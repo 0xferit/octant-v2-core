@@ -81,6 +81,25 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
     error RageQuitCooldownPeriodChangeDelayElapsed();
     error InvalidGovernanceAddress();
 
+    // Events
+    event RageQuitInitiated(address indexed user, uint256 shares, uint256 unlockTime);
+    event RageQuitCooldownPeriodChanged(uint256 oldPeriod, uint256 newPeriod);
+    event PendingRageQuitCooldownPeriodChange(uint256 newPeriod, uint256 effectiveTimestamp);
+    event RageQuitCancelled(address indexed user, uint256 freedShares);
+    event RegenGovernanceChanged(address indexed previousGovernance, address indexed newGovernance);
+
+    // Storage for lockup information per user
+    struct LockupInfo {
+        uint256 lockupTime; // When the lockup started
+        uint256 unlockTime; // When shares become fully unlocked
+    }
+
+    // Custody struct to track locked shares during rage quit
+    struct CustodyInfo {
+        uint256 lockedShares; // Amount of shares locked for rage quit
+        uint256 unlockTime; // When the shares can be withdrawn
+    }
+
     /**
      * @notice Initiates a rage quit by locking shares until the unlock time is reached
      * @param shares Amount of vault shares to lock for rage quit
@@ -107,6 +126,8 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
      * @custom:security Only regen governance
      */
     function cancelRageQuitCooldownPeriodChange() external;
+    function getPendingRageQuitCooldownPeriod() external view returns (uint256);
+    function getRageQuitCooldownPeriodChangeTimestamp() external view returns (uint256);
 
     /**
      * @notice Sets the regen governance address authorized to manage rage quit parameters
@@ -119,7 +140,6 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
      * @notice Cancels an active rage quit for the caller and frees any locked shares
      */
     function cancelRageQuit() external;
-    function getCustodyInfo(address user) external view returns (uint256 lockedShares, uint256 unlockTime);
 
     /**
      * @notice Get the amount of shares that can be transferred by a user
