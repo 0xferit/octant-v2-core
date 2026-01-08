@@ -1087,7 +1087,7 @@
           <tbody>
             <tr>
               <td><strong>Management</strong></td>
-              <td>Nouns DAO Treasury (<code>0xb1a3...ef71</code>)</td>
+              <td>Dedicated EOA/Multisig</td>
               <td>Administrative role (set keeper, set emergency admin, shutdown)</td>
             </tr>
             <tr>
@@ -1097,14 +1097,18 @@
             </tr>
             <tr>
               <td><strong>Emergency Admin</strong></td>
-              <td>Nouns DAO Treasury (<code>0xb1a3...ef71</code>)</td>
-              <td>Can shutdown the strategy and perform emergency withdrawals</td>
+              <td>Dedicated EOA/Multisig</td>
+              <td><strong>REQUIRED:</strong> Can shutdown the strategy and perform emergency withdrawals quickly</td>
             </tr>
           </tbody>
         </table>
 
         <div class="callout callout-warning">
-          <p><strong>Critical:</strong> The Keeper should be a dedicated EOA or bot, NOT the Treasury. Assigning Keeper to Treasury would require a governance vote for every harvest (7+ day minimum voting cycle), creating severe operational bottlenecks.</p>
+          <p><strong>Critical - Keeper:</strong> The Keeper should be a dedicated EOA or bot, NOT the Treasury. Assigning Keeper to Treasury would require a governance vote for every harvest (7+ day minimum voting cycle), creating severe operational bottlenecks that defeat the purpose of automated yield generation.</p>
+        </div>
+
+        <div class="callout callout-warning">
+          <p><strong>Critical - Emergency Admin:</strong> The Emergency Admin should be a dedicated EOA or multisig, NOT the Treasury. Emergency situations (exploits, bugs, market crashes) require immediate response. Using Treasury as Emergency Admin means waiting 7+ days for governance to act, which defeats the purpose of emergency controls. A trusted multisig (e.g., 2-of-3 or 3-of-5) enables rapid response while maintaining security.</p>
         </div>
 
         <h3>Yield Distribution</h3>
@@ -1690,6 +1694,7 @@ No additional vault wrapper is needed since only one strategy is approved.
         </ul>
 
         <h3>Transaction 1: Deploy PaymentSplitter</h3>
+        <pre><code>Target:   0x5711765E0756B45224fc1FdA1B41ab344682bBcb (PaymentSplitter Factory)
 Function: createPaymentSplitter(address[],string[],uint256[])
 Selector: 0x7a0b30f3
 Value:    0
@@ -1699,8 +1704,7 @@ Parameters:
   payeeNames: ["NounsGrants"]
   shares:     [100]</code></pre>
 
-        <h4>Transaction 2: Deploy Strategy</h4>
-        <pre><code>Target:   [LIDO_STRATEGY_FACTORY_ADDRESS]
+        <h3>Transaction 2: Deploy Strategy</h3>
 Function: createStrategy(string,address,address,address,address,bool,address)
 Selector: 0x31d89943
 Value:    0
@@ -1712,7 +1716,7 @@ Parameters:
   _emergencyAdmin:           [EMERGENCY_ADMIN_ADDRESS]
   _donationAddress:          [PAYMENT_SPLITTER_ADDRESS]
   _enableBurning:            false
-  _tokenizedStrategyAddress: 0x8cf7246a74704bBE59c9dF614ccB5e3d9717d8Ac</code></pre>
+  _tokenizedStrategyAddress: [YIELD_SKIMMING_TOKENIZED_STRATEGY_ADDRESS]</code></pre>
 
         <h4>Transaction 3: Approve wstETH</h4>
         <pre><code>Target:   0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0 (wstETH)
@@ -1835,12 +1839,17 @@ Note: Can be called anytime, no lockup period.</code></pre>
             </tr>
           </thead>
           <tbody>
-            <tr><td><code>createPaymentSplitter(...)</code></td><td><code>0x7a0b30f3</code></td><td>PaymentSplitter Factory</td><td>Deploy splitter</td></tr>
-            <tr><td><code>createStrategy(...)</code></td><td><code>0x31d89943</code></td><td>LidoStrategy Factory</td><td>Deploy strategy</td></tr>
+            <tr><td><code>createPaymentSplitter(address[],string[],uint256[])</code></td><td><code>0x7a0b30f3</code></td><td>PaymentSplitter Factory</td><td>Deploy splitter</td></tr>
+            <tr><td><code>createStrategy(string,address,address,address,address,bool,address)</code></td><td><code>0x31d89943</code></td><td>LidoStrategy Factory</td><td>Deploy strategy</td></tr>
             <tr><td><code>approve(address,uint256)</code></td><td><code>0x095ea7b3</code></td><td>wstETH</td><td>Allow spending</td></tr>
             <tr><td><code>deposit(uint256,address)</code></td><td><code>0x6e553f65</code></td><td>Strategy</td><td>Deposit funds</td></tr>
             <tr><td><code>withdraw(uint256,address,address)</code></td><td><code>0xb460af94</code></td><td>Strategy</td><td>Withdraw funds</td></tr>
+            <tr><td><code>redeem(uint256,address,address)</code></td><td><code>0xba087652</code></td><td>Strategy</td><td>Redeem shares</td></tr>
             <tr><td><code>report()</code></td><td><code>0x2606a10b</code></td><td>Strategy</td><td>Harvest yield</td></tr>
+            <tr><td><code>setDragonRouter(address)</code></td><td><code>0x59bd9f07</code></td><td>Strategy</td><td>Initiate yield recipient change (14-day cooldown)</td></tr>
+            <tr><td><code>finalizeDragonRouterChange()</code></td><td><code>0x0e98ea4e</code></td><td>Strategy</td><td>Finalize yield recipient change</td></tr>
+            <tr><td><code>cancelDragonRouterChange()</code></td><td><code>0x940be647</code></td><td>Strategy</td><td>Cancel pending yield recipient change</td></tr>
+            <tr><td><code>release(address,address)</code></td><td><code>0x48b75044</code></td><td>PaymentSplitter</td><td>Release shares to payee</td></tr>
             <tr><td><code>shutdownStrategy()</code></td><td><code>0xbe8f1668</code></td><td>Strategy</td><td>Emergency shutdown</td></tr>
             <tr><td><code>emergencyWithdraw(uint256)</code></td><td><code>0x5312ea8e</code></td><td>Strategy</td><td>Emergency exit</td></tr>
           </tbody>
@@ -1861,7 +1870,31 @@ Note: Can be called anytime, no lockup period.</code></pre>
         </ol>
 
         <h3>Emergency Admin</h3>
-        <p>The Treasury serves as Emergency Admin. Emergency actions (shutdown, forced withdrawals) will follow standard DAO voting timelines (~7 days) unless a separate multisig is designated for faster response.</p>
+        <p>The Emergency Admin <strong>must be a dedicated EOA or multisig</strong>, NOT the Treasury. This enables rapid response to emergencies without waiting for governance (~7+ days).</p>
+
+        <p><strong>Recommended Setup:</strong></p>
+        <ul>
+          <li><strong>Option A:</strong> Trusted multisig (e.g., 2-of-3 or 3-of-5) with known community members</li>
+          <li><strong>Option B:</strong> Dedicated EOA controlled by a trusted operator</li>
+        </ul>
+
+        <p><strong>Why not Treasury?:</strong> Emergency situations (smart contract exploits, critical bugs, market crashes) require immediate action. If the Treasury is the Emergency Admin, any emergency response requires:</p>
+        <ol>
+          <li>Creating a proposal (~2 days voting delay)</li>
+          <li>Voting period (~3 days)</li>
+          <li>Timelock delay (~2 days)</li>
+          <li><strong>Total: ~7+ days</strong> — far too slow for emergencies</li>
+        </ol>
+
+        <p><strong>Emergency Admin Powers:</strong></p>
+        <ul>
+          <li><code>shutdownStrategy()</code> — Stops new deposits, allows withdrawals</li>
+          <li><code>emergencyWithdraw()</code> — Force withdraw funds after shutdown</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <p><strong>Note:</strong> The Management role (Treasury) can always change the Emergency Admin via governance if needed.</p>
+        </div>
 
         <h3>Withdrawals</h3>
         <p>The strategy provides instant liquidity (no lockup). Withdrawals are straightforward:</p>
