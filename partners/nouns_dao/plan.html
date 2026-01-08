@@ -1087,7 +1087,7 @@
           <tbody>
             <tr>
               <td><strong>Management</strong></td>
-              <td>Dedicated EOA/Multisig</td>
+              <td>Nouns DAO Treasury (<code>0xb1a3...ef71</code>)</td>
               <td>Administrative role (set keeper, set emergency admin, shutdown)</td>
             </tr>
             <tr>
@@ -1705,6 +1705,7 @@ Parameters:
   shares:     [100]</code></pre>
 
         <h3>Transaction 2: Deploy Strategy</h3>
+        <pre><code>Target:   [LIDO_STRATEGY_FACTORY_ADDRESS]
 Function: createStrategy(string,address,address,address,address,bool,address)
 Selector: 0x31d89943
 Value:    0
@@ -1712,13 +1713,13 @@ Value:    0
 Parameters:
   _name:                     "NounsLidoStrategy"
   _management:               0xb1a32FC9F9D8b2cf86C068Cae13108809547ef71
-  _keeper:                   [KEEPER_ADDRESS] (dedicated bot)
-  _emergencyAdmin:           [EMERGENCY_ADMIN_ADDRESS]
+  _keeper:                   [KEEPER_ADDRESS] (dedicated bot/EOA)
+  _emergencyAdmin:           [EMERGENCY_ADMIN_ADDRESS] (dedicated multisig/EOA)
   _donationAddress:          [PAYMENT_SPLITTER_ADDRESS]
   _enableBurning:            false
   _tokenizedStrategyAddress: [YIELD_SKIMMING_TOKENIZED_STRATEGY_ADDRESS]</code></pre>
 
-        <h4>Transaction 3: Approve wstETH</h4>
+        <h3>Transaction 3: Approve wstETH</h3>
         <pre><code>Target:   0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0 (wstETH)
 Function: approve(address,uint256)
 Selector: 0x095ea7b3
