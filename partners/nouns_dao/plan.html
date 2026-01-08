@@ -829,12 +829,16 @@
         <ol class="toc-list">
           <li><a href="#overview" class="active">Overview</a></li>
           <li><a href="#prerequisites">Prerequisites</a></li>
+          <li><a href="#open-questions">Open Questions</a></li>
           <li><a href="#addresses">On-Chain Addresses</a></li>
           <li><a href="#strategy">Strategy</a></li>
           <li><a href="#paymentsplitter">PaymentSplitter</a></li>
           <li><a href="#governance">Governance</a></li>
           <li><a href="#execution">Execution Playbook</a></li>
+          <li><a href="#prepared-calldata">Prepared Calldata</a></li>
           <li><a href="#post-deployment">Post-Deployment</a></li>
+          <li><a href="#emergency-operations">Emergency Operations</a></li>
+          <li><a href="#quick-reference">Quick Reference</a></li>
           <li><a href="#operational-considerations">Operational Considerations</a></li>
           <li><a href="#treasury-holdings">Treasury Holdings</a></li>
           <li><a href="#references">References</a></li>
@@ -926,6 +930,48 @@
         </div>
       </section>
 
+      <!-- OPEN QUESTIONS -->
+      <section class="section" id="open-questions">
+        <h2>Open Questions for Nouns DAO</h2>
+        <p>The following questions need to be answered by the Nouns DAO team before finalizing the proposal:</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Question</th>
+              <th>Context</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>wstETH deposit amount</strong></td>
+              <td>How much wstETH does Nouns DAO want to deposit into the strategy? Treasury holds ~1,725 wstETH.</td>
+              <td class="status-pending">⏳ Pending</td>
+            </tr>
+            <tr>
+              <td><strong>Proposal UI format</strong></td>
+              <td>The deployment requires 4 transactions. In the Nouns DAO UI (nouns.wtf/vote), will this be:<br><strong>Option A</strong>: 4 separate calldata entries (one per transaction), or<br><strong>Option B</strong>: 1 batched calldata containing all 4 transactions?</td>
+              <td class="status-pending">⏳ Pending</td>
+            </tr>
+            <tr>
+              <td><strong>Keeper operator</strong></td>
+              <td>Who will operate the Keeper bot? Options: Nouns DAO team, Golem Foundation, third-party service</td>
+              <td class="status-pending">⏳ Pending</td>
+            </tr>
+            <tr>
+              <td><strong>Emergency Admin setup</strong></td>
+              <td>Who should be the Emergency Admin? Recommend a trusted multisig (2-of-3 or 3-of-5) for rapid response</td>
+              <td class="status-pending">⏳ Pending</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <p><strong>Note:</strong> The script can generate output for both proposal formats (individual transactions or batched). Confirm the preferred format before generating final calldata.</p>
+        </div>
+      </section>
+
       <!-- ADDRESSES -->
       <section class="section" id="addresses">
         <h2>Verified On-Chain Addresses</h2>
@@ -965,13 +1011,38 @@
               <td>Ethereum</td>
             </tr>
             <tr>
-              <td>Tokenized Strategy Implementation</td>
-              <td><a href="https://etherscan.io/address/0x8cf7246a74704bBE59c9dF614ccB5e3d9717d8Ac" class="address-link"><code class="address">0x8cf7246a74704bBE59c9dF614ccB5e3d9717d8Ac</code></a></td>
-              <td>Ethereum</td>
-            </tr>
             <!-- /PARTNER -->
           </tbody>
         </table>
+
+        <h3>Contracts To Be Deployed</h3>
+        <p>The following contracts must be deployed to mainnet before the DAO proposal:</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Contract</th>
+              <th>Purpose</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>YieldSkimmingTokenizedStrategy</td>
+              <td>Base implementation for yield-skimming strategies</td>
+              <td class="status-pending">⏳ Pending deployment</td>
+            </tr>
+            <tr>
+              <td>LidoStrategyFactory</td>
+              <td>Factory for deploying LidoStrategy instances via CREATE2</td>
+              <td class="status-pending">⏳ Pending deployment</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <p><strong>Note:</strong> These contracts will be deployed by the Golem Foundation team. Addresses will be updated here once deployed.</p>
+        </div>
       </section>
 
       <!-- STRATEGY -->
@@ -1051,6 +1122,88 @@
             </tr>
           </tbody>
         </table>
+
+        <h3>Strategy Configuration Parameters</h3>
+
+        <h4><code>_enableBurning</code></h4>
+        <p>The <code>_enableBurning</code> parameter controls whether the strategy can burn Dragon shares to cover losses.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>false</code></td>
+              <td>Dragon shares are never burned. If the strategy incurs a loss (e.g., wstETH exchange rate decreases due to slashing), the loss is socialized among all depositors. Dragon operations are blocked if the vault cannot cover user debt.</td>
+            </tr>
+            <tr>
+              <td><code>true</code></td>
+              <td>Dragon shares can be burned to cover losses before affecting user principal. Provides additional protection for depositors but reduces Dragon's accumulated yield.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <p><strong>Recommendation:</strong> Set to <code>false</code> for Nouns DAO. Lido slashing events are extremely rare, and disabling burning simplifies accounting while ensuring Dragon receives all earned yield.</p>
+        </div>
+
+        <h4>Changing the Donation Address (Dragon Router)</h4>
+        <p>The donation address can be changed after deployment, but it requires a <strong>two-step process with a mandatory 14-day cooldown</strong>. This protects depositors by giving them time to exit if they disagree with the change.</p>
+
+        <p><strong>Step 1: Initiate Change (Management only)</strong></p>
+        <pre><code>Target:   [STRATEGY_ADDRESS]
+Function: setDragonRouter(address)
+Selector: 0x59bd9f07
+Value:    0
+
+Parameters:
+  _dragonRouter: [NEW_PAYMENT_SPLITTER_ADDRESS]
+
+Access: Management only (requires governance vote)
+Effect: Starts 14-day cooldown, emits PendingDragonRouterChange event</code></pre>
+
+        <p><strong>Step 2: Wait 14 Days (Cooldown Period)</strong></p>
+        <p>During this period:</p>
+        <ul>
+          <li>Users can see the pending change via <code>pendingDragonRouter()</code> and <code>dragonRouterChangeTimestamp()</code></li>
+          <li>Users who disagree can withdraw their funds</li>
+          <li>Management can cancel via <code>cancelDragonRouterChange()</code> if needed</li>
+        </ul>
+
+        <p><strong>Step 3: Finalize Change (Permissionless)</strong></p>
+        <pre><code>Target:   [STRATEGY_ADDRESS]
+Function: finalizeDragonRouterChange()
+Selector: 0x0e98ea4e
+Value:    0
+
+Parameters: (none)
+
+Access: Anyone (permissionless after cooldown)
+Effect: Applies the new dragon router address</code></pre>
+
+        <p><strong>Cancel Pending Change (Optional)</strong></p>
+        <pre><code>Target:   [STRATEGY_ADDRESS]
+Function: cancelDragonRouterChange()
+Selector: 0x940be647
+Value:    0
+
+Parameters: (none)
+
+Access: Management only
+Effect: Cancels pending change, resets cooldown</code></pre>
+
+        <div class="callout callout-info">
+          <p><strong>Timeline:</strong> A dragon router change requires ~21 days total:</p>
+          <ul>
+            <li>~7 days for governance proposal (propose → vote → queue → execute)</li>
+            <li>14 days mandatory cooldown</li>
+            <li>Then anyone can finalize</li>
+          </ul>
+        </div>
       </section>
 
       <!-- PAYMENTSPLITTER -->
@@ -1110,6 +1263,30 @@
             </tr>
           </tbody>
         </table>
+
+        <h3>Proposal Lifecycle</h3>
+        <p>A Nouns DAO proposal goes through several stages before execution:</p>
+
+        <div class="diagram">┌──────────────────────────────────────────────────────────────────────────────┐
+│                         NOUNS DAO PROPOSAL LIFECYCLE                         │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐   │
+│  │   PROPOSE   │───▶│    VOTE     │───▶│    QUEUE    │───▶│   EXECUTE   │   │
+│  │  (~2 days)  │    │  (~3 days)  │    │  (~2 days)  │    │  (anytime)  │   │
+│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘   │
+│                                                                              │
+│  1. PROPOSE        2. VOTE             3. QUEUE           4. EXECUTE        │
+│  ─────────────     ─────────────       ─────────────      ─────────────     │
+│  - Proposer        - Noun holders      - Proposal auto-   - Anyone can      │
+│    submits           cast votes          queued in          call execute    │
+│    proposal        - For/Against/        timelock         - Timelock        │
+│  - Voting delay      Abstain           - Waiting period     executes txs    │
+│    begins          - Quorum needed       before exec      - msg.sender =    │
+│                                                              Timelock       │
+│                                                                              │
+│  Total time from proposal to execution: ~7 days minimum                      │
+└──────────────────────────────────────────────────────────────────────────────┘</div>
 
         <h3>Execution Call Chain</h3>
         <div class="diagram">┌──────────────────────────────────────────────────────────────────────────────┐
@@ -1173,11 +1350,7 @@
       <section class="section" id="execution">
         <h2>Execution Playbook</h2>
 
-        <h3>Phase 1: PaymentSplitter Deployment</h3>
-        <p>Deploy a PaymentSplitter to receive yield from the strategy.</p>
-
-        <h3>Phase 2: Strategy Deployment</h3>
-        <p>The deployment can be executed in a <strong>single DAO proposal</strong> with <strong>4 batched transactions</strong>:</p>
+        <p>The full deployment can be executed in a <strong>single DAO proposal</strong> with <strong>4 batched transactions</strong>:</p>
         <ol>
           <li>Deploy PaymentSplitter via Factory</li>
           <li>Deploy LidoStrategy via Factory</li>
@@ -1185,13 +1358,183 @@
           <li>Deposit wstETH into Strategy</li>
         </ol>
 
-        <div class="callout callout-success">
-          <p><strong>Note:</strong> The strategy factory uses CREATE2, allowing address precomputation.</p>
+        <div class="callout callout-warning">
+          <p><strong>Prerequisites:</strong> Before submitting the proposal:</p>
+          <ul>
+            <li>YieldSkimmingTokenizedStrategy must be deployed to mainnet</li>
+            <li>LidoStrategyFactory must be deployed to mainnet</li>
+            <li>Strategy factory uses CREATE2, allowing address precomputation</li>
+          </ul>
         </div>
 
-        <div class="callout callout-warning">
-          <p><strong>Note:</strong> LidoStrategyFactory needs to be deployed to mainnet first.</p>
-        </div>
+        <h3>Step 1: Create Proposal</h3>
+        <p><strong>1.1 — Navigate to Nouns DAO</strong></p>
+        <p>Open <a href="https://nouns.wtf/vote" class="address-link">nouns.wtf/vote</a></p>
+
+        <p><strong>1.2 — Connect Wallet</strong></p>
+        <p>Connect a wallet with sufficient voting power (own or delegated Nouns).</p>
+
+        <p><strong>1.3 — Click "Submit Proposal"</strong></p>
+        <p>Navigate to the proposals section and initiate a new proposal.</p>
+
+        <p><strong>1.4 — Fill Proposal Details</strong></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Title</td>
+              <td><code>Deploy Octant Lido Yield Strategy for wstETH</code></td>
+            </tr>
+            <tr>
+              <td>Description</td>
+              <td>See <a href="#proposal-template">Proposal Template</a> below</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>1.5 — Add Transaction 1: Deploy PaymentSplitter</strong></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Target Contract</td>
+              <td><code>0x5711765E0756B45224fc1FdA1B41ab344682bBcb</code> (PaymentSplitter Factory)</td>
+            </tr>
+            <tr>
+              <td>Function</td>
+              <td><code>createPaymentSplitter(address[],string[],uint256[])</code></td>
+            </tr>
+            <tr>
+              <td><code>payees</code></td>
+              <td><code>[[GRANT_RECIPIENT_ADDRESS]]</code></td>
+            </tr>
+            <tr>
+              <td><code>payeeNames</code></td>
+              <td><code>["NounsGrants"]</code></td>
+            </tr>
+            <tr>
+              <td><code>shares</code></td>
+              <td><code>[100]</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>1.6 — Add Transaction 2: Deploy Strategy</strong></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Target Contract</td>
+              <td><code>[LIDO_STRATEGY_FACTORY_ADDRESS]</code></td>
+            </tr>
+            <tr>
+              <td>Function</td>
+              <td><code>createStrategy(string,address,address,address,address,bool,address)</code></td>
+            </tr>
+            <tr>
+              <td><code>_name</code></td>
+              <td><code>NounsLidoStrategy</code></td>
+            </tr>
+            <tr>
+              <td><code>_management</code></td>
+              <td><code>0xb1a32FC9F9D8b2cf86C068Cae13108809547ef71</code></td>
+            </tr>
+            <tr>
+              <td><code>_keeper</code></td>
+              <td><code>[KEEPER_BOT_ADDRESS]</code> (dedicated bot/EOA)</td>
+            </tr>
+            <tr>
+              <td><code>_emergencyAdmin</code></td>
+              <td><code>[EMERGENCY_ADMIN_ADDRESS]</code> (dedicated multisig/EOA, NOT Treasury)</td>
+            </tr>
+            <tr>
+              <td><code>_donationAddress</code></td>
+              <td><code>[PAYMENT_SPLITTER_ADDRESS]</code> (from Tx 1)</td>
+            </tr>
+            <tr>
+              <td><code>_enableBurning</code></td>
+              <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td><code>_tokenizedStrategyAddress</code></td>
+              <td><code>[YIELD_SKIMMING_TOKENIZED_STRATEGY_ADDRESS]</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>1.7 — Add Transaction 3: Approve wstETH</strong></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Target Contract</td>
+              <td><code>0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0</code> (wstETH)</td>
+            </tr>
+            <tr>
+              <td>Function</td>
+              <td><code>approve(address spender, uint256 amount)</code></td>
+            </tr>
+            <tr>
+              <td><code>spender</code></td>
+              <td><code>[STRATEGY_ADDRESS]</code> (from Tx 2)</td>
+            </tr>
+            <tr>
+              <td><code>amount</code></td>
+              <td><code>[DEPOSIT_AMOUNT]</code> (e.g., 1000e18 for 1000 wstETH)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>1.8 — Add Transaction 4: Deposit wstETH</strong></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Target Contract</td>
+              <td><code>[STRATEGY_ADDRESS]</code> (from Tx 2)</td>
+            </tr>
+            <tr>
+              <td>Function</td>
+              <td><code>deposit(uint256 assets, address receiver)</code></td>
+            </tr>
+            <tr>
+              <td><code>assets</code></td>
+              <td><code>[DEPOSIT_AMOUNT]</code> (e.g., 1000e18 for 1000 wstETH)</td>
+            </tr>
+            <tr>
+              <td><code>receiver</code></td>
+              <td><code>0xb1a32FC9F9D8b2cf86C068Cae13108809547ef71</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>1.9 — Submit Proposal</strong></p>
+        <p>Review all details and submit the proposal.</p>
 
         <h3>Gas Profile</h3>
         <table>
@@ -1222,23 +1565,133 @@
               <td><strong>Total (batched)</strong></td>
               <td><strong>~4M</strong></td>
             </tr>
+          </tbody>
+        </table>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Limit</th>
+              <th>Value</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Per-Transaction Gas Limit</td>
+              <td>16,777,216 (2²⁴)</td>
+              <td>Hard cap via EIP-7825 (Fusaka upgrade)</td>
+            </tr>
             <tr>
               <td>Block Gas Limit</td>
               <td>30M</td>
+              <td>Maximum per block</td>
             </tr>
             <tr>
-              <td>Headroom</td>
-              <td>&gt;85%</td>
+              <td><strong>Headroom</strong></td>
+              <td><strong>&gt;75%</strong></td>
+              <td>Proposal well within limits</td>
             </tr>
           </tbody>
         </table>
 
-        <h3>Transaction Details</h3>
+        <div class="callout callout-info">
+          <p><strong>Note:</strong> The Ethereum "Fusaka" upgrade introduced a per-transaction gas cap of 16,777,216 gas (2²⁴) via <a href="https://eips.ethereum.org/EIPS/eip-7825" class="address-link">EIP-7825</a>. This is a hard protocol limit distinct from the block gas limit. Our ~4M total is safely within this cap.</p>
+        </div>
+        <h4>Step 2: Vote</h4>
+        <ol>
+          <li>Share the proposal link on <a href="https://discourse.nouns.wtf/" class="address-link">Discourse</a> for discussion</li>
+          <li>Noun holders vote during the voting period (~3 days)</li>
+          <li>Proposal passes if quorum is met and majority votes "For"</li>
+        </ol>
 
-        <h4>Transaction 1: Deploy PaymentSplitter</h4>
-        <pre><code>Target:   0x5711765E0756B45224fc1FdA1B41ab344682bBcb (PaymentSplitter Factory)
+        <h4>Step 3: Queue</h4>
+        <p>Once voting passes, the proposal enters the timelock queue (~2 days).</p>
+
+        <h4>Step 4: Execute</h4>
+        <p>After the timelock delay:</p>
+        <ol>
+          <li>Return to the proposal page on nouns.wtf</li>
+          <li>Click "Execute" (available after timelock)</li>
+          <li>Sign the execution transaction</li>
+          <li>Verify on Etherscan that all transactions succeeded</li>
+        </ol>
+
+        <h4>Step 5: Verify Deployment</h4>
+        <p>After execution, verify:</p>
+        <ul>
+          <li>☐ PaymentSplitter deployed with correct payees</li>
+          <li>☐ Strategy deployed with correct donation address (PaymentSplitter)</li>
+          <li>☐ Treasury received strategy shares</li>
+          <li>☐ wstETH deposited into strategy</li>
+        </ul>
+
+        <h3 id="proposal-template">Proposal Template</h3>
+        <pre><code>## Summary
+
+This proposal deploys the Octant Lido Yield Skimming Strategy and deposits
+[AMOUNT] wstETH from Nouns DAO treasury as part of the Octant v2 pilot.
+
+## Background
+
+Octant v2 enables DAOs to optimize treasury yield while funding public goods.
+The Lido strategy captures yield from wstETH exchange rate appreciation
+(~3-5% annually from ETH staking rewards) and routes it to designated recipients.
+
+## Transactions (4 total)
+
+1. **Deploy PaymentSplitter**: Create yield distribution splitter for grants
+2. **Deploy Strategy**: Create ERC-4626 yield-skimming strategy
+3. **Approve wstETH**: Allow Strategy to spend treasury wstETH
+4. **Deposit wstETH**: Deposit wstETH, receiving shares to Treasury
+
+## Architecture
+
+The LidoStrategy IS the ERC-4626 vault (via Yearn's TokenizedStrategy).
+No additional vault wrapper is needed since only one strategy is approved.
+
+## Yield Distribution
+
+- 100% → Dragon Funding Pool → Nouns Ecosystem Grants
+
+## Risk Considerations
+
+- Underlying: wstETH (Lido wrapped staked ETH)
+- Exchange Rate Risk: ETH validator slashing could reduce rate (rare)
+- Custody: Treasury retains full share ownership
+- Liquidity: Instant withdrawals (no lockup period)
+
+## Links
+
+- [wstETH Token](https://etherscan.io/token/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0)
+- [Nouns Treasury](https://etherscan.io/address/0xb1a32FC9F9D8b2cf86C068Cae13108809547ef71)
+- [PaymentSplitter Factory](https://etherscan.io/address/0x5711765E0756B45224fc1FdA1B41ab344682bBcb)</code></pre>
+
+        <h2 id="prepared-calldata">Prepared Calldata</h2>
+        <p>Complete transaction calldata can be generated programmatically using the provided script:</p>
+
+        <pre><code>forge script partners/nouns_dao/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv</code></pre>
+
+        <p>Before running, update the configuration in the script:</p>
+        <ul>
+          <li><code>LIDO_STRATEGY_FACTORY</code> — LidoStrategyFactory address (after deployment)</li>
+          <li><code>TOKENIZED_STRATEGY</code> — YieldSkimmingTokenizedStrategy address (after deployment)</li>
+          <li><code>DRAGON_FUNDING_POOL</code> — Actual grant recipient address</li>
+          <li><code>KEEPER_BOT</code> — Dedicated keeper EOA/bot address</li>
+          <li><code>EMERGENCY_ADMIN</code> — Emergency shutdown admin address (dedicated multisig/EOA, NOT Treasury)</li>
+          <li><code>DEPOSIT_AMOUNT</code> — Amount of wstETH to deposit</li>
+        </ul>
+
+        <p>The script outputs:</p>
+        <ul>
+          <li>Precomputed CREATE2 address for Strategy</li>
+          <li>Individual calldata for each transaction (TX 0-3)</li>
+          <li>Formatted parameters for nouns.wtf proposal UI</li>
+        </ul>
+
+        <h3>Transaction 1: Deploy PaymentSplitter</h3>
 Function: createPaymentSplitter(address[],string[],uint256[])
-Selector: 0x... (TBD)
+Selector: 0x7a0b30f3
 Value:    0
 
 Parameters:
@@ -1249,7 +1702,7 @@ Parameters:
         <h4>Transaction 2: Deploy Strategy</h4>
         <pre><code>Target:   [LIDO_STRATEGY_FACTORY_ADDRESS]
 Function: createStrategy(string,address,address,address,address,bool,address)
-Selector: 0x... (TBD)
+Selector: 0x31d89943
 Value:    0
 
 Parameters:
@@ -1281,38 +1734,59 @@ Parameters:
   assets:   [DEPOSIT_AMOUNT] (e.g., 1000000000000000000000 for 1000 wstETH)
   receiver: 0xb1a32FC9F9D8b2cf86C068Cae13108809547ef71 (Treasury)</code></pre>
 
-        <h3>Generate Calldata</h3>
-        <pre><code>forge script partners/nouns_dao/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv</code></pre>
-      </section>
-
       <!-- POST-DEPLOYMENT -->
       <section class="section" id="post-deployment">
         <h2>Post-Deployment Operations</h2>
 
-        <h3>Harvest Operation</h3>
+        <h4>Harvest Operation</h4>
+
+        <p><strong>Report (Harvest Yield)</strong></p>
         <pre><code>Target:   [STRATEGY_ADDRESS]
 Function: report()
 Selector: 0x2606a10b
 Value:    0
 
-Calldata: 0x2606a10b
+Parameters: (none)
 
 Note: Called by management or keeper to harvest yield. Returns (uint256 profit, uint256 loss).
 Mints profit shares to Dragon Router (PaymentSplitter).</code></pre>
 
-        <h3>Release Yield from PaymentSplitter</h3>
+        <h4>Release Yield from PaymentSplitter</h4>
+        <p><strong>Step 1: Release strategy shares to payee</strong></p>
         <pre><code>Target:   [PAYMENT_SPLITTER_ADDRESS]
 Function: release(address token, address account)
-Selector: 0x... (TBD)
+Selector: 0x48b75044
 Value:    0
 
 Parameters:
-  token:   [STRATEGY_ADDRESS]
+  token:   [STRATEGY_ADDRESS] (strategy shares)
   account: [PAYEE_ADDRESS]
 
-Note: Payee calls to claim their share of accumulated yield.</code></pre>
+Note: Anyone can call this function. Transfers accumulated strategy shares to the payee.</code></pre>
 
-        <h3>Emergency Operations</h3>
+        <p><strong>Step 2: Payee redeems shares for wstETH</strong></p>
+        <p>After receiving strategy shares, the payee must redeem them for underlying wstETH:</p>
+        <pre><code>Target:   [STRATEGY_ADDRESS]
+Function: redeem(uint256 shares, address receiver, address owner)
+Selector: 0xba087652
+Value:    0
+
+Parameters:
+  shares:   Amount of strategy shares to redeem
+  receiver: Address to receive wstETH
+  owner:    Payee's address (msg.sender)
+
+Note: Only the payee (share owner) can redeem their own shares.</code></pre>
+
+        <div class="callout callout-warning">
+          <p><strong>Important:</strong> The <code>release()</code> function only transfers strategy shares to the payee. The payee must then call <code>redeem()</code> on the strategy contract to convert those shares into actual wstETH.</p>
+        </div>
+
+        </section>
+
+      <!-- EMERGENCY OPERATIONS -->
+      <section class="section" id="emergency-operations">
+        <h2>Emergency Operations</h2>
 
         <h4>Shutdown Strategy</h4>
         <pre><code>Target:   [STRATEGY_ADDRESS]
@@ -1346,7 +1820,11 @@ Parameters:
 
 Note: Can be called anytime, no lockup period.</code></pre>
 
-        <h3>Quick Reference: Function Selectors</h3>
+        </section>
+
+      <!-- QUICK REFERENCE -->
+      <section class="section" id="quick-reference">
+        <h2>Quick Reference: Function Selectors</h2>
         <table>
           <thead>
             <tr>
@@ -1357,8 +1835,8 @@ Note: Can be called anytime, no lockup period.</code></pre>
             </tr>
           </thead>
           <tbody>
-            <tr><td><code>createPaymentSplitter(...)</code></td><td><code>TBD</code></td><td>PaymentSplitter Factory</td><td>Deploy splitter</td></tr>
-            <tr><td><code>createStrategy(...)</code></td><td><code>TBD</code></td><td>LidoStrategy Factory</td><td>Deploy strategy</td></tr>
+            <tr><td><code>createPaymentSplitter(...)</code></td><td><code>0x7a0b30f3</code></td><td>PaymentSplitter Factory</td><td>Deploy splitter</td></tr>
+            <tr><td><code>createStrategy(...)</code></td><td><code>0x31d89943</code></td><td>LidoStrategy Factory</td><td>Deploy strategy</td></tr>
             <tr><td><code>approve(address,uint256)</code></td><td><code>0x095ea7b3</code></td><td>wstETH</td><td>Allow spending</td></tr>
             <tr><td><code>deposit(uint256,address)</code></td><td><code>0x6e553f65</code></td><td>Strategy</td><td>Deposit funds</td></tr>
             <tr><td><code>withdraw(uint256,address,address)</code></td><td><code>0xb460af94</code></td><td>Strategy</td><td>Withdraw funds</td></tr>
