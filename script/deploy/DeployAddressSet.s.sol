@@ -5,12 +5,13 @@ import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { AddressSetFactory } from "src/factories/AddressSetFactory.sol";
 import { AddressSet } from "src/utils/AddressSet.sol";
+import { BatchScript } from "../helpers/BatchScript.sol";
 
 /**
  * @title DeployAddressSet
  * @author [Golem Foundation](https://golem.foundation)
  * @custom:security-contact security@golem.foundation
- * @notice Deployment script for AddressSet contracts via AddressSetFactory
+ * @notice Deployment script for AddressSet contracts via AddressSetFactory using Safe multisig
  * @dev Deploys AddressSet instances through the factory for correct ownership and deterministic addresses.
  *
  *      PREREQUISITES:
@@ -19,24 +20,28 @@ import { AddressSet } from "src/utils/AddressSet.sol";
  *
  * Usage:
  * ```bash
- * # Deploy a staker allowset
- * ADDRESS_SET_FACTORY=0x... ADDRESS_SET_SALT=STAKER_ALLOWSET_V1 \
+ * # Deploy a staker allowset through Safe
+ * export SAFE_ADDRESS=0x...
+ * export CHAIN=ethereum
+ * export WALLET_TYPE=local # or ledger
+ * export PRIVATE_KEY=0x... # required for WALLET_TYPE=local
+ * export ADDRESS_SET_FACTORY=0x...
+ * export ADDRESS_SET_SALT=STAKER_ALLOWSET_V1
+ *
  * forge script script/deploy/DeployAddressSet.s.sol:DeployAddressSet \
  *   --rpc-url $ETH_RPC_URL \
- *   --private-key $PRIVATE_KEY \
- *   --broadcast \
- *   --verify \
- *   --etherscan-api-key $ETHERSCAN_API_KEY
+ *   --ffi
  * ```
  *
  * Environment Variables:
- * - PRIVATE_KEY: Deployer private key (will become owner)
  * - ADDRESS_SET_FACTORY: Address of deployed AddressSetFactory
  * - ADDRESS_SET_SALT: Salt string for deterministic address (e.g., "STAKER_ALLOWSET_V1")
+ * - ADDRESS_SET_OWNER: Address that will own the AddressSet (defaults to SAFE_ADDRESS)
  */
-contract DeployAddressSet is Script {
+contract DeployAddressSet is Script, BatchScript {
     error AddressMismatch(address expected, address actual);
     error OwnerMismatch(address expected, address actual);
+    error InvalidOwner();
 
     /// @notice Default salts for common AddressSet deployments
     bytes32 public constant STAKER_ALLOWSET_SALT = keccak256("OCTANT_STAKER_ALLOWSET_V1");
@@ -46,34 +51,58 @@ contract DeployAddressSet is Script {
     /// @notice Deployed AddressSet contract
     AddressSet public addressSet;
 
-    function run() external returns (address) {
-        return deploy();
+    /// @notice AddressSetFactory used for deployments
+    AddressSetFactory public factory;
+
+    /// @notice Safe address used to submit the batch
+    address public safe;
+
+    /// @notice AddressSet owner (defaults to Safe)
+    address public owner;
+
+    function setUp() public {
+        safe = vm.envOr("SAFE_ADDRESS", address(0));
+        if (safe == address(0)) {
+            try vm.prompt("Enter Safe Address") returns (string memory res) {
+                safe = vm.parseAddress(res);
+            } catch {
+                revert("Invalid Safe Address");
+            }
+        }
+
+        factory = AddressSetFactory(vm.envAddress("ADDRESS_SET_FACTORY"));
+        owner = vm.envOr("ADDRESS_SET_OWNER", safe);
+        if (owner == address(0)) revert InvalidOwner();
+
+        console.log("Using Safe:", safe);
+        console.log("Factory:", address(factory));
+        console.log("Owner:", owner);
     }
 
-    function deploy() public returns (address) {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
-        address factoryAddress = vm.envAddress("ADDRESS_SET_FACTORY");
+    function run() public isBatch(safe) {
+        _deploySingle();
+        executeBatch(true);
+    }
+
+    function _deploySingle() internal returns (address) {
         string memory saltString = vm.envOr("ADDRESS_SET_SALT", string("OCTANT_ADDRESS_SET_V1"));
         bytes32 salt = keccak256(bytes(saltString));
 
-        AddressSetFactory factory = AddressSetFactory(factoryAddress);
-
         console.log("=== ADDRESSSET DEPLOYMENT VIA FACTORY ===");
-        console.log("Deployer (will be owner):", deployer);
-        console.log("Factory:", factoryAddress);
+        console.log("Owner:", owner);
         console.log("Salt string:", saltString);
         console.logBytes32(salt);
 
-        address expectedAddress = factory.predictAddress(salt, deployer);
+        address expectedAddress = factory.predictAddress(salt, owner);
         console.log("Expected AddressSet address:", expectedAddress);
 
-        vm.startBroadcast(deployerPrivateKey);
-
-        address deployedAddress = factory.deploy(salt, deployer);
+        bytes memory result = addToBatch(
+            address(factory),
+            0,
+            abi.encodeWithSignature("deploy(bytes32,address)", salt, owner)
+        );
+        address deployedAddress = abi.decode(result, (address));
         addressSet = AddressSet(deployedAddress);
-
-        vm.stopBroadcast();
 
         console.log("Deployed AddressSet address:", deployedAddress);
 
@@ -82,13 +111,13 @@ contract DeployAddressSet is Script {
         }
         console.log("[OK] Deployment is deterministic");
 
-        address owner = addressSet.owner();
-        console.log("Owner:", owner);
+        address actualOwner = addressSet.owner();
+        console.log("Owner:", actualOwner);
 
-        if (owner != deployer) {
-            revert OwnerMismatch(deployer, owner);
+        if (actualOwner != owner) {
+            revert OwnerMismatch(owner, actualOwner);
         }
-        console.log("[OK] Ownership correctly set to deployer");
+        console.log("[OK] Ownership correctly set to owner");
 
         console.log("=== DEPLOYMENT COMPLETE ===");
 
@@ -101,29 +130,38 @@ contract DeployAddressSet is Script {
     /// @return allocationMechanismAllowset Address of allocation mechanism allowset
     function deployAll()
         external
+        isBatch(safe)
         returns (address stakerAllowset, address stakerBlockset, address allocationMechanismAllowset)
     {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
-        address factoryAddress = vm.envAddress("ADDRESS_SET_FACTORY");
-        AddressSetFactory factory = AddressSetFactory(factoryAddress);
-
         console.log("=== DEPLOYING ALL ADDRESSSETS FOR REGENSTAKER ===");
-        console.log("Deployer (will be owner):", deployer);
-        console.log("Factory:", factoryAddress);
+        console.log("Owner:", owner);
+        console.log("Factory:", address(factory));
 
-        vm.startBroadcast(deployerPrivateKey);
-
-        stakerAllowset = factory.deploy(STAKER_ALLOWSET_SALT, deployer);
+        bytes memory stakerAllowsetResult = addToBatch(
+            address(factory),
+            0,
+            abi.encodeWithSignature("deploy(bytes32,address)", STAKER_ALLOWSET_SALT, owner)
+        );
+        stakerAllowset = abi.decode(stakerAllowsetResult, (address));
         console.log("Staker Allowset:", stakerAllowset);
 
-        stakerBlockset = factory.deploy(STAKER_BLOCKSET_SALT, deployer);
+        bytes memory stakerBlocksetResult = addToBatch(
+            address(factory),
+            0,
+            abi.encodeWithSignature("deploy(bytes32,address)", STAKER_BLOCKSET_SALT, owner)
+        );
+        stakerBlockset = abi.decode(stakerBlocksetResult, (address));
         console.log("Staker Blockset:", stakerBlockset);
 
-        allocationMechanismAllowset = factory.deploy(ALLOCATION_MECHANISM_ALLOWSET_SALT, deployer);
+        bytes memory allocationMechanismAllowsetResult = addToBatch(
+            address(factory),
+            0,
+            abi.encodeWithSignature("deploy(bytes32,address)", ALLOCATION_MECHANISM_ALLOWSET_SALT, owner)
+        );
+        allocationMechanismAllowset = abi.decode(allocationMechanismAllowsetResult, (address));
         console.log("Allocation Mechanism Allowset:", allocationMechanismAllowset);
 
-        vm.stopBroadcast();
+        executeBatch(true);
 
         console.log("=== ALL ADDRESSSETS DEPLOYED ===");
     }

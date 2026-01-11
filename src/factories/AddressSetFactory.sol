@@ -12,6 +12,10 @@ import { AddressSet } from "src/utils/AddressSet.sol";
  */
 contract AddressSetFactory {
     /// @notice Emitted when a new AddressSet is deployed
+    /// @param deployer Address that called deploy
+    /// @param addressSet Deployed AddressSet address
+    /// @param owner Address that owns the AddressSet
+    /// @param salt Salt used for CREATE2 derivation
     event AddressSetDeployed(address indexed deployer, address indexed addressSet, address indexed owner, bytes32 salt);
 
     /// @notice Deploy a new AddressSet with deterministic address

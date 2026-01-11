@@ -4,71 +4,79 @@ pragma solidity ^0.8.25;
 import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { AddressSetFactory } from "src/factories/AddressSetFactory.sol";
+import { BatchScript } from "../helpers/BatchScript.sol";
 
 /**
  * @title DeployAddressSetFactory
  * @author [Golem Foundation](https://golem.foundation)
  * @custom:security-contact security@golem.foundation
- * @notice Deployment script for AddressSetFactory
- * @dev Deploys AddressSetFactory deterministically by explicitly calling the CREATE2 factory.
+ * @notice Deployment script for AddressSetFactory via Safe multisig
+ * @dev Deploys AddressSetFactory deterministically by calling the CREATE2 factory through Safe.
  *      This ensures the deployed address matches the predicted address.
  *
  * Usage:
  * ```bash
+ * export SAFE_ADDRESS=0x...
+ * export CHAIN=ethereum
+ * export WALLET_TYPE=local # or ledger
+ * export PRIVATE_KEY=0x... # required for WALLET_TYPE=local
+ *
  * forge script script/deploy/DeployAddressSetFactory.s.sol:DeployAddressSetFactory \
  *   --rpc-url $ETH_RPC_URL \
- *   --private-key $PRIVATE_KEY \
- *   --broadcast \
- *   --verify \
- *   --etherscan-api-key $ETHERSCAN_API_KEY
+ *   --ffi
  * ```
  */
-contract DeployAddressSetFactory is Script {
-    error DeploymentFailed();
-
+contract DeployAddressSetFactory is Script, BatchScript {
     /// @notice Salt for deterministic factory deployment
     bytes32 public constant DEPLOYMENT_SALT = keccak256("OCTANT_ADDRESS_SET_FACTORY_V1");
 
-    /// @notice Deployed factory contract
+    /// @notice Deployed factory contract (expected address)
     AddressSetFactory public factory;
 
-    function run() external returns (address) {
-        return deploy();
+    /// @notice Safe address used to submit the batch
+    address public safe;
+
+    function setUp() public {
+        safe = vm.envOr("SAFE_ADDRESS", address(0));
+        if (safe == address(0)) {
+            try vm.prompt("Enter Safe Address") returns (string memory res) {
+                safe = vm.parseAddress(res);
+            } catch {
+                revert("Invalid Safe Address");
+            }
+        }
+
+        console.log("Using Safe:", safe);
     }
 
-    function deploy() public returns (address) {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
-
-        console.log("=== ADDRESS SET FACTORY DEPLOYMENT ===");
-        console.log("Deployer:", deployer);
+    function run() public isBatch(safe) {
+        console.log("=== ADDRESS SET FACTORY DEPLOYMENT (SAFE) ===");
 
         bytes memory creationCode = type(AddressSetFactory).creationCode;
         address expectedAddress = _computeCreate2Address(CREATE2_FACTORY, DEPLOYMENT_SALT, keccak256(creationCode));
         console.log("Expected factory address:", expectedAddress);
 
-        vm.startBroadcast(deployerPrivateKey);
-
-        // Explicitly call CREATE2_FACTORY with salt + bytecode
+        // Explicitly call CREATE2_FACTORY with salt + bytecode via Safe batch
         bytes memory deployData = abi.encodePacked(DEPLOYMENT_SALT, creationCode);
-        (bool success, ) = CREATE2_FACTORY.call(deployData);
-        if (!success) {
-            revert DeploymentFailed();
-        }
+        addToBatch(CREATE2_FACTORY, 0, deployData);
 
-        vm.stopBroadcast();
-
-        // Verify deployment succeeded
         factory = AddressSetFactory(expectedAddress);
-        if (expectedAddress.code.length == 0) {
-            revert DeploymentFailed();
-        }
 
-        console.log("Deployed factory address:", expectedAddress);
-        console.log("[OK] Factory deployment successful");
-        console.log("=== DEPLOYMENT COMPLETE ===");
+        executeBatch(true);
+        _logDeploymentSummary();
+    }
 
-        return expectedAddress;
+    function _logDeploymentSummary() internal view {
+        console.log("\n=== DEPLOYMENT SUMMARY ===");
+        console.log("Safe Address:", safe);
+        console.log("AddressSetFactory:", address(factory));
+        console.log("\nBatch transaction created:");
+        console.log("- Safe will call execTransaction once");
+        console.log("- execTransaction calls MultiSendCallOnly");
+        console.log("- MultiSendCallOnly calls CREATE2 factory");
+        console.log("- CREATE2 factory deploys contract deterministically");
+        console.log("\nTransaction sent to Safe for signing.");
+        console.log("========================\n");
     }
 
     /**
