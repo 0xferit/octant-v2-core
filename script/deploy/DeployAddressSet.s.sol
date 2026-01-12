@@ -42,6 +42,9 @@ import { BatchScript } from "../helpers/BatchScript.sol";
  * - ADDRESS_SET_FACTORY: Address of deployed AddressSetFactory
  * - ADDRESS_SET_SALT: Salt string for deterministic address (e.g., "STAKER_ALLOWSET_V1")
  * - ADDRESS_SET_OWNER: Address that will own the AddressSet (defaults to SAFE_ADDRESS)
+ * - STAKER_ALLOWSET_SALT: Optional override salt string for deployAll allowset
+ * - STAKER_BLOCKSET_SALT: Optional override salt string for deployAll blockset
+ * - ALLOCATION_MECHANISM_ALLOWSET_SALT: Optional override salt string for deployAll allocation allowset
  */
 contract DeployAddressSet is Script, BatchScript {
     error AddressMismatch(address expected, address actual);
@@ -49,6 +52,10 @@ contract DeployAddressSet is Script, BatchScript {
     error InvalidOwner();
 
     /// @notice Default salts for common AddressSet deployments
+    string public constant STAKER_ALLOWSET_SALT_LABEL = "OCTANT_STAKER_ALLOWSET_V1";
+    string public constant STAKER_BLOCKSET_SALT_LABEL = "OCTANT_STAKER_BLOCKSET_V1";
+    string public constant ALLOCATION_MECHANISM_ALLOWSET_SALT_LABEL = "OCTANT_ALLOCATION_MECHANISM_ALLOWSET_V1";
+
     bytes32 public constant STAKER_ALLOWSET_SALT = keccak256("OCTANT_STAKER_ALLOWSET_V1");
     bytes32 public constant STAKER_BLOCKSET_SALT = keccak256("OCTANT_STAKER_BLOCKSET_V1");
     bytes32 public constant ALLOCATION_MECHANISM_ALLOWSET_SALT = keccak256("OCTANT_ALLOCATION_MECHANISM_ALLOWSET_V1");
@@ -109,12 +116,25 @@ contract DeployAddressSet is Script, BatchScript {
         console.log("Owner:", owner);
         console.log("Factory:", address(factory));
 
-        stakerAllowset = _deployAddressSetBatched(STAKER_ALLOWSET_SALT, "Staker Allowset");
-        stakerBlockset = _deployAddressSetBatched(STAKER_BLOCKSET_SALT, "Staker Blockset");
-        allocationMechanismAllowset = _deployAddressSetBatched(
-            ALLOCATION_MECHANISM_ALLOWSET_SALT,
-            "Allocation Mechanism Allowset"
+        (bytes32 allowsetSalt, string memory allowsetLabel) = _loadSaltOverride(
+            "STAKER_ALLOWSET_SALT",
+            STAKER_ALLOWSET_SALT,
+            STAKER_ALLOWSET_SALT_LABEL
         );
+        (bytes32 blocksetSalt, string memory blocksetLabel) = _loadSaltOverride(
+            "STAKER_BLOCKSET_SALT",
+            STAKER_BLOCKSET_SALT,
+            STAKER_BLOCKSET_SALT_LABEL
+        );
+        (bytes32 allocationSalt, string memory allocationLabel) = _loadSaltOverride(
+            "ALLOCATION_MECHANISM_ALLOWSET_SALT",
+            ALLOCATION_MECHANISM_ALLOWSET_SALT,
+            ALLOCATION_MECHANISM_ALLOWSET_SALT_LABEL
+        );
+
+        stakerAllowset = _deployAddressSetBatched(allowsetSalt, allowsetLabel);
+        stakerBlockset = _deployAddressSetBatched(blocksetSalt, blocksetLabel);
+        allocationMechanismAllowset = _deployAddressSetBatched(allocationSalt, allocationLabel);
 
         executeBatch(true);
 
@@ -127,6 +147,20 @@ contract DeployAddressSet is Script, BatchScript {
 
     function _deployAddressSetBatched(bytes32 salt, string memory label) internal returns (address deployedAddress) {
         return _deployAddressSet(salt, label, true);
+    }
+
+    function _loadSaltOverride(
+        string memory envKey,
+        bytes32 defaultSalt,
+        string memory defaultLabel
+    ) internal returns (bytes32 salt, string memory label) {
+        label = vm.envOr(envKey, string(""));
+        if (bytes(label).length == 0) {
+            label = defaultLabel;
+            salt = defaultSalt;
+        } else {
+            salt = keccak256(bytes(label));
+        }
     }
 
     function _deployAddressSet(

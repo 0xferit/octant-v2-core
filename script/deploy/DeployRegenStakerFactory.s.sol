@@ -22,6 +22,7 @@ import { BatchScript } from "../helpers/BatchScript.sol";
  * export WALLET_TYPE=local # or ledger
  * export PRIVATE_KEY=0x... # required for WALLET_TYPE=local
  * export SENDER=0x... # must be a Safe owner or delegate
+ * export REGEN_STAKER_FACTORY_SALT=OCTANT_REGEN_STAKER_FACTORY_V1_TEST
  *
  * forge script script/deploy/DeployRegenStakerFactory.s.sol:DeployRegenStakerFactory \
  *   --rpc-url $ETH_RPC_URL \
@@ -36,7 +37,8 @@ contract DeployRegenStakerFactory is Script, BatchScript {
     error AddressMismatch(address expected, address actual);
     error DeploymentFailed();
 
-    /// @notice Salt for deterministic deployment
+    /// @notice Default salt label for deterministic deployment
+    string public constant DEFAULT_SALT_LABEL = "OCTANT_REGEN_STAKER_FACTORY_V1";
     bytes32 public constant DEPLOYMENT_SALT = keccak256("OCTANT_REGEN_STAKER_FACTORY_V1");
 
     /// @notice Deployed factory contract
@@ -66,14 +68,22 @@ contract DeployRegenStakerFactory is Script, BatchScript {
         console.log("RegenStakerWithoutDelegation bytecode hash:");
         console.logBytes32(noDelegationBytecodeHash);
 
+        string memory saltLabel = vm.envOr("REGEN_STAKER_FACTORY_SALT", DEFAULT_SALT_LABEL);
+        if (bytes(saltLabel).length == 0) {
+            saltLabel = DEFAULT_SALT_LABEL;
+        }
+        bytes32 salt = keccak256(bytes(saltLabel));
+
         bytes memory creationCode = abi.encodePacked(
             type(RegenStakerFactory).creationCode,
             abi.encode(regenStakerBytecodeHash, noDelegationBytecodeHash)
         );
-        address expectedAddress = _computeCreate2AddressViaFactory(DEPLOYMENT_SALT, creationCode);
+        address expectedAddress = _computeCreate2AddressViaFactory(salt, creationCode);
         console.log("Expected address:", expectedAddress);
+        console.log("Salt string:", saltLabel);
+        console.logBytes32(salt);
 
-        bytes memory deployData = abi.encodePacked(DEPLOYMENT_SALT, creationCode);
+        bytes memory deployData = abi.encodePacked(salt, creationCode);
         bytes memory result = executeTransaction(CREATE2_FACTORY, 0, deployData, Operation.CALL, true);
         address deployedAddress = _decodeCreate2DeployerResult(result);
         if (deployedAddress != expectedAddress) {
