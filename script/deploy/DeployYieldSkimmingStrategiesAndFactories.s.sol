@@ -16,6 +16,23 @@ import { RocketPoolStrategyFactory } from "src/factories/yieldSkimming/RocketPoo
  * @author Golem Foundation
  * @notice Deployment script that deploys yield skimming tokenized strategy and factory contracts via Safe multisig
  * @dev Safe calls MultiSendCallOnly which makes multiple calls to CREATE2 factory for deployment
+ *
+ * Deploys the following contracts:
+ *   - YieldSkimmingTokenizedStrategy (implementation)
+ *   - LidoStrategyFactory
+ *   - RocketPoolStrategyFactory
+ *
+ * Usage:
+ * ```
+ * export SAFE_ADDRESS=0x...
+ * export CHAIN=mainnet
+ * export WALLET_TYPE=local # or ledger
+ * export PRIVATE_KEY=0x... # required for WALLET_TYPE=local
+ * export SENDER=0x... # must be a Safe owner or delegate
+ * export ETH_RPC_URL=https://eth-mainnet.alchemyapi.io/v2/YOUR_API_KEY
+ *
+ * forge script script/deploy/DeployYieldSkimmingStrategiesAndFactories.s.sol:DeployYieldSkimmingStrategiesAndFactories --rpc-url $ETH_RPC_URL --ffi  --sender $SENDER
+ * ```
  */
 contract DeployYieldSkimmingStrategiesAndFactories is Script, BatchScript {
     // Deployment salts for deterministic addresses (date-based: DDMMYYYY format)
