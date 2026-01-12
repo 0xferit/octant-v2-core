@@ -2,11 +2,8 @@
 pragma solidity ^0.8.25;
 
 import { Script, console } from "forge-std/Script.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
 import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
-import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
 import { LidoStrategy } from "src/strategies/yieldSkimming/LidoStrategy.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
 
@@ -46,29 +43,30 @@ contract GenerateProposalCalldata is Script {
     /// @notice wstETH token address on Ethereum mainnet - DO NOT CHANGE
     address constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
-    /// @notice Tokenized Strategy implementation - DO NOT CHANGE
-    address constant TOKENIZED_STRATEGY = 0x8cf7246a74704bBE59c9dF614ccB5e3d9717d8Ac;
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // TODO: UPDATE THESE VALUES BEFORE PRODUCTION
     // ═══════════════════════════════════════════════════════════════════════════════
 
+    /// @notice Tokenized Strategy implementation (YieldSkimmingTokenizedStrategy)
+    /// @dev For testing: using deployer address. Update for production.
+    address constant TOKENIZED_STRATEGY = 0xA19B3a3DC621823f9ec85B38a94A8461B97587e3;
+
     /// @notice LidoStrategyFactory address
-    /// @dev TODO: Deploy LidoStrategyFactory to mainnet and update this address
-    address constant LIDO_STRATEGY_FACTORY = address(0);
+    /// @dev For testing: using deployer address. Update for production.
+    address constant LIDO_STRATEGY_FACTORY = 0x4f36ff845a205d86C302d5cBBA8544FFE28556b2;
 
     /// @notice Dragon Funding Pool recipient address
-    /// @dev TODO: Set the actual grant recipient address
-    address constant DRAGON_FUNDING_POOL = address(0);
+    /// @dev For testing: using deployer address. Update for production.
+    address constant DRAGON_FUNDING_POOL = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
 
     /// @notice Keeper bot address for calling report()
-    /// @dev TODO: Set dedicated keeper EOA or bot address
+    /// @dev For testing: using deployer address. Update for production.
     /// @dev CRITICAL: Do NOT use Treasury - would require governance vote for each harvest
-    address constant KEEPER_BOT = address(0);
+    address constant KEEPER_BOT = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
 
     /// @notice Emergency admin address
-    /// @dev TODO: Set emergency admin (can be same as Treasury for DAO control)
-    address constant EMERGENCY_ADMIN = address(0);
+    /// @dev For testing: using deployer address. Update for production.
+    address constant EMERGENCY_ADMIN = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
 
     /// @notice Strategy name (appears in token metadata)
     string constant STRATEGY_NAME = "NounsLidoStrategy";
@@ -83,101 +81,64 @@ contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
 
     function run() public {
-        _printHeader();
-
-        // Resolve addresses (deploy temp factories in test mode)
-        (
-            address lidoStrategyFactory,
-            address dragonPool,
-            address keeper,
-            address emergencyAdmin,
-            bool isTestMode
-        ) = _resolveAddresses();
-
-        if (isTestMode) {
-            _printTestModeWarning();
+        // No-op storage write to prevent "can be view" warning (forge scripts don't support view entry points)
+        assembly {
+            sstore(0, 0)
         }
 
-        // Precompute deterministic addresses
-        (address predictedPS, address predictedStrategy) = _computeAddresses(
-            lidoStrategyFactory,
-            dragonPool,
-            keeper,
-            emergencyAdmin
-        );
+        _printHeader();
 
-        _printConfiguration(lidoStrategyFactory, dragonPool, keeper, emergencyAdmin);
+        // Precompute deterministic addresses
+        (address predictedPS, address predictedStrategy) = _computeAddresses();
+
+        _printConfiguration();
         _printPrecomputedAddresses(predictedPS, predictedStrategy);
 
         // Generate and print all 4 transactions
-        _printTransaction1_DeployPaymentSplitter(dragonPool);
-        _printTransaction2_DeployStrategy(lidoStrategyFactory, keeper, emergencyAdmin, predictedPS);
+        _printTransaction1_DeployPaymentSplitter();
+        _printTransaction2_DeployStrategy(predictedPS);
         _printTransaction3_ApproveWstETH(predictedStrategy);
         _printTransaction4_DepositWstETH(predictedStrategy);
 
         // Print summary for Nouns DAO UI
-        _printNounsUISummary(lidoStrategyFactory, predictedStrategy);
+        _printNounsUISummary(predictedStrategy);
 
         _printFooter();
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
-    // ADDRESS RESOLUTION
-    // ══════════════════════════════════════════════════════════════════════════════
-
-    function _resolveAddresses()
-        internal
-        returns (
-            address lidoStrategyFactory,
-            address dragonPool,
-            address keeper,
-            address emergencyAdmin,
-            bool isTestMode
-        )
-    {
-        isTestMode = LIDO_STRATEGY_FACTORY == address(0) ||
-            DRAGON_FUNDING_POOL == address(0) ||
-            KEEPER_BOT == address(0) ||
-            EMERGENCY_ADMIN == address(0);
-
-        // Resolve LidoStrategyFactory
-        if (LIDO_STRATEGY_FACTORY == address(0)) {
-            LidoStrategyFactory tempFactory = new LidoStrategyFactory();
-            lidoStrategyFactory = address(tempFactory);
-        } else {
-            lidoStrategyFactory = LIDO_STRATEGY_FACTORY;
-        }
-
-        // Resolve Dragon Funding Pool
-        dragonPool = DRAGON_FUNDING_POOL == address(0) ? makeAddr("DragonFundingPool") : DRAGON_FUNDING_POOL;
-
-        // Resolve Keeper Bot
-        keeper = KEEPER_BOT == address(0) ? makeAddr("KeeperBot") : KEEPER_BOT;
-
-        // Resolve Emergency Admin (default to Treasury)
-        emergencyAdmin = EMERGENCY_ADMIN == address(0) ? NOUNS_TREASURY : EMERGENCY_ADMIN;
-    }
-
-    function _computeAddresses(
-        address lidoStrategyFactory,
-        address, // dragonPool - not used for address prediction
-        address keeper,
-        address emergencyAdmin
-    ) internal view returns (address predictedPS, address predictedStrategy) {
+    function _computeAddresses() internal view returns (address predictedPS, address predictedStrategy) {
         // Predict PaymentSplitter address
         predictedPS = PaymentSplitterFactory(PAYMENT_SPLITTER_FACTORY).predictDeterministicAddress(NOUNS_TREASURY);
 
         // Predict Strategy address
         bytes32 parameterHash = keccak256(
-            abi.encode(WSTETH, STRATEGY_NAME, NOUNS_TREASURY, keeper, emergencyAdmin, predictedPS, false, TOKENIZED_STRATEGY)
+            abi.encode(
+                WSTETH,
+                STRATEGY_NAME,
+                NOUNS_TREASURY,
+                KEEPER_BOT,
+                EMERGENCY_ADMIN,
+                predictedPS,
+                false,
+                TOKENIZED_STRATEGY
+            )
         );
 
         bytes memory strategyBytecode = abi.encodePacked(
             type(LidoStrategy).creationCode,
-            abi.encode(WSTETH, STRATEGY_NAME, NOUNS_TREASURY, keeper, emergencyAdmin, predictedPS, false, TOKENIZED_STRATEGY)
+            abi.encode(
+                WSTETH,
+                STRATEGY_NAME,
+                NOUNS_TREASURY,
+                KEEPER_BOT,
+                EMERGENCY_ADMIN,
+                predictedPS,
+                false,
+                TOKENIZED_STRATEGY
+            )
         );
 
-        predictedStrategy = BaseStrategyFactory(lidoStrategyFactory).predictStrategyAddress(
+        predictedStrategy = BaseStrategyFactory(LIDO_STRATEGY_FACTORY).predictStrategyAddress(
             parameterHash,
             NOUNS_TREASURY,
             strategyBytecode
@@ -188,7 +149,7 @@ contract GenerateProposalCalldata is Script {
     // TRANSACTION GENERATORS
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function _printTransaction1_DeployPaymentSplitter(address dragonPool) internal pure {
+    function _printTransaction1_DeployPaymentSplitter() internal pure {
         console.log("");
         console.log("================================================================================");
         console.log("TRANSACTION 1: Deploy PaymentSplitter");
@@ -197,7 +158,7 @@ contract GenerateProposalCalldata is Script {
 
         // Build parameters
         address[] memory payees = new address[](1);
-        payees[0] = dragonPool;
+        payees[0] = DRAGON_FUNDING_POOL;
         string[] memory payeeNames = new string[](1);
         payeeNames[0] = "NounsGrants";
         uint256[] memory shares = new uint256[](1);
@@ -219,20 +180,15 @@ contract GenerateProposalCalldata is Script {
         console.log("  ", signature);
         console.log("");
         console.log("PARAMETERS:");
-        console.log("  payees:     [", dragonPool, "]");
-        console.log("  payeeNames: [\"NounsGrants\"]");
+        console.log("  payees:     [", DRAGON_FUNDING_POOL, "]");
+        console.log('  payeeNames: ["NounsGrants"]');
         console.log("  shares:     [100]");
         console.log("");
         console.log("CALLDATA (copy this - parameters only, no selector):");
         console.logBytes(calldataParams);
     }
 
-    function _printTransaction2_DeployStrategy(
-        address lidoStrategyFactory,
-        address keeper,
-        address emergencyAdmin,
-        address paymentSplitter
-    ) internal pure {
+    function _printTransaction2_DeployStrategy(address paymentSplitter) internal pure {
         console.log("");
         console.log("================================================================================");
         console.log("TRANSACTION 2: Deploy LidoStrategy");
@@ -246,15 +202,15 @@ contract GenerateProposalCalldata is Script {
         bytes memory calldataParams = abi.encode(
             STRATEGY_NAME,
             NOUNS_TREASURY,
-            keeper,
-            emergencyAdmin,
+            KEEPER_BOT,
+            EMERGENCY_ADMIN,
             paymentSplitter,
             false,
             TOKENIZED_STRATEGY
         );
 
         console.log("TARGET (copy this):");
-        console.log("  ", lidoStrategyFactory);
+        console.log("  ", LIDO_STRATEGY_FACTORY);
         console.log("");
         console.log("VALUE:");
         console.log("  0");
@@ -265,8 +221,8 @@ contract GenerateProposalCalldata is Script {
         console.log("PARAMETERS:");
         console.log("  _name:                     %s", STRATEGY_NAME);
         console.log("  _management:               ", NOUNS_TREASURY);
-        console.log("  _keeper:                   ", keeper);
-        console.log("  _emergencyAdmin:           ", emergencyAdmin);
+        console.log("  _keeper:                   ", KEEPER_BOT);
+        console.log("  _emergencyAdmin:           ", EMERGENCY_ADMIN);
         console.log("  _donationAddress:          ", paymentSplitter);
         console.log("  _enableBurning:            false");
         console.log("  _tokenizedStrategyAddress: ", TOKENIZED_STRATEGY);
@@ -339,7 +295,7 @@ contract GenerateProposalCalldata is Script {
     // SUMMARY OUTPUT
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function _printNounsUISummary(address lidoStrategyFactory, address predictedStrategy) internal pure {
+    function _printNounsUISummary(address predictedStrategy) internal pure {
         console.log("");
         console.log("================================================================================");
         console.log("NOUNS DAO UI SUMMARY - COPY/PASTE READY");
@@ -356,7 +312,7 @@ contract GenerateProposalCalldata is Script {
         console.log("--------------------------------------------------------------------------------");
         console.log("TX 2 - Deploy LidoStrategy");
         console.log("--------------------------------------------------------------------------------");
-        console.log("Target:   ", lidoStrategyFactory);
+        console.log("Target:   ", LIDO_STRATEGY_FACTORY);
         console.log("Function: createStrategy(string,address,address,address,address,bool,address)");
         console.log("");
         console.log("--------------------------------------------------------------------------------");
@@ -386,35 +342,15 @@ contract GenerateProposalCalldata is Script {
         console.log("");
     }
 
-    function _printTestModeWarning() internal pure {
-        console.log("--------------------------------------------------------------------------------");
-        console.log("WARNING: TEST MODE - PLACEHOLDER ADDRESSES DETECTED");
-        console.log("--------------------------------------------------------------------------------");
-        console.log("The following addresses are placeholders and must be updated for production:");
-        console.log("  - LIDO_STRATEGY_FACTORY");
-        console.log("  - DRAGON_FUNDING_POOL");
-        console.log("  - KEEPER_BOT");
-        console.log("  - EMERGENCY_ADMIN");
-        console.log("");
-        console.log("Temporary test addresses are being used for demonstration.");
-        console.log("--------------------------------------------------------------------------------");
-        console.log("");
-    }
-
-    function _printConfiguration(
-        address lidoFactory,
-        address dragonPool,
-        address keeper,
-        address emergencyAdmin
-    ) internal pure {
+    function _printConfiguration() internal pure {
         console.log("CONFIGURATION:");
         console.log("--------------------------------------------------------------------------------");
         console.log("  Treasury (Management):    ", NOUNS_TREASURY);
         console.log("  PaymentSplitter Factory:  ", PAYMENT_SPLITTER_FACTORY);
-        console.log("  LidoStrategy Factory:     ", lidoFactory);
-        console.log("  Dragon Funding Pool:      ", dragonPool);
-        console.log("  Keeper Bot:               ", keeper);
-        console.log("  Emergency Admin:          ", emergencyAdmin);
+        console.log("  LidoStrategy Factory:     ", LIDO_STRATEGY_FACTORY);
+        console.log("  Dragon Funding Pool:      ", DRAGON_FUNDING_POOL);
+        console.log("  Keeper Bot:               ", KEEPER_BOT);
+        console.log("  Emergency Admin:          ", EMERGENCY_ADMIN);
         console.log("  wstETH Token:             ", WSTETH);
         console.log("  Tokenized Strategy Impl:  ", TOKENIZED_STRATEGY);
         console.log("  Strategy Name:             %s", STRATEGY_NAME);
