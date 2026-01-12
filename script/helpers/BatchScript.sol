@@ -98,26 +98,27 @@ abstract contract BatchScript is Script {
         chainId = chain.chainId;
 
         // Set the Safe API base URL and multisend address based on chain
+        // Note: Safe API migrated to api.safe.global/tx-service/{network}/...
         if (chainId == 1) {
-            SAFE_API_BASE_URL = "https://safe-transaction-mainnet.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/mainnet/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 137) {
-            SAFE_API_BASE_URL = "https://safe-transaction-polygon.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/polygon/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 5) {
-            SAFE_API_BASE_URL = "https://safe-transaction-goerli.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/goerli/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 11155111) {
-            SAFE_API_BASE_URL = "https://safe-transaction-sepolia.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/sepolia/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 8453) {
-            SAFE_API_BASE_URL = "https://safe-transaction-base.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/base/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 42161) {
-            SAFE_API_BASE_URL = "https://safe-transaction-arbitrum.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/arbitrum/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 43114) {
-            SAFE_API_BASE_URL = "https://safe-transaction-avalanche.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/avalanche/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else {
             revert("Unsupported chain");
