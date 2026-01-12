@@ -6,52 +6,42 @@ import { console } from "forge-std/console.sol";
 import { RegenStakerFactory } from "src/factories/RegenStakerFactory.sol";
 import { RegenStaker } from "src/regen/RegenStaker.sol";
 import { RegenStakerWithoutDelegateSurrogateVotes } from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
-import { BatchScript } from "../helpers/BatchScript.sol";
 
 /**
  * @title DeployRegenStakerFactory
  * @author [Golem Foundation](https://golem.foundation)
  * @custom:security-contact security@golem.foundation
- * @notice Deployment script for RegenStakerFactory via Safe multisig
- * @dev Deploys RegenStakerFactory deterministically using CREATE2 with a salt for consistent addresses.
+ * @notice Deployment script for RegenStakerFactory
+ * @dev Deploys RegenStakerFactory deterministically using CREATE2.
  *
  * Usage:
  * ```bash
- * export SAFE_ADDRESS=0x...
- * export CHAIN=ethereum
- * export WALLET_TYPE=local # or ledger
- * export PRIVATE_KEY=0x... # required for WALLET_TYPE=local
- *
  * forge script script/deploy/DeployRegenStakerFactory.s.sol:DeployRegenStakerFactory \
  *   --rpc-url $ETH_RPC_URL \
- *   --ffi
+ *   --private-key $PRIVATE_KEY \
+ *   --broadcast \
+ *   --verify
  * ```
  */
-contract DeployRegenStakerFactory is Script, BatchScript {
+contract DeployRegenStakerFactory is Script {
+    error DeploymentFailed();
+
     /// @notice Salt for deterministic deployment
     bytes32 public constant DEPLOYMENT_SALT = keccak256("OCTANT_REGEN_STAKER_FACTORY_V1");
 
-    /// @notice Deployed factory contract (expected address)
+    /// @notice Deployed factory contract
     RegenStakerFactory public regenStakerFactory;
 
-    /// @notice Safe address used to submit the batch
-    address public safe;
-
-    function setUp() public {
-        safe = vm.envOr("SAFE_ADDRESS", address(0));
-        if (safe == address(0)) {
-            try vm.prompt("Enter Safe Address") returns (string memory res) {
-                safe = vm.parseAddress(res);
-            } catch {
-                revert("Invalid Safe Address");
-            }
-        }
-
-        console.log("Using Safe:", safe);
+    function run() public virtual returns (address) {
+        return deploy();
     }
 
-    function run() public virtual isBatch(safe) {
-        console.log("=== REGEN STAKER FACTORY DEPLOYMENT (SAFE) ===");
+    function deploy() public virtual returns (address) {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
+
+        console.log("=== REGEN STAKER FACTORY DEPLOYMENT ===");
+        console.log("Deployer:", deployer);
 
         bytes32 regenStakerBytecodeHash = keccak256(type(RegenStaker).creationCode);
         bytes32 noDelegationBytecodeHash = keccak256(type(RegenStakerWithoutDelegateSurrogateVotes).creationCode);
@@ -68,36 +58,25 @@ contract DeployRegenStakerFactory is Script, BatchScript {
         address expectedAddress = _computeCreate2Address(CREATE2_FACTORY, DEPLOYMENT_SALT, keccak256(creationCode));
         console.log("Expected address:", expectedAddress);
 
-        // Explicitly call CREATE2_FACTORY with salt + bytecode via Safe batch
+        vm.startBroadcast(deployerPrivateKey);
         bytes memory deployData = abi.encodePacked(DEPLOYMENT_SALT, creationCode);
-        addToBatch(CREATE2_FACTORY, 0, deployData);
+        (bool success, ) = CREATE2_FACTORY.call(deployData);
+        if (!success) {
+            revert DeploymentFailed();
+        }
+        vm.stopBroadcast();
 
         regenStakerFactory = RegenStakerFactory(expectedAddress);
 
-        executeBatch(true);
-        _logDeploymentSummary();
+        if (expectedAddress.code.length == 0) {
+            revert DeploymentFailed();
+        }
+
+        console.log("RegenStakerFactory deployed at:", address(regenStakerFactory));
+        return address(regenStakerFactory);
     }
 
-    function _logDeploymentSummary() internal view {
-        console.log("\n=== DEPLOYMENT SUMMARY ===");
-        console.log("Safe Address:", safe);
-        console.log("RegenStakerFactory:", address(regenStakerFactory));
-        console.log("\nBatch transaction created:");
-        console.log("- Safe will call execTransaction once");
-        console.log("- execTransaction calls MultiSendCallOnly");
-        console.log("- MultiSendCallOnly calls CREATE2 factory");
-        console.log("- CREATE2 factory deploys contract deterministically");
-        console.log("\nTransaction sent to Safe for signing.");
-        console.log("========================\n");
-    }
-
-    /**
-     * @notice Compute expected CREATE2 address
-     * @param factory CREATE2 factory address
-     * @param salt Deployment salt
-     * @param initCodeHash Hash of the contract's creation code (including constructor args)
-     * @return Expected deployment address
-     */
+    /// @notice Compute expected CREATE2 address
     function _computeCreate2Address(
         address factory,
         bytes32 salt,
