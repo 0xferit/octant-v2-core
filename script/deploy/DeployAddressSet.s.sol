@@ -25,13 +25,18 @@ import { BatchScript } from "../helpers/BatchScript.sol";
  * export CHAIN=ethereum
  * export WALLET_TYPE=local # or ledger
  * export PRIVATE_KEY=0x... # required for WALLET_TYPE=local
+ * export SENDER=0x... # must be a Safe owner or delegate
  * export ADDRESS_SET_FACTORY=0x...
  * export ADDRESS_SET_SALT=STAKER_ALLOWSET_V1
  *
  * forge script script/deploy/DeployAddressSet.s.sol:DeployAddressSet \
  *   --rpc-url $ETH_RPC_URL \
- *   --ffi
+ *   --ffi \
+ *   --sender $SENDER
  * ```
+ *
+ * Note: The --sender flag must be set to the address corresponding to PRIVATE_KEY.
+ *       This address must be an owner or delegate of the Safe.
  *
  * Environment Variables:
  * - ADDRESS_SET_FACTORY: Address of deployed AddressSetFactory
@@ -61,14 +66,7 @@ contract DeployAddressSet is Script, BatchScript {
     address public owner;
 
     function setUp() public {
-        safe = vm.envOr("SAFE_ADDRESS", address(0));
-        if (safe == address(0)) {
-            try vm.prompt("Enter Safe Address") returns (string memory res) {
-                safe = vm.parseAddress(res);
-            } catch {
-                revert("Invalid Safe Address");
-            }
-        }
+        safe = _loadSafeAddress();
 
         factory = AddressSetFactory(vm.envAddress("ADDRESS_SET_FACTORY"));
         owner = vm.envOr("ADDRESS_SET_OWNER", safe);
@@ -81,7 +79,6 @@ contract DeployAddressSet is Script, BatchScript {
 
     function run() public isBatch(safe) {
         _deploySingle();
-        executeBatch(true);
     }
 
     function _deploySingle() internal returns (address) {
@@ -93,32 +90,7 @@ contract DeployAddressSet is Script, BatchScript {
         console.log("Salt string:", saltString);
         console.logBytes32(salt);
 
-        address expectedAddress = factory.predictAddress(salt, owner);
-        console.log("Expected AddressSet address:", expectedAddress);
-
-        bytes memory result = addToBatch(
-            address(factory),
-            0,
-            abi.encodeWithSignature("deploy(bytes32,address)", salt, owner)
-        );
-        address deployedAddress = abi.decode(result, (address));
-        addressSet = AddressSet(deployedAddress);
-
-        console.log("Deployed AddressSet address:", deployedAddress);
-
-        if (expectedAddress != deployedAddress) {
-            revert AddressMismatch(expectedAddress, deployedAddress);
-        }
-        console.log("[OK] Deployment is deterministic");
-
-        address actualOwner = addressSet.owner();
-        console.log("Owner:", actualOwner);
-
-        if (actualOwner != owner) {
-            revert OwnerMismatch(owner, actualOwner);
-        }
-        console.log("[OK] Ownership correctly set to owner");
-
+        address deployedAddress = _deployAddressSetSingle(salt, saltString);
         console.log("=== DEPLOYMENT COMPLETE ===");
 
         return deployedAddress;
@@ -137,32 +109,63 @@ contract DeployAddressSet is Script, BatchScript {
         console.log("Owner:", owner);
         console.log("Factory:", address(factory));
 
-        bytes memory stakerAllowsetResult = addToBatch(
-            address(factory),
-            0,
-            abi.encodeWithSignature("deploy(bytes32,address)", STAKER_ALLOWSET_SALT, owner)
+        stakerAllowset = _deployAddressSetBatched(STAKER_ALLOWSET_SALT, "Staker Allowset");
+        stakerBlockset = _deployAddressSetBatched(STAKER_BLOCKSET_SALT, "Staker Blockset");
+        allocationMechanismAllowset = _deployAddressSetBatched(
+            ALLOCATION_MECHANISM_ALLOWSET_SALT,
+            "Allocation Mechanism Allowset"
         );
-        stakerAllowset = abi.decode(stakerAllowsetResult, (address));
-        console.log("Staker Allowset:", stakerAllowset);
-
-        bytes memory stakerBlocksetResult = addToBatch(
-            address(factory),
-            0,
-            abi.encodeWithSignature("deploy(bytes32,address)", STAKER_BLOCKSET_SALT, owner)
-        );
-        stakerBlockset = abi.decode(stakerBlocksetResult, (address));
-        console.log("Staker Blockset:", stakerBlockset);
-
-        bytes memory allocationMechanismAllowsetResult = addToBatch(
-            address(factory),
-            0,
-            abi.encodeWithSignature("deploy(bytes32,address)", ALLOCATION_MECHANISM_ALLOWSET_SALT, owner)
-        );
-        allocationMechanismAllowset = abi.decode(allocationMechanismAllowsetResult, (address));
-        console.log("Allocation Mechanism Allowset:", allocationMechanismAllowset);
 
         executeBatch(true);
 
         console.log("=== ALL ADDRESSSETS DEPLOYED ===");
+    }
+
+    function _deployAddressSetSingle(bytes32 salt, string memory label) internal returns (address deployedAddress) {
+        return _deployAddressSet(salt, label, false);
+    }
+
+    function _deployAddressSetBatched(bytes32 salt, string memory label) internal returns (address deployedAddress) {
+        return _deployAddressSet(salt, label, true);
+    }
+
+    function _deployAddressSet(
+        bytes32 salt,
+        string memory label,
+        bool useBatch
+    ) internal returns (address deployedAddress) {
+        if (bytes(label).length != 0) {
+            console.log(string.concat("Deploying AddressSet: ", label));
+        }
+
+        address expectedAddress = factory.predictAddress(salt, owner);
+        console.log("Expected AddressSet address:", expectedAddress);
+
+        bytes memory data = abi.encodeWithSignature("deploy(bytes32,address)", salt, owner);
+        bytes memory result;
+        if (useBatch) {
+            result = addToBatch(address(factory), 0, data);
+        } else {
+            result = executeTransaction(address(factory), 0, data, Operation.CALL, true);
+        }
+        deployedAddress = abi.decode(result, (address));
+        addressSet = AddressSet(deployedAddress);
+
+        console.log("Deployed AddressSet address:", deployedAddress);
+
+        if (expectedAddress != deployedAddress) {
+            revert AddressMismatch(expectedAddress, deployedAddress);
+        }
+        console.log("[OK] Deployment is deterministic");
+
+        address actualOwner = addressSet.owner();
+        console.log("Owner:", actualOwner);
+
+        if (actualOwner != owner) {
+            revert OwnerMismatch(owner, actualOwner);
+        }
+        console.log("[OK] Ownership correctly set to owner");
+
+        return deployedAddress;
     }
 }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { AddressSetFactory } from "src/factories/AddressSetFactory.sol";
+import { BatchScript } from "../helpers/BatchScript.sol";
 
 /**
  * @title DeployAddressSetFactory
@@ -14,14 +15,23 @@ import { AddressSetFactory } from "src/factories/AddressSetFactory.sol";
  *
  * Usage:
  * ```bash
+ * export SAFE_ADDRESS=0x...
+ * export CHAIN=ethereum
+ * export WALLET_TYPE=local # or ledger
+ * export PRIVATE_KEY=0x... # required for WALLET_TYPE=local
+ * export SENDER=0x... # must be a Safe owner or delegate
+ *
  * forge script script/deploy/DeployAddressSetFactory.s.sol:DeployAddressSetFactory \
  *   --rpc-url $ETH_RPC_URL \
- *   --private-key $PRIVATE_KEY \
- *   --broadcast \
- *   --verify
+ *   --ffi \
+ *   --sender $SENDER
  * ```
+ *
+ * Note: The --sender flag must be set to the address corresponding to PRIVATE_KEY.
+ *       This address must be an owner or delegate of the Safe.
  */
-contract DeployAddressSetFactory is Script {
+contract DeployAddressSetFactory is Script, BatchScript {
+    error AddressMismatch(address expected, address actual);
     error DeploymentFailed();
 
     /// @notice Salt for deterministic factory deployment
@@ -30,45 +40,36 @@ contract DeployAddressSetFactory is Script {
     /// @notice Deployed factory contract
     AddressSetFactory public factory;
 
-    function run() external returns (address) {
-        return deploy();
+    /// @notice Safe address used to submit the batch
+    address public safe;
+
+    function setUp() public {
+        safe = _loadSafeAddress();
+
+        console.log("Using Safe:", safe);
     }
 
-    function deploy() public returns (address) {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
+    function run() external isBatch(safe) returns (address) {
+        return _deploy();
+    }
 
+    function _deploy() internal returns (address) {
         console.log("=== ADDRESS SET FACTORY DEPLOYMENT ===");
-        console.log("Deployer:", deployer);
 
         bytes memory creationCode = type(AddressSetFactory).creationCode;
-        address expectedAddress = _computeCreate2Address(CREATE2_FACTORY, DEPLOYMENT_SALT, keccak256(creationCode));
+        address expectedAddress = _computeCreate2AddressViaFactory(DEPLOYMENT_SALT, creationCode);
         console.log("Expected factory address:", expectedAddress);
 
-        vm.startBroadcast(deployerPrivateKey);
         bytes memory deployData = abi.encodePacked(DEPLOYMENT_SALT, creationCode);
-        (bool success, ) = CREATE2_FACTORY.call(deployData);
-        if (!success) {
-            revert DeploymentFailed();
-        }
-        vm.stopBroadcast();
-
-        factory = AddressSetFactory(expectedAddress);
-
-        if (expectedAddress.code.length == 0) {
-            revert DeploymentFailed();
+        bytes memory result = executeTransaction(CREATE2_FACTORY, 0, deployData, Operation.CALL, true);
+        address deployedAddress = _decodeCreate2DeployerResult(result);
+        if (deployedAddress != expectedAddress) {
+            revert AddressMismatch(expectedAddress, deployedAddress);
         }
 
-        console.log("AddressSetFactory deployed at:", address(factory));
-        return address(factory);
-    }
+        factory = AddressSetFactory(deployedAddress);
 
-    /// @notice Compute expected CREATE2 address
-    function _computeCreate2Address(
-        address factoryAddr,
-        bytes32 salt,
-        bytes32 initCodeHash
-    ) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encodePacked(hex"ff", factoryAddr, salt, initCodeHash)))));
+        console.log("AddressSetFactory deployed at:", deployedAddress);
+        return deployedAddress;
     }
 }

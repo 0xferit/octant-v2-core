@@ -11,6 +11,18 @@ import { AddressSet } from "src/utils/AddressSet.sol";
  * @dev Final salt = keccak256(salt, owner). Ownership transfers to specified owner after deployment.
  */
 contract AddressSetFactory {
+    /// @notice Information about a deployed AddressSet
+    struct AddressSetInfo {
+        address deployerAddress;
+        uint256 timestamp;
+        address owner;
+        address addressSet;
+        bytes32 salt;
+    }
+
+    /// @dev Tracks deployed AddressSets per deployer
+    mapping(address => AddressSetInfo[]) public addressSets;
+
     /// @notice Emitted when a new AddressSet is deployed
     /// @param deployer Address that called deploy
     /// @param addressSet Deployed AddressSet address
@@ -27,6 +39,7 @@ contract AddressSetFactory {
         AddressSet set = new AddressSet{ salt: finalSalt }();
         set.transferOwnership(owner);
         addressSet = address(set);
+        _recordAddressSet(owner, addressSet, salt);
         emit AddressSetDeployed(msg.sender, addressSet, owner, salt);
     }
 
@@ -40,5 +53,23 @@ contract AddressSetFactory {
             abi.encodePacked(bytes1(0xff), address(this), finalSalt, keccak256(type(AddressSet).creationCode))
         );
         predicted = address(uint160(uint256(hash)));
+    }
+
+    /// @notice Returns all AddressSets deployed by a specific address
+    /// @param deployer Deployer address
+    function getAddressSetsByDeployer(address deployer) external view returns (AddressSetInfo[] memory) {
+        return addressSets[deployer];
+    }
+
+    function _recordAddressSet(address owner, address deployedAddressSet, bytes32 salt) internal {
+        addressSets[msg.sender].push(
+            AddressSetInfo({
+                deployerAddress: msg.sender,
+                timestamp: block.timestamp,
+                owner: owner,
+                addressSet: deployedAddressSet,
+                salt: salt
+            })
+        );
     }
 }

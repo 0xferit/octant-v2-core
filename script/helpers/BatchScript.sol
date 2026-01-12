@@ -98,26 +98,27 @@ abstract contract BatchScript is Script {
         chainId = chain.chainId;
 
         // Set the Safe API base URL and multisend address based on chain
+        // Note: Safe API migrated to api.safe.global/tx-service/{network}/...
         if (chainId == 1) {
-            SAFE_API_BASE_URL = "https://safe-transaction-mainnet.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/mainnet/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 137) {
-            SAFE_API_BASE_URL = "https://safe-transaction-polygon.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/polygon/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 5) {
-            SAFE_API_BASE_URL = "https://safe-transaction-goerli.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/goerli/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 11155111) {
-            SAFE_API_BASE_URL = "https://safe-transaction-sepolia.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/sepolia/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 8453) {
-            SAFE_API_BASE_URL = "https://safe-transaction-base.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/base/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 42161) {
-            SAFE_API_BASE_URL = "https://safe-transaction-arbitrum.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/arbitrum/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else if (chainId == 43114) {
-            SAFE_API_BASE_URL = "https://safe-transaction-avalanche.safe.global/api/v1/safes/";
+            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/avalanche/api/v1/safes/";
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else {
             revert("Unsupported chain");
@@ -179,6 +180,24 @@ abstract contract BatchScript is Script {
         }
     }
 
+    // Simulate then send a single transaction to the Safe API. If `send_` is `false`,
+    // the transaction is only simulated.
+    function executeTransaction(
+        address to_,
+        uint256 value_,
+        bytes memory data_,
+        Operation operation_,
+        bool send_
+    ) internal returns (bytes memory result) {
+        result = _simulateTransaction(to_, value_, data_, operation_);
+
+        if (send_) {
+            Batch memory safeTx = _createSafeTx(safe, to_, value_, data_, operation_);
+            safeTx = _signBatch(safe, safeTx);
+            _sendBatch(safe, safeTx);
+        }
+    }
+
     // Simulate then send the batch to the Safe API. If `send_` is `false`, the
     // batch will only be simulated.
     function executeBatch(bool send_) internal {
@@ -190,7 +209,87 @@ abstract contract BatchScript is Script {
         }
     }
 
+    // Shared helpers for Safe-based deployment scripts
+
+    function _loadSafeAddress() internal returns (address safeAddress) {
+        safeAddress = vm.envOr("SAFE_ADDRESS", address(0));
+        if (safeAddress == address(0)) {
+            try vm.prompt("Enter Safe Address") returns (string memory res) {
+                safeAddress = vm.parseAddress(res);
+            } catch {
+                revert("Invalid Safe Address");
+            }
+        }
+    }
+
+    function _computeCreate2AddressViaFactory(bytes32 salt, bytes memory creationCode) internal pure returns (address) {
+        return _computeCreate2AddressViaFactory(salt, keccak256(creationCode));
+    }
+
+    function _computeCreate2AddressViaFactory(bytes32 salt, bytes32 initCodeHash) internal pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encodePacked(hex"ff", CREATE2_FACTORY, salt, initCodeHash)))));
+    }
+
+    function _addCreate2Deployment(bytes32 salt, bytes memory creationCode) internal returns (address deployedAddress) {
+        bytes memory deployData = abi.encodePacked(salt, creationCode);
+        bytes memory result = addToBatch(CREATE2_FACTORY, 0, deployData);
+        deployedAddress = _decodeCreate2DeployerResult(result);
+        return deployedAddress;
+    }
+
+    function _decodeCreate2DeployerResult(bytes memory data) internal pure returns (address) {
+        if (data.length == 32) {
+            return abi.decode(data, (address));
+        }
+        if (data.length == 20) {
+            address addr;
+            assembly {
+                addr := shr(96, mload(add(data, 32)))
+            }
+            return addr;
+        }
+        if (data.length == 0) {
+            return address(0);
+        }
+        revert("Unexpected CREATE2 return");
+    }
+
     // Private functions
+
+    function _simulateTransaction(
+        address to_,
+        uint256 value_,
+        bytes memory data_,
+        Operation operation_
+    ) private returns (bytes memory result) {
+        vm.prank(safe);
+        bool success;
+        if (operation_ == Operation.CALL) {
+            (success, result) = to_.call{ value: value_ }(data_);
+        } else {
+            if (value_ != 0) revert("Delegatecall with value");
+            (success, result) = to_.delegatecall(data_);
+        }
+        if (!success) {
+            revert(string(result));
+        }
+    }
+
+    function _createSafeTx(
+        address safe_,
+        address to_,
+        uint256 value_,
+        bytes memory data_,
+        Operation operation_
+    ) private returns (Batch memory safeTx) {
+        safeTx.to = to_;
+        safeTx.value = value_;
+        safeTx.data = data_;
+        safeTx.operation = operation_;
+
+        safeTx.nonce = _getNonce(safe_);
+        safeTx.txHash = _getTransactionHash(safe_, safeTx);
+    }
 
     // Encodes the stored encoded transactions into a single Multisend transaction
     function _createBatch(address safe_) private returns (Batch memory batch) {
