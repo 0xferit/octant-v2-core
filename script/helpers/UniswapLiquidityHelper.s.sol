@@ -51,6 +51,14 @@ contract UniswapLiquidityHelper is IERC721Receiver {
     mapping(uint256 => Deposit) public deposits;
     mapping(uint24 => int24) public feeAmountTickSpacing;
 
+    // Storage variable for position data to reduce stack pressure during coverage builds
+    struct PositionData {
+        uint128 liquidity;
+        address token0;
+        address token1;
+    }
+    PositionData internal _positionData;
+
     constructor(address token0Address_, address token1Address_, address nonfungiblePositionManager_, uint24 poolFee_) {
         contractOwner = msg.sender;
         token0Address = token0Address_;
@@ -158,9 +166,9 @@ contract UniswapLiquidityHelper is IERC721Receiver {
     function decreaseLiquidityInHalf(uint256 tokenId) external returns (uint256 amount0, uint256 amount1) {
         // caller must be the owner of the NFT
         require(msg.sender == deposits[tokenId].owner, "Not the owner");
-        // get liquidity data for tokenId
-        (, , , , , , , uint128 liquidity, , , , ) = nonfungiblePositionManager.positions(tokenId);
-        uint128 halfLiquidity = liquidity / 2;
+        // get liquidity data for tokenId - use storage to reduce stack pressure
+        _positionData.liquidity = _getPositionLiquidity(tokenId);
+        uint128 halfLiquidity = _positionData.liquidity / 2;
         deposits[tokenId].liquidity = halfLiquidity;
 
         return _decreaseLiquidity(tokenId, halfLiquidity);
@@ -172,11 +180,11 @@ contract UniswapLiquidityHelper is IERC721Receiver {
         amount1 = 0;
         // caller must be the owner of the NFT
         require(msg.sender == deposits[tokenId].owner, "Not the owner");
-        // get liquidity data for tokenId
-        (, , , , , , , uint128 liquidity, , , , ) = nonfungiblePositionManager.positions(tokenId);
+        // get liquidity data for tokenId - use storage to reduce stack pressure
+        _positionData.liquidity = _getPositionLiquidity(tokenId);
         deposits[tokenId].liquidity = 0;
 
-        _decreaseLiquidity(tokenId, liquidity);
+        _decreaseLiquidity(tokenId, _positionData.liquidity);
     }
 
     /// @notice Increases liquidity in the current range
@@ -252,12 +260,54 @@ contract UniswapLiquidityHelper is IERC721Receiver {
     }
 
     function _createDeposit(address owner, uint256 tokenId) internal {
-        (, , address token0, address token1, , , , uint128 liquidity, , , , ) = nonfungiblePositionManager.positions(
-            tokenId
-        );
+        // Use helper to get position data - reduces stack pressure during coverage builds
+        _loadPositionData(tokenId);
 
         // set the owner and data for position
         // operator is msg.sender
-        deposits[tokenId] = Deposit({ owner: owner, liquidity: liquidity, token0: token0, token1: token1 });
+        deposits[tokenId] = Deposit({
+            owner: owner,
+            liquidity: _positionData.liquidity,
+            token0: _positionData.token0,
+            token1: _positionData.token1
+        });
+    }
+
+    /// @notice Helper function to get position liquidity - uses low-level call to reduce stack pressure
+    function _getPositionLiquidity(uint256 tokenId) internal view returns (uint128) {
+        // Use low-level call to avoid 12-return-value stack overflow
+        bytes memory data = abi.encodeWithSelector(INonfungiblePositionManager.positions.selector, tokenId);
+        (bool success, bytes memory result) = address(nonfungiblePositionManager).staticcall(data);
+        require(success, "Position query failed");
+        // Liquidity is the 8th return value (index 7), each value is 32 bytes
+        // Skip first 7 values (7 * 32 = 224 bytes) to get liquidity
+        uint128 liquidity;
+        assembly {
+            liquidity := mload(add(result, 256)) // 32 + 224 = 256 (skip length prefix + 7 values)
+        }
+        return liquidity;
+    }
+
+    /// @notice Helper function to load position data into storage - uses low-level call to reduce stack pressure
+    function _loadPositionData(uint256 tokenId) internal {
+        // Use low-level call to avoid 12-return-value stack overflow
+        bytes memory data = abi.encodeWithSelector(INonfungiblePositionManager.positions.selector, tokenId);
+        (bool success, bytes memory result) = address(nonfungiblePositionManager).staticcall(data);
+        require(success, "Position query failed");
+
+        // Decode only the values we need:
+        // token0 is 3rd return value (index 2): offset = 32 + 64 = 96
+        // token1 is 4th return value (index 3): offset = 32 + 96 = 128
+        // liquidity is 8th return value (index 7): offset = 32 + 224 = 256
+        assembly {
+            let token0 := mload(add(result, 96))
+            let token1 := mload(add(result, 128))
+            let liquidity := mload(add(result, 256))
+
+            // Store in storage struct
+            sstore(_positionData.slot, liquidity)
+            sstore(add(_positionData.slot, 1), token0)
+            sstore(add(_positionData.slot, 2), token1)
+        }
     }
 }
