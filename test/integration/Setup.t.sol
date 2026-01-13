@@ -11,7 +11,7 @@ import { Safe } from "@gnosis.pm/safe-contracts/contracts/Safe.sol";
 import { SafeProxy } from "@gnosis.pm/safe-contracts/contracts/proxies/SafeProxy.sol";
 import { SafeProxyFactory } from "@gnosis.pm/safe-contracts/contracts/proxies/SafeProxyFactory.sol";
 import { Enum } from "@gnosis.pm/safe-contracts/contracts/common/Enum.sol";
-import { MockHats as Hats } from "test/mocks/hats/MockHats.sol";
+import { Hats } from "hats-protocol/Hats.sol";
 import { DragonHatter } from "src/utils/hats/DragonHatter.sol";
 import { SimpleEligibilityAndToggle } from "src/utils/hats/SimpleEligibilityAndToggle.sol";
 import { DragonRouter } from "src/zodiac-core/DragonRouter.sol";
@@ -361,26 +361,20 @@ contract SetupIntegrationTest is Test, TestPlus {
         uint256 _maxReportDelay = 1 days;
         string memory _name = "Mock Dragon Strategy";
 
-        // Prepare initialization data using scoped blocks to reduce stack pressure
-        bytes memory strategyParams;
-        {
-            strategyParams = abi.encode(
-                dragonTokenizedStrategyAddress,
-                address(token),
-                address(mockYieldSource),
-                safeAddress, // management
-                safeAddress, // keeper
-                dragonRouterProxyAddress,
-                _maxReportDelay, // maxReportDelay
-                _name,
-                safeAddress // regenGovernance
-            );
-        }
+        // Prepare initialization data
+        bytes memory strategyParams = abi.encode(
+            dragonTokenizedStrategyAddress,
+            address(token),
+            address(mockYieldSource),
+            safeAddress, // management
+            safeAddress, // keeper
+            dragonRouterProxyAddress,
+            _maxReportDelay, // maxReportDelay
+            _name,
+            safeAddress // regenGovernance
+        );
 
-        bytes memory initData;
-        {
-            initData = abi.encodeWithSignature("setUp(bytes)", abi.encode(safeAddress, strategyParams));
-        }
+        bytes memory initData = abi.encodeWithSignature("setUp(bytes)", abi.encode(safeAddress, strategyParams));
 
         // Deploy and enable module on safe
         address proxy = moduleProxyFactory.deployModule(address(mockStrategySingleton), initData, block.timestamp);

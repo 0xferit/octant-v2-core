@@ -36,16 +36,6 @@ out = 'out'
 test = 'proof/kontrol'
 ast = true
 
-[profile.coverage]
-src = "src"
-out = "out"
-libs = ["dependencies"]
-evm_version = "prague"
-optimizer = true
-optimizer_runs = 1
-via_ir = false
-solc = "0.8.30"
-
 [rpc_endpoints]
 mainnet = "${TEST_RPC_URL}"
 

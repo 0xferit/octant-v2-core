@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
-import { MockHats as Hats } from "test/mocks/hats/MockHats.sol";
+import { Hats } from "hats-protocol/Hats.sol";
 import { DragonHatter } from "src/utils/hats/DragonHatter.sol";
 import { SimpleEligibilityAndToggle } from "src/utils/hats/SimpleEligibilityAndToggle.sol";
 
