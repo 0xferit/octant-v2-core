@@ -13,7 +13,6 @@ import { DeployModuleProxyFactory } from "script/deploy/DeployModuleProxyFactory
 import { DeployPaymentSplitterFactory } from "script/deploy/DeployPaymentSplitterFactory.sol";
 import { DeploySkyCompounderStrategyFactory } from "script/deploy/DeploySkyCompounderStrategyFactory.sol";
 import { DeployMorphoCompounderStrategyFactory } from "script/deploy/DeployMorphoCompounderStrategyFactory.sol";
-import { DeployRegenStakerFactory } from "script/deploy/DeployRegenStakerFactory.sol";
 import { DeployAllocationMechanismFactory } from "script/deploy/DeployAllocationMechanismFactory.sol";
 import { DeployYearnV3StrategyFactory } from "script/deploy/DeployYearnV3StrategyFactory.s.sol";
 import { DeployLidoStrategyFactory } from "script/deploy/DeployLidoStrategyFactory.sol";
@@ -35,7 +34,6 @@ contract DeployProtocol is Script {
     DeployPaymentSplitterFactory public deployPaymentSplitterFactory;
     DeploySkyCompounderStrategyFactory public deploySkyCompounderStrategyFactory;
     DeployMorphoCompounderStrategyFactory public deployMorphoCompounderStrategyFactory;
-    DeployRegenStakerFactory public deployRegenStakerFactory;
     DeployAllocationMechanismFactory public deployAllocationMechanismFactory;
     DeployYearnV3StrategyFactory public deployYearnV3StrategyFactory;
     DeployLidoStrategyFactory public deployLidoStrategyFactory;
@@ -84,7 +82,6 @@ contract DeployProtocol is Script {
         deployPaymentSplitterFactory = new DeployPaymentSplitterFactory();
         deploySkyCompounderStrategyFactory = new DeploySkyCompounderStrategyFactory();
         deployMorphoCompounderStrategyFactory = new DeployMorphoCompounderStrategyFactory();
-        deployRegenStakerFactory = new DeployRegenStakerFactory();
         deployAllocationMechanismFactory = new DeployAllocationMechanismFactory();
         deployYearnV3StrategyFactory = new DeployYearnV3StrategyFactory();
         deployLidoStrategyFactory = new DeployLidoStrategyFactory();
@@ -212,11 +209,10 @@ contract DeployProtocol is Script {
             if (morphoCompounderStrategyFactoryAddress == address(0)) revert DeploymentFailed();
         }
 
-        // Deploy Regen Staker Factory
+        // Regen Staker Factory must be pre-deployed via Safe multisig
+        // Use script/deploy/DeployRegenStakerFactory.s.sol with SAFE_ADDRESS env var
         if (regenStakerFactoryAddress == address(0)) {
-            deployRegenStakerFactory.deploy();
-            regenStakerFactoryAddress = address(deployRegenStakerFactory.regenStakerFactory());
-            if (regenStakerFactoryAddress == address(0)) revert DeploymentFailed();
+            revert("RegenStakerFactory must be deployed via Safe multisig first");
         }
 
         // Deploy Allocation Mechanism Factory
@@ -266,7 +262,7 @@ contract DeployProtocol is Script {
         console2.log("Branch Hat ID:             ", vm.toString(deployHatsProtocol.branchHatId()));
         console2.log("------------------");
 
-        string memory contractAddressFilename = "./ci/contract_addresses.txt";
+        string memory contractAddressFilename = "./contract_addresses.txt";
         if (vm.exists(contractAddressFilename)) {
             vm.removeFile(contractAddressFilename);
         }

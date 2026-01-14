@@ -22,7 +22,7 @@ The deployment script `DeployAllStrategiesAndFactories.s.sol` deploys the follow
 3. **Environment Setup**: Ensure you have the following:
    - Foundry/Forge installed
    - Access to the Safe transaction service API
-   - Private key for transaction submission (doesn't need to be a Safe owner)
+   - Private key for transaction submission (must be a Safe owner or delegate)
 
 ## Supported Chains
 
@@ -82,6 +82,7 @@ forge script script/deploy/DeployAllStrategiesAndFactories.s.sol:DeployAllStrate
 **Important**: The `--ffi` flag is required for the forge-safe integration to work.
 
 If `SAFE_ADDRESS` is not set, the script will prompt you to enter it.
+The script signs the Safe transaction once and submits it to the Safe transaction service. It does not execute the Safe transaction on-chain.
 
 ### 3. Sign the Transaction in Safe
 
@@ -115,4 +116,3 @@ All salts use a date-based format (DDMMYYYY) for versioning:
    - CREATE2 factory deploys each contract deterministically
 4. **Sends to Safe Backend**: Submits the transaction to Safe's backend for owner signatures
 5. **Logs Deployment Info**: Outputs all expected contract addresses
-
