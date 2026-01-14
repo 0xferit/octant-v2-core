@@ -279,6 +279,8 @@ contract UniswapLiquidityHelper is IERC721Receiver {
         bytes memory data = abi.encodeWithSelector(INonfungiblePositionManager.positions.selector, tokenId);
         (bool success, bytes memory result) = address(nonfungiblePositionManager).staticcall(data);
         require(success, "Position query failed");
+        // positions() returns 12 values, each 32 bytes = 384 bytes total
+        require(result.length >= 384, "Invalid position data");
         // Liquidity is the 8th return value (index 7), each value is 32 bytes
         // Skip first 7 values (7 * 32 = 224 bytes) to get liquidity
         uint128 liquidity;
@@ -294,6 +296,8 @@ contract UniswapLiquidityHelper is IERC721Receiver {
         bytes memory data = abi.encodeWithSelector(INonfungiblePositionManager.positions.selector, tokenId);
         (bool success, bytes memory result) = address(nonfungiblePositionManager).staticcall(data);
         require(success, "Position query failed");
+        // positions() returns 12 values, each 32 bytes = 384 bytes total
+        require(result.length >= 384, "Invalid position data");
 
         // Decode only the values we need:
         // token0 is 3rd return value (index 2): offset = 32 + 64 = 96
