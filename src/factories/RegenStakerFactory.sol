@@ -63,6 +63,20 @@ contract RegenStakerFactory {
         WITH_DELEGATION
     }
 
+    /// @notice Information about a deployed RegenStaker
+    struct StakerInfo {
+        address deployerAddress;
+        uint256 timestamp;
+        address admin;
+        address stakerAddress;
+        RegenStakerVariant variant;
+        address calculatorAddress;
+        bytes32 salt;
+    }
+
+    /// @dev Tracks deployed stakers per deployer
+    mapping(address => StakerInfo[]) public stakers;
+
     // Events
     /// @notice Emitted when a new RegenStaker is deployed
     /// @param deployer Address that called the factory
@@ -145,6 +159,12 @@ contract RegenStakerFactory {
         return Create2.computeAddress(finalSalt, keccak256(bytecode));
     }
 
+    /// @notice Returns all RegenStakers deployed by a specific address
+    /// @param deployer Deployer address
+    function getStakersByDeployer(address deployer) external view returns (StakerInfo[] memory) {
+        return stakers[deployer];
+    }
+
     /// @notice Validate bytecode against canonical hash
     /// @param code Bytecode to validate
     /// @param variant RegenStaker variant this bytecode represents
@@ -172,8 +192,9 @@ contract RegenStakerFactory {
 
         stakerAddress = Create2.deploy(0, finalSalt, fullBytecode);
 
-        // Emit deployment metadata to facilitate off-chain verification
+        _recordStaker(params, stakerAddress, salt, variant);
 
+        // Emit deployment metadata to facilitate off-chain verification
         emit StakerDeploy(
             msg.sender,
             params.admin,
@@ -199,5 +220,24 @@ contract RegenStakerFactory {
                 params.stakerAccessMode,
                 params.allocationMechanismAllowset
             );
+    }
+
+    function _recordStaker(
+        CreateStakerParams calldata params,
+        address stakerAddress,
+        bytes32 salt,
+        RegenStakerVariant variant
+    ) internal {
+        stakers[msg.sender].push(
+            StakerInfo({
+                deployerAddress: msg.sender,
+                timestamp: block.timestamp,
+                admin: params.admin,
+                stakerAddress: stakerAddress,
+                variant: variant,
+                calculatorAddress: address(params.earningPowerCalculator),
+                salt: salt
+            })
+        );
     }
 }
