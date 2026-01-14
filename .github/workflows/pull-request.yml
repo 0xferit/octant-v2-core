@@ -114,84 +114,86 @@ jobs:
           TEST_SAFE_SINGLETON_POLYGON: "0x41675C099F32341bf84BFc5382aF534df5C7461a"
           TEST_SAFE_PROXY_FACTORY_POLYGON: "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67"
         run: |
-          # Comment out problematic lines
-          sed -i.bak '197,205s/^/\/\/ /' dependencies/hats-protocol-1.0/src/Hats.sol
-          
           # Create markdown report header
           echo "# Code Coverage Report for src/ files" > src_coverage.md
           echo "" >> src_coverage.md
           echo "| File | % Lines | % Statements | % Branches | % Funcs |" >> src_coverage.md
           echo "|------|---------|--------------|------------|---------|" >> src_coverage.md
-          
-          # Run coverage
-          echo "Running coverage with --ir-minimum, this may take a while..."
-          if forge coverage --report summary --no-match-test "Skip" --ir-minimum > full_coverage.txt 2>coverage_error.txt; then
+
+          # Run coverage using yarn script (handles Hats protocol patching)
+          echo "Running yarn coverage:summary..."
+          if yarn coverage:summary > full_coverage.txt 2>coverage_error.txt; then
             echo "Coverage completed successfully"
-            
+
             # Process each src/ line and add emoji indicators
             grep "| src/" full_coverage.txt | while read -r line; do
               # Extract file path
               file=$(echo "$line" | awk -F'|' '{print $2}' | xargs)
-              
+
               # Extract numerical percentages and full data
               lines_data=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
               stmts_data=$(echo "$line" | awk -F'|' '{print $4}' | xargs)
               branch_data=$(echo "$line" | awk -F'|' '{print $5}' | xargs)
               funcs_data=$(echo "$line" | awk -F'|' '{print $6}' | xargs)
-              
+
               # Extract just the percentage values (before the %)
               lines_pct=$(echo "$lines_data" | grep -o "^[0-9]\+\.[0-9]\+" || echo "0")
               stmts_pct=$(echo "$stmts_data" | grep -o "^[0-9]\+\.[0-9]\+" || echo "0")
               branch_pct=$(echo "$branch_data" | grep -o "^[0-9]\+\.[0-9]\+" || echo "0")
               funcs_pct=$(echo "$funcs_data" | grep -o "^[0-9]\+\.[0-9]\+" || echo "0")
-              
+
               # Compare as integers by removing decimal part (85.00 becomes 85)
               lines_int=$(echo "$lines_pct" | cut -d. -f1)
               stmts_int=$(echo "$stmts_pct" | cut -d. -f1)
               branch_int=$(echo "$branch_pct" | cut -d. -f1)
               funcs_int=$(echo "$funcs_pct" | cut -d. -f1)
-              
+
               # Add emojis using integer comparison
               if [ "$lines_int" -lt 85 ]; then
                 lines_formatted="🔴 $lines_data"
               else
                 lines_formatted="✅ $lines_data"
               fi
-              
+
               if [ "$stmts_int" -lt 85 ]; then
                 stmts_formatted="🔴 $stmts_data"
               else
                 stmts_formatted="✅ $stmts_data"
               fi
-              
+
               if [ "$branch_int" -lt 85 ]; then
                 branch_formatted="🔴 $branch_data"
               else
                 branch_formatted="✅ $branch_data"
               fi
-              
+
               if [ "$funcs_int" -lt 85 ]; then
                 funcs_formatted="🔴 $funcs_data"
               else
                 funcs_formatted="✅ $funcs_data"
               fi
-              
+
               # Output the formatted line
               echo "| $file | $lines_formatted | $stmts_formatted | $branch_formatted | $funcs_formatted |" >> src_coverage.md
             done
           else
-            echo "Coverage failed with exit code $?"
+            exit_code=$?
+            echo "Coverage failed with exit code $exit_code"
             echo "## ⚠️ Coverage Generation Failed" >> src_coverage.md
             echo "" >> src_coverage.md
-            echo "Error output:" >> src_coverage.md
+            echo "Exit code: $exit_code" >> src_coverage.md
+            echo "" >> src_coverage.md
+            echo "### Error output (stderr):" >> src_coverage.md
             echo '```' >> src_coverage.md
             cat coverage_error.txt >> src_coverage.md
             echo '```' >> src_coverage.md
+            echo "" >> src_coverage.md
+            echo "### Last 50 lines of stdout:" >> src_coverage.md
+            echo '```' >> src_coverage.md
+            tail -50 full_coverage.txt >> src_coverage.md
+            echo '```' >> src_coverage.md
           fi
-          
-          # Restore original file
-          mv lib/hats-protocol/src/Hats.sol.bak lib/hats-protocol/src/Hats.sol
-          
+
           # Always output what we have to GitHub step summary
           cat src_coverage.md >> $GITHUB_STEP_SUMMARY
         continue-on-error: true
