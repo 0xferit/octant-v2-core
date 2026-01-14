@@ -11,6 +11,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 import { CREATE3 } from "solady/utils/CREATE3.sol";
 
 /// @title MorphoCompounderStrategyFactory Test
@@ -106,6 +107,11 @@ contract MorphoCompounderStrategyFactoryTest is Test {
             IERC4626(address(strategy)).asset(),
             0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48,
             "USDC asset address incorrect"
+        );
+        assertEq(
+            ITokenizedStrategy(address(strategy)).symbol(),
+            "osMORPHO",
+            "Symbol should match the value passed during creation"
         );
     }
 

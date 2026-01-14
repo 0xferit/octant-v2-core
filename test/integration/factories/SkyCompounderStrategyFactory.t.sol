@@ -11,6 +11,7 @@ import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
+import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 
 /// @title SkyCompounderStrategyFactory Test
 /// @author mil0x
@@ -145,7 +146,11 @@ contract SkyCompounderStrategyFactoryTest is Test {
         // Verify strategy was initialized correctly
         SkyCompounderStrategy strategy = SkyCompounderStrategy(strategyAddress);
         assertEq(strategy.staking(), STAKING, "Staking address incorrect");
-        // assertEq(strategy.donationAddress(), donationAddress, "Donation address incorrect");
+        assertEq(
+            ITokenizedStrategy(address(strategy)).symbol(),
+            vaultSymbol,
+            "Symbol should match the value passed during creation"
+        );
     }
 
     /// @notice Test creating multiple strategies for the same user

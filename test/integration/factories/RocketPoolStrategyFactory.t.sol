@@ -11,6 +11,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 
 /// @title RocketPoolFactory Test
@@ -106,6 +107,11 @@ contract RocketPoolStrategyFactoryTest is Test {
         // Verify strategy was initialized correctly
         RocketPoolStrategy strategy = RocketPoolStrategy(strategyAddress);
         assertEq(IERC4626(address(strategy)).asset(), R_ETH, "Yield vault address incorrect");
+        assertEq(
+            ITokenizedStrategy(address(strategy)).symbol(),
+            "osRPL",
+            "Symbol should match the value passed during creation"
+        );
     }
 
     /// @notice Fuzz test for creating multiple strategies for the same user
