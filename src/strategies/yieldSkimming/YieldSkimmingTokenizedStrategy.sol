@@ -750,8 +750,8 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         uint256 oldDragonBalance = _balanceOf(S, oldDragonRouter);
         uint256 newDragonBalance = _balanceOf(S, newDragonRouter);
 
-        if (_isVaultInsolvent() && oldDragonBalance > 0) {
-            revert("Dragon cannot operate during insolvency");
+        if (oldDragonBalance > 0) {
+            _requireDragonSolvency(oldDragonRouter);
         }
 
         // Migrate debt accounting:
