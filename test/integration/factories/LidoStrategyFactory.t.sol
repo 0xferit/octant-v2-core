@@ -11,6 +11,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 import { CREATE3 } from "solady/utils/CREATE3.sol";
 
 /// @title LidoStrategyFactory Test
@@ -81,6 +82,7 @@ contract LidoStrategyFactoryTest is Test {
 
         address strategyAddress = factory.createStrategy(
             vaultSharesName,
+            "osLIDO",
             management,
             keeper,
             emergencyAdmin,
@@ -102,6 +104,11 @@ contract LidoStrategyFactoryTest is Test {
         // Verify strategy was initialized correctly
         LidoStrategy strategy = LidoStrategy(strategyAddress);
         assertEq(IERC4626(address(strategy)).asset(), WSTETH, "Yield vault address incorrect");
+        assertEq(
+            ITokenizedStrategy(address(strategy)).symbol(),
+            "osLIDO",
+            "Symbol should match the value passed during creation"
+        );
     }
 
     /// @notice Test creating multiple strategies for the same user
@@ -112,6 +119,7 @@ contract LidoStrategyFactoryTest is Test {
         vm.startPrank(management);
         address firstStrategyAddress = factory.createStrategy(
             firstVaultName,
+            "osLIDO1",
             management,
             keeper,
             emergencyAdmin,
@@ -125,6 +133,7 @@ contract LidoStrategyFactoryTest is Test {
 
         address secondStrategyAddress = factory.createStrategy(
             secondVaultName,
+            "osLIDO2",
             management,
             keeper,
             emergencyAdmin,
@@ -158,6 +167,7 @@ contract LidoStrategyFactoryTest is Test {
         vm.startPrank(firstUser);
         address firstStrategyAddress = factory.createStrategy(
             firstVaultName,
+            "osLIDO1",
             firstUser,
             keeper,
             emergencyAdmin,
@@ -173,6 +183,7 @@ contract LidoStrategyFactoryTest is Test {
         vm.startPrank(secondUser);
         address secondStrategyAddress = factory.createStrategy(
             secondVaultName,
+            "osLIDO2",
             secondUser,
             keeper,
             emergencyAdmin,
@@ -203,6 +214,7 @@ contract LidoStrategyFactoryTest is Test {
         vm.startPrank(management);
         address firstAddress = factory.createStrategy(
             vaultSharesName,
+            "osDET",
             management,
             keeper,
             emergencyAdmin,
@@ -217,6 +229,7 @@ contract LidoStrategyFactoryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(BaseStrategyFactory.StrategyAlreadyExists.selector, firstAddress));
         factory.createStrategy(
             vaultSharesName,
+            "osDET",
             management,
             keeper,
             emergencyAdmin,
@@ -231,6 +244,7 @@ contract LidoStrategyFactoryTest is Test {
         vm.startPrank(management);
         address secondAddress = factory.createStrategy(
             differentName,
+            "osDIF",
             management,
             keeper,
             emergencyAdmin,

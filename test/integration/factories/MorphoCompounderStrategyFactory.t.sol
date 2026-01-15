@@ -11,6 +11,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 import { CREATE3 } from "solady/utils/CREATE3.sol";
 
 /// @title MorphoCompounderStrategyFactory Test
@@ -81,6 +82,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
 
         address strategyAddress = factory.createStrategy(
             vaultSharesName,
+            "osMORPHO",
             management,
             keeper,
             emergencyAdmin,
@@ -106,6 +108,11 @@ contract MorphoCompounderStrategyFactoryTest is Test {
             0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48,
             "USDC asset address incorrect"
         );
+        assertEq(
+            ITokenizedStrategy(address(strategy)).symbol(),
+            "osMORPHO",
+            "Symbol should match the value passed during creation"
+        );
     }
 
     /// @notice Test creating multiple strategies for the same user
@@ -116,6 +123,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
         vm.startPrank(management);
         address firstStrategyAddress = factory.createStrategy(
             firstVaultName,
+            "osMORPHO1",
             management,
             keeper,
             emergencyAdmin,
@@ -129,6 +137,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
 
         address secondStrategyAddress = factory.createStrategy(
             secondVaultName,
+            "osMORPHO2",
             management,
             keeper,
             emergencyAdmin,
@@ -162,6 +171,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
         vm.startPrank(firstUser);
         address firstStrategyAddress = factory.createStrategy(
             firstVaultName,
+            "osMORPHO1",
             firstUser,
             keeper,
             emergencyAdmin,
@@ -177,6 +187,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
         vm.startPrank(secondUser);
         address secondStrategyAddress = factory.createStrategy(
             secondVaultName,
+            "osMORPHO2",
             secondUser,
             keeper,
             emergencyAdmin,
@@ -207,6 +218,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
         vm.startPrank(management);
         address firstAddress = factory.createStrategy(
             vaultSharesName,
+            "osDET",
             management,
             keeper,
             emergencyAdmin,
@@ -221,6 +233,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(BaseStrategyFactory.StrategyAlreadyExists.selector, firstAddress));
         factory.createStrategy(
             vaultSharesName,
+            "osDET",
             management,
             keeper,
             emergencyAdmin,
@@ -235,6 +248,7 @@ contract MorphoCompounderStrategyFactoryTest is Test {
         vm.startPrank(management);
         address secondAddress = factory.createStrategy(
             differentName,
+            "osDIF",
             management,
             keeper,
             emergencyAdmin,

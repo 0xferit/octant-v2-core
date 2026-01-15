@@ -11,6 +11,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 
 /// @title RocketPoolFactory Test
@@ -84,6 +85,7 @@ contract RocketPoolStrategyFactoryTest is Test {
 
         address strategyAddress = factory.createStrategy(
             vaultSharesName,
+            "osRPL",
             management,
             keeper,
             emergencyAdmin,
@@ -105,6 +107,11 @@ contract RocketPoolStrategyFactoryTest is Test {
         // Verify strategy was initialized correctly
         RocketPoolStrategy strategy = RocketPoolStrategy(strategyAddress);
         assertEq(IERC4626(address(strategy)).asset(), R_ETH, "Yield vault address incorrect");
+        assertEq(
+            ITokenizedStrategy(address(strategy)).symbol(),
+            "osRPL",
+            "Symbol should match the value passed during creation"
+        );
     }
 
     /// @notice Fuzz test for creating multiple strategies for the same user
@@ -116,6 +123,7 @@ contract RocketPoolStrategyFactoryTest is Test {
         vm.startPrank(management);
         address firstStrategyAddress = factory.createStrategy(
             firstVaultName,
+            "osRPL1",
             management,
             keeper,
             emergencyAdmin,
@@ -127,6 +135,7 @@ contract RocketPoolStrategyFactoryTest is Test {
         // Create second strategy for same user
         address secondStrategyAddress = factory.createStrategy(
             secondVaultName,
+            "osRPL2",
             management,
             keeper,
             emergencyAdmin,
@@ -165,6 +174,7 @@ contract RocketPoolStrategyFactoryTest is Test {
             vm.startPrank(users[i]);
             strategyAddresses[i] = factory.createStrategy(
                 vaultNames[i],
+                string(abi.encodePacked("osRPL", i)),
                 users[i],
                 keeper,
                 emergencyAdmin,
@@ -194,6 +204,7 @@ contract RocketPoolStrategyFactoryTest is Test {
         vm.startPrank(management);
         address firstAddress = factory.createStrategy(
             vaultSharesName,
+            "osTEST",
             management,
             keeper,
             emergencyAdmin,
@@ -206,6 +217,7 @@ contract RocketPoolStrategyFactoryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(BaseStrategyFactory.StrategyAlreadyExists.selector, firstAddress));
         factory.createStrategy(
             vaultSharesName,
+            "osTEST",
             management,
             keeper,
             emergencyAdmin,
@@ -218,6 +230,7 @@ contract RocketPoolStrategyFactoryTest is Test {
         string memory differentName = "Different Vault";
         address secondAddress = factory.createStrategy(
             differentName,
+            "osDIF",
             management,
             keeper,
             emergencyAdmin,
@@ -255,6 +268,7 @@ contract RocketPoolStrategyFactoryTest is Test {
         vm.startPrank(fuzzManagement);
         factory.createStrategy(
             vaultName,
+            "osFUZZ",
             fuzzManagement,
             fuzzKeeper,
             fuzzEmergencyAdmin,
@@ -284,10 +298,12 @@ contract RocketPoolStrategyFactoryTest is Test {
         // Create multiple strategies
         for (uint256 i = 0; i < numStrategies; i++) {
             string memory vaultName = string(abi.encodePacked("Vault_", i));
+            string memory vaultSymbol = string(abi.encodePacked("osV", i));
 
             vm.startPrank(testUser);
             factory.createStrategy(
                 vaultName,
+                vaultSymbol,
                 testUser,
                 keeper,
                 emergencyAdmin,
