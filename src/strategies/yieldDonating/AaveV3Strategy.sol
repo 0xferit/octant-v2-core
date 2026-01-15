@@ -152,7 +152,7 @@ contract AaveV3Strategy is BaseHealthCheck {
 
     /**
      * @notice Returns maximum assets withdrawable without expected loss
-     * @dev Sums idle balance and aToken balance
+     * @dev Checks pool liquidity to ensure withdrawals won't fail due to high utilization
      * @return limit Maximum withdrawal amount in asset base units
      */
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
@@ -160,7 +160,13 @@ contract AaveV3Strategy is BaseHealthCheck {
         uint256 aTokenBalance = IERC20(aToken).balanceOf(address(this));
         uint256 idleBalance = IERC20(address(asset)).balanceOf(address(this));
 
-        return aTokenBalance + idleBalance;
+        // Check pool liquidity - the underlying asset balance held by the aToken contract
+        uint256 poolLiquidity = IERC20(address(asset)).balanceOf(aToken);
+
+        // We can only withdraw up to the pool's available liquidity
+        uint256 withdrawableFromPool = aTokenBalance < poolLiquidity ? aTokenBalance : poolLiquidity;
+
+        return withdrawableFromPool + idleBalance;
     }
 
     /**
