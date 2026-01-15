@@ -10,6 +10,7 @@ import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/Yie
 // Factory contracts
 import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
 import { RocketPoolStrategyFactory } from "src/factories/yieldSkimming/RocketPoolStrategyFactory.sol";
+import { YearnV3StrategyFactory } from "src/factories/yieldDonating/YearnV3StrategyFactory.sol";
 
 /**
  * @title DeployYieldSkimmingStrategiesAndFactories
@@ -21,6 +22,7 @@ import { RocketPoolStrategyFactory } from "src/factories/yieldSkimming/RocketPoo
  *   - YieldSkimmingTokenizedStrategy (implementation)
  *   - LidoStrategyFactory
  *   - RocketPoolStrategyFactory
+ *   - YearnV3StrategyFactory
  *
  * Usage:
  * ```
@@ -36,16 +38,18 @@ import { RocketPoolStrategyFactory } from "src/factories/yieldSkimming/RocketPoo
  */
 contract DeployYieldSkimmingStrategiesAndFactories is Script, BatchScript {
     // Deployment salts for deterministic addresses (date-based: DDMMYYYY format)
-    bytes32 public constant YIELD_SKIMMING_SALT = keccak256("OCTANT_YIELD_SKIMMING_STRATEGY_09012026");
+    bytes32 public constant YIELD_SKIMMING_SALT = keccak256("OCTANT_YIELD_SKIMMING_STRATEGY_18012026");
 
     // Factory deployment salts
-    bytes32 public constant LIDO_FACTORY_SALT = keccak256("LIDO_STRATEGY_FACTORY_09012026");
-    bytes32 public constant ROCKET_POOL_FACTORY_SALT = keccak256("ROCKET_POOL_STRATEGY_FACTORY_09012026");
+    bytes32 public constant LIDO_FACTORY_SALT = keccak256("LIDO_STRATEGY_FACTORY_18012026");
+    bytes32 public constant ROCKET_POOL_FACTORY_SALT = keccak256("ROCKET_POOL_STRATEGY_FACTORY_18012026");
+    bytes32 public constant YEARN_V3_FACTORY_SALT = keccak256("OCT_YEARN_V3_STRATEGY_FACTORY_18012026");
 
     // Deployed addresses (to be logged)
     address public yieldSkimmingStrategy;
     address public lidoFactory;
     address public rocketPoolFactory;
+    address public yearnV3Factory;
 
     // Safe address
     address public safe;
@@ -95,6 +99,10 @@ contract DeployYieldSkimmingStrategiesAndFactories is Script, BatchScript {
             ROCKET_POOL_FACTORY_SALT,
             keccak256(rocketPoolCreationCode)
         );
+
+        // YearnV3StrategyFactory
+        bytes memory yearnV3CreationCode = type(YearnV3StrategyFactory).creationCode;
+        yearnV3Factory = _computeCreate2Address(CREATE2_FACTORY, YEARN_V3_FACTORY_SALT, keccak256(yearnV3CreationCode));
     }
 
     function _addStrategyDeployments() internal {
@@ -125,6 +133,14 @@ contract DeployYieldSkimmingStrategiesAndFactories is Script, BatchScript {
         );
         addToBatch(CREATE2_FACTORY, 0, rocketPoolDeployData);
         console.log("- RocketPoolStrategyFactory at:", rocketPoolFactory);
+
+        // Deploy YearnV3StrategyFactory
+        bytes memory yearnV3DeployData = abi.encodePacked(
+            YEARN_V3_FACTORY_SALT,
+            type(YearnV3StrategyFactory).creationCode
+        );
+        addToBatch(CREATE2_FACTORY, 0, yearnV3DeployData);
+        console.log("- YearnV3StrategyFactory at:", yearnV3Factory);
     }
 
     function _logDeploymentSummary() internal view {
@@ -135,10 +151,11 @@ contract DeployYieldSkimmingStrategiesAndFactories is Script, BatchScript {
         console.log("\nFactory Contracts:");
         console.log("- LidoStrategyFactory:", lidoFactory);
         console.log("- RocketPoolStrategyFactory:", rocketPoolFactory);
+        console.log("- YearnV3StrategyFactory:", yearnV3Factory);
         console.log("\nBatch transaction created:");
         console.log("- Safe will call execTransaction once");
         console.log("- execTransaction calls MultiSendCallOnly");
-        console.log("- MultiSendCallOnly makes 3 calls to CREATE2 factory");
+        console.log("- MultiSendCallOnly makes 4 calls to CREATE2 factory");
         console.log("- CREATE2 factory deploys each contract deterministically");
         console.log("\nTransaction sent to Safe for signing.");
         console.log("========================\n");
