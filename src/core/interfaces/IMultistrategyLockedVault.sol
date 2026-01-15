@@ -78,7 +78,6 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
     error TransferExceedsAvailableShares();
     error NoPendingRageQuitCooldownPeriodChange();
     error RageQuitCooldownPeriodChangeDelayNotElapsed();
-    error RageQuitCooldownPeriodChangeDelayElapsed();
     error InvalidGovernanceAddress();
 
     // Events
