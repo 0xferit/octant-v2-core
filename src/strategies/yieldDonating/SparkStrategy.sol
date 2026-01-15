@@ -92,7 +92,6 @@ contract SparkStrategy is ERC4626Strategy {
 
         // Only proceed if there's a balance to sweep
         require(balance > 0, "SparkStrategy: No balance to sweep");
-        require(dragon != address(0), "SparkStrategy: Invalid dragon router");
 
         // Transfer all tokens to dragon router
         IERC20(_token).safeTransfer(dragon, balance);
