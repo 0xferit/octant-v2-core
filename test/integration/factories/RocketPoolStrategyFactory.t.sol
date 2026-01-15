@@ -112,6 +112,8 @@ contract RocketPoolStrategyFactoryTest is Test {
         // Bound the inputs
         vm.assume(bytes(firstVaultName).length >= MIN_NAME_LENGTH && bytes(firstVaultName).length <= MAX_NAME_LENGTH);
         vm.assume(bytes(secondVaultName).length >= MIN_NAME_LENGTH && bytes(secondVaultName).length <= MAX_NAME_LENGTH);
+        // Ensure names are different to avoid StrategyAlreadyExists error
+        vm.assume(keccak256(bytes(firstVaultName)) != keccak256(bytes(secondVaultName)));
 
         vm.startPrank(management);
         address firstStrategyAddress = factory.createStrategy(
