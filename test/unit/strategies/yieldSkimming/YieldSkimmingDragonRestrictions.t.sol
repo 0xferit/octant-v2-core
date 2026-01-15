@@ -255,7 +255,7 @@ contract YieldSkimmingDragonRestrictionsTest is Test {
 
         // Dragon cannot withdraw their full balance due to restrictions
         vm.prank(dragonRouter);
-        vm.expectRevert("Dragon cannot operate during insolvency");
+        vm.expectRevert("Transfer would cause vault insolvency");
         strategy.redeem(dragonBalance, dragonRouter, dragonRouter);
 
         // But dragon can still withdraw the allowed amount
@@ -431,8 +431,8 @@ contract YieldSkimmingDragonRestrictionsTest is Test {
         uint256 dragonMaxRedeem = strategy.maxRedeem(dragonRouter);
 
         // Debug info to understand the situation
-        uint256 userDebt = strategy.gettotalDebtOwedToUserInAssetValue();
-        uint256 dragonDebt = strategy.getDragonRouterDebtInAssetValue();
+        uint256 userDebt = strategy.totalSupply() - strategy.balanceOf(dragonRouter);
+        uint256 dragonDebt = strategy.balanceOf(dragonRouter);
         uint256 totalAssets = strategy.totalAssets();
         uint256 currentRate = strategy.getCurrentExchangeRate();
         uint256 vaultValue = (totalAssets * currentRate) / WAD;
