@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import { YieldDonatingTokenizedStrategy } from "./YieldDonatingTokenizedStrategy.sol";
+import { Whitelistable } from "src/core/Whitelistable.sol";
 
 /**
  * @title Whitelisted Yield Donating Tokenized Strategy
@@ -9,38 +10,13 @@ import { YieldDonatingTokenizedStrategy } from "./YieldDonatingTokenizedStrategy
  * @custom:security-contact security@golem.foundation
  * @notice YieldDonatingTokenizedStrategy with whitelist-gated deposits and mints.
  */
-contract WhitelistedYieldDonatingTokenizedStrategy is YieldDonatingTokenizedStrategy {
-    event WhitelistUpdated(address indexed account, bool status);
-
-    bytes32 internal constant WHITELIST_STORAGE =
-        keccak256(abi.encode(uint256(keccak256("octant.whitelisted.strategy.storage")) - 1)) & ~bytes32(uint256(0xff));
-
-    struct WhitelistData {
-        mapping(address => bool) whitelisted;
-    }
-
-    function _whitelistStorage() internal pure returns (WhitelistData storage W) {
-        bytes32 slot = WHITELIST_STORAGE;
-        assembly {
-            W.slot := slot
-        }
-    }
-
+contract WhitelistedYieldDonatingTokenizedStrategy is YieldDonatingTokenizedStrategy, Whitelistable {
     function setWhitelist(address _account, bool _status) external onlyManagement {
-        _whitelistStorage().whitelisted[_account] = _status;
-        emit WhitelistUpdated(_account, _status);
+        _setWhitelist(_account, _status);
     }
 
     function setWhitelistBatch(address[] calldata _accounts, bool _status) external onlyManagement {
-        WhitelistData storage W = _whitelistStorage();
-        for (uint256 i = 0; i < _accounts.length; i++) {
-            W.whitelisted[_accounts[i]] = _status;
-            emit WhitelistUpdated(_accounts[i], _status);
-        }
-    }
-
-    function isWhitelisted(address _account) public view returns (bool) {
-        return _whitelistStorage().whitelisted[_account];
+        _setWhitelistBatch(_accounts, _status);
     }
 
     function deposit(uint256 assets, address receiver) public override returns (uint256) {
