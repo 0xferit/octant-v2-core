@@ -631,7 +631,7 @@ abstract contract TokenizedStrategy {
      * @return shares Amount of shares minted to receiver
      * @custom:security Reentrancy protected
      */
-    function deposit(uint256 assets, address receiver) external virtual nonReentrant returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual nonReentrant returns (uint256 shares) {
         // Get the storage slot for all following calls.
         StrategyData storage S = _strategyStorage();
 
@@ -661,7 +661,7 @@ abstract contract TokenizedStrategy {
      * @return assets Amount of assets deposited from caller
      * @custom:security Reentrancy protected
      */
-    function mint(uint256 shares, address receiver) external virtual nonReentrant returns (uint256 assets) {
+    function mint(uint256 shares, address receiver) public virtual nonReentrant returns (uint256 assets) {
         // Get the storage slot for all following calls.
         StrategyData storage S = _strategyStorage();
 

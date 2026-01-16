@@ -61,7 +61,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * @param receiver Address to receive the shares (cannot be dragon router)
      * @return shares Amount of shares minted (1 share = 1 asset value)
      */
-    function deposit(uint256 assets, address receiver) external override nonReentrant returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) public virtual override nonReentrant returns (uint256 shares) {
         // Block deposits during vault insolvency
         _requireVaultSolvency();
 
@@ -104,7 +104,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * @param receiver Address to receive the shares
      * @return assets Amount of assets deposited in asset base units (1 share = 1 ETH value, except in case of uncovered loss)
      */
-    function mint(uint256 shares, address receiver) external override nonReentrant returns (uint256 assets) {
+    function mint(uint256 shares, address receiver) public virtual override nonReentrant returns (uint256 assets) {
         // Block mints during vault insolvency
         _requireVaultSolvency();
 
@@ -269,7 +269,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * @param receiver Address that would receive the shares
      * @return Maximum deposit amount in asset base units
      */
-    function maxDeposit(address receiver) public view override returns (uint256) {
+    function maxDeposit(address receiver) public view virtual override returns (uint256) {
         StrategyData storage S = _strategyStorage();
         if (receiver == S.dragonRouter || _isVaultInsolvent()) {
             return 0;
@@ -283,7 +283,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * @param receiver Address that would receive the shares
      * @return Maximum mint amount in shares
      */
-    function maxMint(address receiver) public view override returns (uint256) {
+    function maxMint(address receiver) public view virtual override returns (uint256) {
         StrategyData storage S = _strategyStorage();
         if (receiver == S.dragonRouter || _isVaultInsolvent()) {
             return 0;
