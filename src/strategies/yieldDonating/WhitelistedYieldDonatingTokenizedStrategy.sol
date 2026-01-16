@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity >=0.8.25;
 
-import { YieldSkimmingTokenizedStrategy } from "./YieldSkimmingTokenizedStrategy.sol";
+import { YieldDonatingTokenizedStrategy } from "./YieldDonatingTokenizedStrategy.sol";
 
 /**
- * @title Whitelisted Yield Skimming Tokenized Strategy
+ * @title Whitelisted Yield Donating Tokenized Strategy
  * @author [Golem Foundation](https://golem.foundation)
  * @custom:security-contact security@golem.foundation
- * @notice YieldSkimmingTokenizedStrategy with whitelist-gated deposits and mints.
+ * @notice YieldDonatingTokenizedStrategy with whitelist-gated deposits and mints.
  */
-contract WhitelistedYieldSkimmingTokenizedStrategy is YieldSkimmingTokenizedStrategy {
+contract WhitelistedYieldDonatingTokenizedStrategy is YieldDonatingTokenizedStrategy {
     event WhitelistUpdated(address indexed account, bool status);
 
     bytes32 internal constant WHITELIST_STORAGE =
