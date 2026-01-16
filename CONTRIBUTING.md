@@ -20,6 +20,7 @@ As PRs get bigger, time to review them scales super-linearly. And long-standing 
 - Aim for PRs under 300 lines of code when possible
 - Split large features into smaller, sequential PRs
 - Include relevant tests and documentation with your changes
+- Mark unfinished or work-in-progress PRs as Draft until they are ready for review
 - Review existing PRs (if requested) before creating new ones
 - Help merge ready PRs to prevent accumulation
 - Set aside a time for PR reviews daily
