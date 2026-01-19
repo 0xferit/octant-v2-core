@@ -64,7 +64,9 @@ contract MorphoCompounderDonatingStrategyTest is BaseYieldDonatingIntegrationTes
     function _deployStrategy() internal override returns (address) {
         _etchImplementation();
 
-        factory = new MorphoCompounderStrategyFactory{ salt: keccak256("OCT_MORPHO_COMPOUNDER_STRATEGY_VAULT_FACTORY_V1") }();
+        factory = new MorphoCompounderStrategyFactory{
+            salt: keccak256("OCT_MORPHO_COMPOUNDER_STRATEGY_VAULT_FACTORY_V1")
+        }();
 
         vm.startPrank(management);
         address strategyAddress = factory.createStrategy(
@@ -460,11 +462,7 @@ contract MorphoCompounderDonatingStrategyTest is BaseYieldDonatingIntegrationTes
 
         airdrop(ERC20(_asset()), _compounderVault(), depositAmount / 10);
 
-        vm.mockCall(
-            _compounderVault(),
-            abi.encodeWithSignature("freeFunds(uint256)"),
-            ""
-        );
+        vm.mockCall(_compounderVault(), abi.encodeWithSignature("freeFunds(uint256)"), "");
 
         vm.startPrank(user);
         YieldDonatingTokenizedStrategy(address(strategy)).redeem(vaultShares - 2, user, user, 10_000);

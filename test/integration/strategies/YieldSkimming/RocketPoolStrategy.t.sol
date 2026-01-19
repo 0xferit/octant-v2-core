@@ -46,9 +46,7 @@ contract RocketPoolStrategyTest is BaseYieldSkimmingIntegrationTest {
     // ========== SETUP ==========
 
     function _etchImplementation() internal override {
-        implementation = new YieldSkimmingTokenizedStrategy{
-            salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1")
-        }();
+        implementation = new YieldSkimmingTokenizedStrategy{ salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1") }();
         // RocketPool doesn't need etching - uses implementation directly
     }
 
@@ -120,10 +118,7 @@ contract RocketPoolStrategyTest is BaseYieldSkimmingIntegrationTest {
         _testFuzzEmergencyExit(depositAmount);
     }
 
-    function testFuzzExchangeRateTrackingRocket(
-        uint256 depositAmount,
-        uint256 exchangeRateIncreasePercentage
-    ) public {
+    function testFuzzExchangeRateTrackingRocket(uint256 depositAmount, uint256 exchangeRateIncreasePercentage) public {
         _testFuzzExchangeRateTracking(depositAmount, exchangeRateIncreasePercentage);
     }
 

@@ -13,13 +13,7 @@ import { IYieldSkimmingStrategy } from "src/strategies/yieldSkimming/IYieldSkimm
 import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 import { WadRayMath } from "src/utils/libs/Maths/WadRay.sol";
 import { BaseIntegrationTest } from "../../base/BaseIntegrationTest.sol";
-import {
-    TestState,
-    FuzzTestState,
-    ProfitFuzzTestState,
-    ProfitLossTestData,
-    DragonWithdrawalTestData
-} from "../../base/TestStructs.sol";
+import { TestState, FuzzTestState, ProfitFuzzTestState, ProfitLossTestData, DragonWithdrawalTestData } from "../../base/TestStructs.sol";
 
 /// @title BaseYieldSkimmingIntegrationTest
 /// @notice Base contract for all yield skimming strategy integration tests
@@ -189,11 +183,7 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
         _mockExchangeRate(state.newExchangeRate);
 
         vm.startPrank(donationAddress);
-        state.donationAssetsReceived = vault.redeem(
-            vault.balanceOf(donationAddress),
-            donationAddress,
-            donationAddress
-        );
+        state.donationAssetsReceived = vault.redeem(vault.balanceOf(donationAddress), donationAddress, donationAddress);
         vm.stopPrank();
         _clearMocks();
 
@@ -366,10 +356,7 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
     /// @notice Fuzz test exchange rate tracking and yield calculation
     /// @param depositAmount Amount to deposit
     /// @param exchangeRateIncreasePercentage Percentage increase (1-99)
-    function _testFuzzExchangeRateTracking(
-        uint256 depositAmount,
-        uint256 exchangeRateIncreasePercentage
-    ) internal {
+    function _testFuzzExchangeRateTracking(uint256 depositAmount, uint256 exchangeRateIncreasePercentage) internal {
         depositAmount = bound(depositAmount, 1e18, 10000e18);
         exchangeRateIncreasePercentage = bound(exchangeRateIncreasePercentage, 1, 99);
 
@@ -488,7 +475,7 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
 
     /// @notice Test tendTrigger always returns false
     function _testTendTriggerAlwaysFalse() internal view {
-        (bool trigger,) = IBaseStrategy(_strategy()).tendTrigger();
+        (bool trigger, ) = IBaseStrategy(_strategy()).tendTrigger();
         assertEq(trigger, false, "Tend trigger should always be false");
     }
 
@@ -815,11 +802,7 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
         uint256 receivedValue = state.assetsReceived * state.secondLossRate;
 
         if (state.secondLossRate < state.initialExchangeRate) {
-            assertLe(
-                receivedValue,
-                initialValue,
-                "User cannot receive more than initial deposit when net loss occurs"
-            );
+            assertLe(receivedValue, initialValue, "User cannot receive more than initial deposit when net loss occurs");
         } else {
             assertApproxEqRel(
                 receivedValue,
@@ -999,12 +982,7 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
 
         uint256 depositValue = (data.depositAmount * data.initialRate) / 1e18;
         uint256 withdrawValue = (data.assetsReceived * data.increasedRate) / 1e18;
-        assertApproxEqAbs(
-            withdrawValue,
-            depositValue,
-            1e15,
-            "User should have no loss in ETH value terms"
-        );
+        assertApproxEqAbs(withdrawValue, depositValue, 1e15, "User should have no loss in ETH value terms");
     }
 
     /// @notice Test dragon router withdrawal followed by rate decline - user should experience loss

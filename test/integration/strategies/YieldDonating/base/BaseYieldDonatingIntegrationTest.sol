@@ -315,12 +315,7 @@ abstract contract BaseYieldDonatingIntegrationTest is BaseIntegrationTest {
         uint256 assetsReceived = vault.redeem(userShares, user, user);
         vm.stopPrank();
 
-        assertApproxEqRel(
-            assetsReceived,
-            depositAmount,
-            0.01e18,
-            "User should receive approximately original deposit"
-        );
+        assertApproxEqRel(assetsReceived, depositAmount, 0.01e18, "User should receive approximately original deposit");
     }
 
     /// @notice Fuzz test emergency withdraw functionality
