@@ -20,12 +20,12 @@ contract PrivilegedYieldSkimmingTokenizedStrategy is YieldSkimmingTokenizedStrat
     }
 
     function deposit(uint256 assets, address receiver) public override returns (uint256) {
-        require(isPrivileged(receiver), "!privileged");
+        require(isPrivileged(msg.sender) && isPrivileged(receiver), "!privileged");
         return super.deposit(assets, receiver);
     }
 
     function mint(uint256 shares, address receiver) public override returns (uint256) {
-        require(isPrivileged(receiver), "!privileged");
+        require(isPrivileged(msg.sender) && isPrivileged(receiver), "!privileged");
         return super.mint(shares, receiver);
     }
 
