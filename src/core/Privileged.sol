@@ -39,6 +39,9 @@ abstract contract Privileged {
         }
     }
 
+    /// @notice Checks if an account has privileged status.
+    /// @param _account The address to check.
+    /// @return True if the account is privileged, false otherwise.
     function isPrivileged(address _account) public view returns (bool) {
         return _privilegedStorage().privileged[_account];
     }
