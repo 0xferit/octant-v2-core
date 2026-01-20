@@ -476,7 +476,12 @@ contract YearnV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
         uint256 limit = strategy.availableWithdrawLimit(user);
 
-        assertApproxEqRel(limit, depositAmount, 0.001e16, "Withdraw limit should be approximately equal to deposited amount");
+        assertApproxEqRel(
+            limit,
+            depositAmount,
+            0.001e16,
+            "Withdraw limit should be approximately equal to deposited amount"
+        );
 
         uint256 idleBalance = ERC20(_asset()).balanceOf(address(strategy));
         uint256 yearnMaxWithdraw = ITokenizedStrategy(_compounderVault()).maxWithdraw(address(strategy));
@@ -597,7 +602,12 @@ contract YearnV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         vm.stopPrank();
 
         assertLt(assetsReceived, depositAmount, "User should receive less than deposited");
-        assertApproxEqRel(assetsReceived, remainingValue, 0.001e16, "User should receive proportional share after loss");
+        assertApproxEqRel(
+            assetsReceived,
+            remainingValue,
+            0.001e16,
+            "User should receive proportional share after loss"
+        );
     }
 
     /// @notice Test multiple users experiencing losses - fair distribution

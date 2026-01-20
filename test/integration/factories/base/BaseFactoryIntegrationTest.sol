@@ -49,11 +49,7 @@ abstract contract BaseFactoryIntegrationTest is Test {
     /// @param symbol The strategy symbol
     /// @param mgmt The management address
     /// @return The deployed strategy address
-    function _createStrategy(
-        string memory name,
-        string memory symbol,
-        address mgmt
-    ) internal virtual returns (address);
+    function _createStrategy(string memory name, string memory symbol, address mgmt) internal virtual returns (address);
 
     /// @notice Deploys the factory
     function _deployFactory() internal virtual;
@@ -104,8 +100,12 @@ abstract contract BaseFactoryIntegrationTest is Test {
         vm.stopPrank();
 
         // Verify factory tracking
-        (address deployerAddress, uint256 timestamp, string memory name, address stratDonationAddress) =
-            BaseStrategyFactory(_factory()).strategies(management, 0);
+        (
+            address deployerAddress,
+            uint256 timestamp,
+            string memory name,
+            address stratDonationAddress
+        ) = BaseStrategyFactory(_factory()).strategies(management, 0);
         assertEq(deployerAddress, management, "Deployer address incorrect");
         assertEq(name, vaultName, "Vault name incorrect");
         assertEq(stratDonationAddress, donationAddress, "Donation address incorrect");
@@ -125,11 +125,11 @@ abstract contract BaseFactoryIntegrationTest is Test {
         address secondAddr = _createStrategy(second, string.concat(_strategySymbolPrefix(), "2"), management);
         vm.stopPrank();
 
-        (address deployer1,, string memory name1,) = BaseStrategyFactory(_factory()).strategies(management, 0);
+        (address deployer1, , string memory name1, ) = BaseStrategyFactory(_factory()).strategies(management, 0);
         assertEq(deployer1, management, "First deployer address incorrect");
         assertEq(name1, first, "First vault name incorrect");
 
-        (address deployer2,, string memory name2,) = BaseStrategyFactory(_factory()).strategies(management, 1);
+        (address deployer2, , string memory name2, ) = BaseStrategyFactory(_factory()).strategies(management, 1);
         assertEq(deployer2, management, "Second deployer address incorrect");
         assertEq(name2, second, "Second vault name incorrect");
 
@@ -146,15 +146,18 @@ abstract contract BaseFactoryIntegrationTest is Test {
         vm.stopPrank();
 
         vm.startPrank(secondUser);
-        address secondAddr =
-            _createStrategy("Second User Vault", string.concat(_strategySymbolPrefix(), "2"), secondUser);
+        address secondAddr = _createStrategy(
+            "Second User Vault",
+            string.concat(_strategySymbolPrefix(), "2"),
+            secondUser
+        );
         vm.stopPrank();
 
-        (address deployer1,, string memory name1,) = BaseStrategyFactory(_factory()).strategies(firstUser, 0);
+        (address deployer1, , string memory name1, ) = BaseStrategyFactory(_factory()).strategies(firstUser, 0);
         assertEq(deployer1, firstUser, "First user's deployer address incorrect");
         assertEq(name1, "First User Vault", "First user's vault name incorrect");
 
-        (address deployer2,, string memory name2,) = BaseStrategyFactory(_factory()).strategies(secondUser, 0);
+        (address deployer2, , string memory name2, ) = BaseStrategyFactory(_factory()).strategies(secondUser, 0);
         assertEq(deployer2, secondUser, "Second user's deployer address incorrect");
         assertEq(name2, "Second User Vault", "Second user's vault name incorrect");
 
@@ -174,8 +177,11 @@ abstract contract BaseFactoryIntegrationTest is Test {
         _createStrategy(vaultName, symbol, management);
 
         // Different params should succeed
-        address secondAddr =
-            _createStrategy("Different Vault", string.concat(_strategySymbolPrefix(), "DIF"), management);
+        address secondAddr = _createStrategy(
+            "Different Vault",
+            string.concat(_strategySymbolPrefix(), "DIF"),
+            management
+        );
         vm.stopPrank();
 
         assertTrue(firstAddr != secondAddr, "Different params should create different address");

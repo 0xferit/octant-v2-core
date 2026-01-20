@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {BaseFactoryIntegrationTest} from "test/integration/factories/base/BaseFactoryIntegrationTest.sol";
-import {MorphoCompounderStrategy} from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
-import {MorphoCompounderStrategyFactory} from "src/factories/MorphoCompounderStrategyFactory.sol";
-import {YieldSkimmingTokenizedStrategy} from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
+import { BaseFactoryIntegrationTest } from "test/integration/factories/base/BaseFactoryIntegrationTest.sol";
+import { MorphoCompounderStrategy } from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
+import { MorphoCompounderStrategyFactory } from "src/factories/MorphoCompounderStrategyFactory.sol";
+import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 
 /// @title MorphoCompounderStrategyFactory Test
 /// @author Octant
@@ -46,26 +46,27 @@ contract MorphoCompounderStrategyFactoryTest is BaseFactoryIntegrationTest {
     }
 
     function _deployImplementation() internal override returns (address) {
-        implementation = new YieldSkimmingTokenizedStrategy{salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1")}();
+        implementation = new YieldSkimmingTokenizedStrategy{ salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1") }();
         vm.etch(TOKENIZED_STRATEGY_ADDRESS, address(implementation).code);
         return address(implementation);
     }
 
-    function _createStrategy(string memory name, string memory symbol, address mgmt)
-        internal
-        override
-        returns (address)
-    {
-        return factory.createStrategy(
-            name,
-            symbol,
-            mgmt,
-            keeper,
-            emergencyAdmin,
-            donationAddress,
-            false, // enableBurning
-            address(implementation)
-        );
+    function _createStrategy(
+        string memory name,
+        string memory symbol,
+        address mgmt
+    ) internal override returns (address) {
+        return
+            factory.createStrategy(
+                name,
+                symbol,
+                mgmt,
+                keeper,
+                emergencyAdmin,
+                donationAddress,
+                false, // enableBurning
+                address(implementation)
+            );
     }
 
     function _labelFactoryAddresses() internal override {

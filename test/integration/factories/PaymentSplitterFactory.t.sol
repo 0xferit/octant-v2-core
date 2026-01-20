@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {Test} from "forge-std/Test.sol";
-import {PaymentSplitterFactory} from "src/factories/PaymentSplitterFactory.sol";
-import {PaymentSplitter} from "src/core/PaymentSplitter.sol";
-import {ERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {MockERC20} from "test/mocks/MockERC20.sol";
+import { Test } from "forge-std/Test.sol";
+import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
+import { PaymentSplitter } from "src/core/PaymentSplitter.sol";
+import { ERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { MockERC20 } from "test/mocks/MockERC20.sol";
 
 contract PaymentSplitterFactoryTest is Test {
     PaymentSplitterFactory public factory;
@@ -61,7 +61,7 @@ contract PaymentSplitterFactoryTest is Test {
 
         // Send ETH to the splitter
         uint256 ethAmount = 10 ether;
-        (bool success,) = address(splitter).call{value: ethAmount}("");
+        (bool success, ) = address(splitter).call{ value: ethAmount }("");
         assertTrue(success);
 
         // Record balances before release
@@ -114,7 +114,7 @@ contract PaymentSplitterFactoryTest is Test {
         uint256 charlieBalanceBefore = charlie.balance;
 
         // Create PaymentSplitter with ETH
-        address splitterAddress = factory.createPaymentSplitterWithETH{value: ethAmount}(payees, payeeNames, shares);
+        address splitterAddress = factory.createPaymentSplitterWithETH{ value: ethAmount }(payees, payeeNames, shares);
         PaymentSplitter splitter = PaymentSplitter(payable(splitterAddress));
 
         // Release payments immediately
@@ -197,8 +197,8 @@ contract PaymentSplitterFactoryTest is Test {
         uint256 amount1 = 10 ether;
         uint256 amount2 = 20 ether;
 
-        (bool success1,) = splitter1Address.call{value: amount1}("");
-        (bool success2,) = splitter2Address.call{value: amount2}("");
+        (bool success1, ) = splitter1Address.call{ value: amount1 }("");
+        (bool success2, ) = splitter2Address.call{ value: amount2 }("");
 
         assertTrue(success1);
         assertTrue(success2);
@@ -234,7 +234,7 @@ contract PaymentSplitterFactoryTest is Test {
         uint256 ethAmount = 10 ether;
         uint256 tokenAmount = 100e18;
 
-        (bool success,) = address(splitter).call{value: ethAmount}("");
+        (bool success, ) = address(splitter).call{ value: ethAmount }("");
         assertTrue(success);
 
         token.transfer(address(splitter), tokenAmount);
@@ -275,7 +275,7 @@ contract PaymentSplitterFactoryTest is Test {
         shares[2] = 20;
 
         // Create PaymentSplitter
-        address splitterAddress = factory.createPaymentSplitterWithETH{value: 5 ether}(payees, payeeNames, shares);
+        address splitterAddress = factory.createPaymentSplitterWithETH{ value: 5 ether }(payees, payeeNames, shares);
         PaymentSplitter splitter = PaymentSplitter(payable(splitterAddress));
 
         // First round: Alice claims her share from the initial funding
@@ -286,7 +286,7 @@ contract PaymentSplitterFactoryTest is Test {
 
         // Second round: Bob sends ETH directly to the splitter
         vm.prank(bob);
-        (bool success1,) = address(splitter).call{value: 10 ether}("");
+        (bool success1, ) = address(splitter).call{ value: 10 ether }("");
         assertTrue(success1);
 
         // Alice claims her share again
@@ -297,7 +297,7 @@ contract PaymentSplitterFactoryTest is Test {
 
         // Third round: Charlie sends ETH directly to the splitter
         vm.prank(charlie);
-        (bool success2,) = address(splitter).call{value: 15 ether}("");
+        (bool success2, ) = address(splitter).call{ value: 15 ether }("");
         assertTrue(success2);
 
         // Bob claims all his accumulated shares
@@ -343,7 +343,7 @@ contract PaymentSplitterFactoryTest is Test {
 
         // 3. Business receives payment (simulated by sending ETH)
         uint256 businessRevenue = 100 ether;
-        (bool success,) = revenueSplitter.call{value: businessRevenue}("");
+        (bool success, ) = revenueSplitter.call{ value: businessRevenue }("");
         assertTrue(success);
 
         // 4. Team members can withdraw their shares
@@ -403,7 +403,7 @@ contract PaymentSplitterFactoryTest is Test {
         splitter.release(alice);
 
         // Recover by adding funds and trying again
-        (bool success,) = address(splitter).call{value: 10 ether}("");
+        (bool success, ) = address(splitter).call{ value: 10 ether }("");
         assertTrue(success);
 
         // Now should work

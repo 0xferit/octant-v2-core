@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {BaseFactoryIntegrationTest} from "test/integration/factories/base/BaseFactoryIntegrationTest.sol";
-import {SkyCompounderStrategy} from "src/strategies/yieldDonating/SkyCompounderStrategy.sol";
-import {SkyCompounderStrategyFactory} from "src/factories/SkyCompounderStrategyFactory.sol";
-import {YieldDonatingTokenizedStrategy} from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
+import { BaseFactoryIntegrationTest } from "test/integration/factories/base/BaseFactoryIntegrationTest.sol";
+import { SkyCompounderStrategy } from "src/strategies/yieldDonating/SkyCompounderStrategy.sol";
+import { SkyCompounderStrategyFactory } from "src/factories/SkyCompounderStrategyFactory.sol";
+import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
 
 /// @title SkyCompounderStrategyFactory Test
 /// @author mil0x
@@ -46,28 +46,30 @@ contract SkyCompounderStrategyFactoryTest is BaseFactoryIntegrationTest {
     }
 
     function _deployImplementation() internal override returns (address) {
-        YieldDonatingTokenizedStrategy tempStrategy =
-            new YieldDonatingTokenizedStrategy{salt: keccak256("OCT_YIELD_DONATING_STRATEGY_V1")}();
+        YieldDonatingTokenizedStrategy tempStrategy = new YieldDonatingTokenizedStrategy{
+            salt: keccak256("OCT_YIELD_DONATING_STRATEGY_V1")
+        }();
         vm.etch(TOKENIZED_STRATEGY_ADDRESS, address(tempStrategy).code);
         tokenizedStrategy = YieldDonatingTokenizedStrategy(TOKENIZED_STRATEGY_ADDRESS);
         return address(tokenizedStrategy);
     }
 
-    function _createStrategy(string memory name, string memory symbol, address mgmt)
-        internal
-        override
-        returns (address)
-    {
-        return factory.createStrategy(
-            name,
-            symbol,
-            mgmt,
-            keeper,
-            emergencyAdmin,
-            donationAddress,
-            true, // enableBurning
-            address(tokenizedStrategy)
-        );
+    function _createStrategy(
+        string memory name,
+        string memory symbol,
+        address mgmt
+    ) internal override returns (address) {
+        return
+            factory.createStrategy(
+                name,
+                symbol,
+                mgmt,
+                keeper,
+                emergencyAdmin,
+                donationAddress,
+                true, // enableBurning
+                address(tokenizedStrategy)
+            );
     }
 
     function _labelFactoryAddresses() internal override {
