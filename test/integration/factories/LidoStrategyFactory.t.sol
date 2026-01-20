@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import { BaseFactoryIntegrationTest } from "test/integration/factories/base/BaseFactoryIntegrationTest.sol";
-import { LidoStrategy } from "src/strategies/yieldSkimming/LidoStrategy.sol";
-import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
-import { YieldSkimmingTokenizedStrategy } from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
+import {BaseFactoryIntegrationTest} from "test/integration/factories/base/BaseFactoryIntegrationTest.sol";
+import {LidoStrategy} from "src/strategies/yieldSkimming/LidoStrategy.sol";
+import {LidoStrategyFactory} from "src/factories/LidoStrategyFactory.sol";
+import {YieldSkimmingTokenizedStrategy} from "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol";
 
 /// @title LidoStrategyFactory Test
 /// @author Octant
@@ -45,16 +45,16 @@ contract LidoStrategyFactoryTest is BaseFactoryIntegrationTest {
     }
 
     function _deployImplementation() internal override returns (address) {
-        implementation = new YieldSkimmingTokenizedStrategy{ salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1") }();
+        implementation = new YieldSkimmingTokenizedStrategy{salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1")}();
         vm.etch(TOKENIZED_STRATEGY_ADDRESS, address(implementation).code);
         return address(implementation);
     }
 
-    function _createStrategy(
-        string memory name,
-        string memory symbol,
-        address mgmt
-    ) internal override returns (address) {
+    function _createStrategy(string memory name, string memory symbol, address mgmt)
+        internal
+        override
+        returns (address)
+    {
         return factory.createStrategy(
             name,
             symbol,
