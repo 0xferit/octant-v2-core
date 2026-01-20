@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
-import { ERC20Mock } from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {Test} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
-import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
-import { BaseStrategy, ERC20 } from "src/core/BaseStrategy.sol";
-import { MockYieldSource } from "test/mocks/core/tokenized-strategies/MockYieldSource.sol";
-import { MockStrategy } from "test/mocks/core/tokenized-strategies/MockStrategy.sol";
-import { IMockStrategy } from "test/mocks/zodiac-core/IMockStrategy.sol";
-import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import { DeployYieldDonatingStrategy } from "script/deploy/DeployYieldDonatingStrategy.s.sol";
+import {YieldDonatingTokenizedStrategy} from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
+import {BaseStrategy, ERC20} from "src/core/BaseStrategy.sol";
+import {MockYieldSource} from "test/mocks/core/tokenized-strategies/MockYieldSource.sol";
+import {MockStrategy} from "test/mocks/core/tokenized-strategies/MockStrategy.sol";
+import {IMockStrategy} from "test/mocks/zodiac-core/IMockStrategy.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {DeployYieldDonatingStrategy} from "script/deploy/DeployYieldDonatingStrategy.s.sol";
 
 /**
  * @title YieldDonatingTokenizedStrategyTest
@@ -97,19 +97,15 @@ contract YieldDonatingTokenizedStrategyTest is Test {
      */
     function testDeterministicDeployment() public {
         // Pre-compute the expected address
-        address expectedAddress = _computeCreate2Address(
-            deployerAddress,
-            deploymentSalt,
-            type(YieldDonatingTokenizedStrategy).creationCode
-        );
+        address expectedAddress =
+            _computeCreate2Address(deployerAddress, deploymentSalt, type(YieldDonatingTokenizedStrategy).creationCode);
 
         console.log("Expected address:", expectedAddress);
 
         // First deployment
         vm.startPrank(deployerAddress);
-        YieldDonatingTokenizedStrategy deterministicStrategy = new YieldDonatingTokenizedStrategy{
-            salt: deploymentSalt
-        }();
+        YieldDonatingTokenizedStrategy deterministicStrategy =
+            new YieldDonatingTokenizedStrategy{salt: deploymentSalt}();
         address actualAddress = address(deterministicStrategy);
         vm.stopPrank();
 
@@ -123,7 +119,7 @@ contract YieldDonatingTokenizedStrategyTest is Test {
 
         // Try to deploy again with the same salt (should revert)
         vm.startPrank(deployerAddress);
-        try new YieldDonatingTokenizedStrategy{ salt: deploymentSalt }() returns (YieldDonatingTokenizedStrategy) {
+        try new YieldDonatingTokenizedStrategy{salt: deploymentSalt}() returns (YieldDonatingTokenizedStrategy) {
             fail();
         } catch {
             console.log("Create Collision: Cannot deploy with the same salt");
@@ -134,18 +130,15 @@ contract YieldDonatingTokenizedStrategyTest is Test {
 
         // Pre-compute the new expected address
         address newExpectedAddress = _computeCreate2Address(
-            deployerAddress,
-            keccak256("DIFFERENT_SALT"),
-            type(YieldDonatingTokenizedStrategy).creationCode
+            deployerAddress, keccak256("DIFFERENT_SALT"), type(YieldDonatingTokenizedStrategy).creationCode
         );
 
         console.log("New expected address (different salt):", newExpectedAddress);
 
         // Deploy with different salt
         vm.startPrank(deployerAddress);
-        YieldDonatingTokenizedStrategy newStrategy = new YieldDonatingTokenizedStrategy{
-            salt: keccak256("DIFFERENT_SALT")
-        }();
+        YieldDonatingTokenizedStrategy newStrategy =
+            new YieldDonatingTokenizedStrategy{salt: keccak256("DIFFERENT_SALT")}();
         address newActualAddress = address(newStrategy);
         vm.stopPrank();
 
@@ -165,7 +158,7 @@ contract YieldDonatingTokenizedStrategyTest is Test {
     function testDifferentDeployers() public {
         // Deploy from first address
         vm.startPrank(deployerAddress);
-        YieldDonatingTokenizedStrategy strategy1 = new YieldDonatingTokenizedStrategy{ salt: deploymentSalt }();
+        YieldDonatingTokenizedStrategy strategy1 = new YieldDonatingTokenizedStrategy{salt: deploymentSalt}();
         address address1 = address(strategy1);
         vm.stopPrank();
 
@@ -175,7 +168,7 @@ contract YieldDonatingTokenizedStrategyTest is Test {
 
         // Deploy from second address with same salt
         vm.startPrank(deployer2);
-        YieldDonatingTokenizedStrategy strategy2 = new YieldDonatingTokenizedStrategy{ salt: deploymentSalt }();
+        YieldDonatingTokenizedStrategy strategy2 = new YieldDonatingTokenizedStrategy{salt: deploymentSalt}();
         address address2 = address(strategy2);
         vm.stopPrank();
 
@@ -194,14 +187,13 @@ contract YieldDonatingTokenizedStrategyTest is Test {
      * @param _creationCode Contract creation bytecode
      * @return Computed address where the contract should be deployed
      */
-    function _computeCreate2Address(
-        address _deployer,
-        bytes32 _salt,
-        bytes memory _creationCode
-    ) internal pure returns (address) {
-        return
-            address(
-                uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), _deployer, _salt, keccak256(_creationCode)))))
-            );
+    function _computeCreate2Address(address _deployer, bytes32 _salt, bytes memory _creationCode)
+        internal
+        pure
+        returns (address)
+    {
+        return address(
+            uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), _deployer, _salt, keccak256(_creationCode)))))
+        );
     }
 }
