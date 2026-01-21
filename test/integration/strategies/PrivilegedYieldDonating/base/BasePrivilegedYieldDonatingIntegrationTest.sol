@@ -76,6 +76,16 @@ abstract contract BasePrivilegedYieldDonatingIntegrationTest is
         vm.stopPrank();
     }
 
+    /// @notice Grants privilege status to an array of test users
+    /// @param users Array of addresses to grant privilege to
+    function _grantPrivilegeToTestUsers(address[] memory users) internal {
+        vm.startPrank(management);
+        for (uint256 i = 0; i < users.length; i++) {
+            IPrivilegedStrategy(address(vault)).setPrivileged(users[i], true);
+        }
+        vm.stopPrank();
+    }
+
     /// @notice Extended base setup that includes privileged user setup
     function _privilegedBaseSetUp() internal virtual {
         _baseSetUp();
