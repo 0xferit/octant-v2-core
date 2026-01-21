@@ -40,6 +40,9 @@ interface IPoolAddressesProvider {
  * @notice Yield-donating strategy that earns yield from Aave V3
  * @dev Deposits assets into Aave V3 lending pool to earn interest
  *
+ *      WARNING: THIS CONTRACT IS UNAUDITED AND NOT INTENDED FOR PRODUCTION USE.
+ *      USE AT YOUR OWN RISK.
+ *
  *      YIELD FLOW:
  *      1. Deposits assets into Aave V3 pool
  *      2. Receives aTokens that automatically accrue interest
