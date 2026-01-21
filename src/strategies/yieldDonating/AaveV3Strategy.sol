@@ -74,6 +74,7 @@ contract AaveV3Strategy is BaseHealthCheck {
      * @param _aToken Address of the aToken corresponding to the asset
      * @param _asset Address of the underlying asset
      * @param _name Strategy display name (e.g., "Octant Aave V3 USDC Strategy")
+     * @param _symbol Strategy share token symbol (e.g., "osAAVE")
      * @param _management Address with management permissions
      * @param _keeper Address authorized to call report() and tend()
      * @param _emergencyAdmin Address authorized for emergency shutdown
@@ -86,6 +87,7 @@ contract AaveV3Strategy is BaseHealthCheck {
         address _aToken,
         address _asset,
         string memory _name,
+        string memory _symbol,
         address _management,
         address _keeper,
         address _emergencyAdmin,
@@ -96,6 +98,7 @@ contract AaveV3Strategy is BaseHealthCheck {
         BaseHealthCheck(
             _asset,
             _name,
+            _symbol,
             _management,
             _keeper,
             _emergencyAdmin,

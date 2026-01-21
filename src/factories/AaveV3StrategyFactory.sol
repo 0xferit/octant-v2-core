@@ -42,6 +42,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
      * @notice Deploy a new AaveV3 strategy
      * @dev Deterministic salt derived from all parameters to avoid duplicates
      * @param _name Strategy share token name
+     * @param _symbol Strategy share token symbol (e.g., "osAAVE")
      * @param _management Management address (can update params)
      * @param _keeper Keeper address (calls report)
      * @param _emergencyAdmin Emergency admin address
@@ -52,6 +53,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
      */
     function createStrategy(
         string memory _name,
+        string memory _symbol,
         address _management,
         address _keeper,
         address _emergencyAdmin,
@@ -65,6 +67,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
                 AUSDC_V3,
                 USDC,
                 _name,
+                _symbol,
                 _management,
                 _keeper,
                 _emergencyAdmin,
@@ -81,6 +84,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
                 AUSDC_V3,
                 USDC,
                 _name,
+                _symbol,
                 _management,
                 _keeper,
                 _emergencyAdmin,
