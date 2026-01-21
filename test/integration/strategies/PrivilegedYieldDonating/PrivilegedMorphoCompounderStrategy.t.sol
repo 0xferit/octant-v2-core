@@ -57,7 +57,9 @@ contract PrivilegedMorphoCompounderStrategyTest is BasePrivilegedYieldDonatingIn
 
     function _etchImplementation() internal override {
         // Use PrivilegedYieldDonatingTokenizedStrategy instead of regular YieldDonatingTokenizedStrategy
-        implementation = new PrivilegedYieldDonatingTokenizedStrategy{ salt: keccak256("OCT_PRIVILEGED_YIELD_DONATING_STRATEGY_V1") }();
+        implementation = new PrivilegedYieldDonatingTokenizedStrategy{
+            salt: keccak256("OCT_PRIVILEGED_YIELD_DONATING_STRATEGY_V1")
+        }();
         bytes memory tokenizedStrategyBytecode = address(implementation).code;
         vm.etch(MorphoTestConfig.TOKENIZED_STRATEGY_ADDRESS, tokenizedStrategyBytecode);
     }

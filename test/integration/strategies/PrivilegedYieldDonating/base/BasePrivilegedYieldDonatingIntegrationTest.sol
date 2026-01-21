@@ -30,7 +30,12 @@ abstract contract BasePrivilegedYieldDonatingIntegrationTest is
     }
 
     /// @dev Override for BaseIntegrationTest and BasePrivilegedIntegrationTest - delegates to the concrete implementation
-    function _asset() internal view virtual override(BaseIntegrationTest, BasePrivilegedIntegrationTest) returns (address);
+    function _asset()
+        internal
+        view
+        virtual
+        override(BaseIntegrationTest, BasePrivilegedIntegrationTest)
+        returns (address);
 
     function _management() internal view override returns (address) {
         return management;
@@ -53,10 +58,20 @@ abstract contract BasePrivilegedYieldDonatingIntegrationTest is
     }
 
     /// @dev Override for BasePrivilegedIntegrationTest - delegates to the concrete implementation
-    function _minDeposit() internal view virtual override(BaseYieldDonatingIntegrationTest, BasePrivilegedIntegrationTest) returns (uint256);
+    function _minDeposit()
+        internal
+        view
+        virtual
+        override(BaseYieldDonatingIntegrationTest, BasePrivilegedIntegrationTest)
+        returns (uint256);
 
     /// @dev Override for BasePrivilegedIntegrationTest - delegates to the concrete implementation
-    function _maxDeposit() internal view virtual override(BaseYieldDonatingIntegrationTest, BasePrivilegedIntegrationTest) returns (uint256);
+    function _maxDeposit()
+        internal
+        view
+        virtual
+        override(BaseYieldDonatingIntegrationTest, BasePrivilegedIntegrationTest)
+        returns (uint256);
 
     // ========== SETUP HELPERS ==========
 

@@ -30,7 +30,12 @@ abstract contract BasePrivilegedYieldSkimmingIntegrationTest is
     }
 
     /// @dev Override for BaseIntegrationTest and BasePrivilegedIntegrationTest - delegates to the concrete implementation
-    function _asset() internal view virtual override(BaseIntegrationTest, BasePrivilegedIntegrationTest) returns (address);
+    function _asset()
+        internal
+        view
+        virtual
+        override(BaseIntegrationTest, BasePrivilegedIntegrationTest)
+        returns (address);
 
     function _management() internal view override returns (address) {
         return management;

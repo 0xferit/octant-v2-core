@@ -56,7 +56,9 @@ contract PrivilegedLidoStrategyTest is BasePrivilegedYieldSkimmingIntegrationTes
 
     function _etchImplementation() internal override {
         // Use PrivilegedYieldSkimmingTokenizedStrategy instead of regular YieldSkimmingTokenizedStrategy
-        implementation = new PrivilegedYieldSkimmingTokenizedStrategy{ salt: keccak256("OCT_PRIVILEGED_YIELD_SKIMMING_STRATEGY_V1") }();
+        implementation = new PrivilegedYieldSkimmingTokenizedStrategy{
+            salt: keccak256("OCT_PRIVILEGED_YIELD_SKIMMING_STRATEGY_V1")
+        }();
         bytes memory tokenizedStrategyBytecode = address(implementation).code;
         vm.etch(LidoTestConfig.TOKENIZED_STRATEGY_ADDRESS, tokenizedStrategyBytecode);
     }
@@ -222,7 +224,10 @@ contract PrivilegedLidoStrategyTest is BasePrivilegedYieldSkimmingIntegrationTes
         _testFuzzEmergencyExit(depositAmount);
     }
 
-    function testFuzzExchangeRateTrackingPrivilegedLido(uint256 depositAmount, uint256 exchangeRateIncreasePercentage) public {
+    function testFuzzExchangeRateTrackingPrivilegedLido(
+        uint256 depositAmount,
+        uint256 exchangeRateIncreasePercentage
+    ) public {
         _testFuzzExchangeRateTracking(depositAmount, exchangeRateIncreasePercentage);
     }
 

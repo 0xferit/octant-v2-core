@@ -57,7 +57,9 @@ contract PrivilegedSkyCompounderStrategyTest is BasePrivilegedYieldDonatingInteg
 
     function _etchImplementation() internal override {
         // Use PrivilegedYieldDonatingTokenizedStrategy instead of regular YieldDonatingTokenizedStrategy
-        implementation = new PrivilegedYieldDonatingTokenizedStrategy{ salt: keccak256("OCT_PRIVILEGED_YIELD_DONATING_STRATEGY_V1") }();
+        implementation = new PrivilegedYieldDonatingTokenizedStrategy{
+            salt: keccak256("OCT_PRIVILEGED_YIELD_DONATING_STRATEGY_V1")
+        }();
     }
 
     function _deployStrategy() internal override returns (address) {

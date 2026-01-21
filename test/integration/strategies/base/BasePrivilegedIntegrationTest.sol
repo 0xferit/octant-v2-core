@@ -67,7 +67,10 @@ abstract contract BasePrivilegedIntegrationTest is Test {
     function _testSetPrivilegedByManagement() internal {
         address newPrivilegedUser = makeAddr("newPrivilegedUser");
 
-        assertFalse(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(newPrivilegedUser), "Should not be privileged initially");
+        assertFalse(
+            IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(newPrivilegedUser),
+            "Should not be privileged initially"
+        );
 
         vm.startPrank(_management());
         vm.expectEmit(true, true, true, true);
@@ -75,7 +78,10 @@ abstract contract BasePrivilegedIntegrationTest is Test {
         IPrivilegedStrategy(_privilegedStrategy()).setPrivileged(newPrivilegedUser, true);
         vm.stopPrank();
 
-        assertTrue(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(newPrivilegedUser), "Should be privileged after setting");
+        assertTrue(
+            IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(newPrivilegedUser),
+            "Should be privileged after setting"
+        );
 
         // Test removing privilege
         vm.startPrank(_management());
@@ -84,7 +90,10 @@ abstract contract BasePrivilegedIntegrationTest is Test {
         IPrivilegedStrategy(_privilegedStrategy()).setPrivileged(newPrivilegedUser, false);
         vm.stopPrank();
 
-        assertFalse(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(newPrivilegedUser), "Should not be privileged after removal");
+        assertFalse(
+            IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(newPrivilegedUser),
+            "Should not be privileged after removal"
+        );
     }
 
     /// @notice Test that setPrivilegedBatch can only be called by management
@@ -110,7 +119,10 @@ abstract contract BasePrivilegedIntegrationTest is Test {
 
         // Verify none are privileged initially
         for (uint256 i = 0; i < accounts.length; i++) {
-            assertFalse(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(accounts[i]), "Should not be privileged initially");
+            assertFalse(
+                IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(accounts[i]),
+                "Should not be privileged initially"
+            );
         }
 
         // Add all as privileged
@@ -124,7 +136,10 @@ abstract contract BasePrivilegedIntegrationTest is Test {
 
         // Verify all are now privileged
         for (uint256 i = 0; i < accounts.length; i++) {
-            assertTrue(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(accounts[i]), "Should be privileged after batch set");
+            assertTrue(
+                IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(accounts[i]),
+                "Should be privileged after batch set"
+            );
         }
 
         // Remove all privileges
@@ -134,7 +149,10 @@ abstract contract BasePrivilegedIntegrationTest is Test {
 
         // Verify none are privileged
         for (uint256 i = 0; i < accounts.length; i++) {
-            assertFalse(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(accounts[i]), "Should not be privileged after removal");
+            assertFalse(
+                IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(accounts[i]),
+                "Should not be privileged after removal"
+            );
         }
     }
 
@@ -395,7 +413,13 @@ abstract contract BasePrivilegedIntegrationTest is Test {
         address privileged = _privilegedUser();
         address nonPrivileged = _nonPrivilegedUser();
 
-        assertTrue(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(privileged), "Privileged user should return true");
-        assertFalse(IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(nonPrivileged), "Non-privileged user should return false");
+        assertTrue(
+            IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(privileged),
+            "Privileged user should return true"
+        );
+        assertFalse(
+            IPrivilegedStrategy(_privilegedStrategy()).isPrivileged(nonPrivileged),
+            "Non-privileged user should return false"
+        );
     }
 }

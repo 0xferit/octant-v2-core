@@ -56,7 +56,9 @@ contract PrivilegedRocketPoolStrategyTest is BasePrivilegedYieldSkimmingIntegrat
 
     function _etchImplementation() internal override {
         // Use PrivilegedYieldSkimmingTokenizedStrategy instead of regular YieldSkimmingTokenizedStrategy
-        implementation = new PrivilegedYieldSkimmingTokenizedStrategy{ salt: keccak256("OCT_PRIVILEGED_YIELD_SKIMMING_STRATEGY_V1") }();
+        implementation = new PrivilegedYieldSkimmingTokenizedStrategy{
+            salt: keccak256("OCT_PRIVILEGED_YIELD_SKIMMING_STRATEGY_V1")
+        }();
         // RocketPool doesn't need etching - uses implementation directly
     }
 
@@ -217,7 +219,10 @@ contract PrivilegedRocketPoolStrategyTest is BasePrivilegedYieldSkimmingIntegrat
         _testFuzzEmergencyExit(depositAmount);
     }
 
-    function testFuzzExchangeRateTrackingPrivilegedRocket(uint256 depositAmount, uint256 exchangeRateIncreasePercentage) public {
+    function testFuzzExchangeRateTrackingPrivilegedRocket(
+        uint256 depositAmount,
+        uint256 exchangeRateIncreasePercentage
+    ) public {
         _testFuzzExchangeRateTracking(depositAmount, exchangeRateIncreasePercentage);
     }
 
