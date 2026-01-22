@@ -1,34 +1,67 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import { BaseSparkVaultStrategyTest } from "../BaseSparkVaultStrategy.t.sol";
+import { SparkDonatingStrategyTest } from "../SparkStrategy.t.sol";
+import { SparkTestConfig } from "../../config/SparkTestConfig.sol";
 
 /// @title Spark WETH Vault Strategy Test
 /// @author Octant
-/// @notice Integration tests for GenericERC4626 strategy with SparkDAO WETH vault
-contract SparkWETHVaultStrategyTest is BaseSparkVaultStrategyTest {
-    /// @notice Returns the Spark WETH vault address
-    function getSparkVault() internal pure override returns (address) {
-        return 0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f; // Spark WETH vault
+/// @notice Integration tests for SparkStrategy with SparkDAO WETH vault
+/// @dev Extends SparkDonatingStrategyTest with WETH-specific configuration
+contract SparkWETHVaultStrategyTest is SparkDonatingStrategyTest {
+    // ========== WETH CONFIGURATION OVERRIDES ==========
+
+    function _asset() internal pure override returns (address) {
+        return SparkTestConfig.WETH;
     }
 
-    /// @notice Returns the WETH token address
-    function getAsset() internal pure override returns (address) {
-        return 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH token
+    function _strategyName() internal pure override returns (string memory) {
+        return SparkTestConfig.WETH_STRATEGY_NAME;
     }
 
-    /// @notice Returns the asset name for labeling
-    function getAssetName() internal pure override returns (string memory) {
-        return "WETH";
+    function _strategySymbol() internal pure override returns (string memory) {
+        return SparkTestConfig.WETH_STRATEGY_SYMBOL;
     }
 
-    /// @notice Returns the initial deposit amount (100 WETH with 18 decimals)
-    function getInitialDeposit() internal pure override returns (uint256) {
-        return 100e18; // 100 WETH
+    function _initialDeposit() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_INITIAL_DEPOSIT;
     }
 
-    /// @notice Returns a different asset for validation testing (USDC)
-    function getWrongAsset() internal pure override returns (address) {
-        return 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // USDC
+    function _compounderVault() internal pure override returns (address) {
+        return SparkTestConfig.WETH_SPARK_VAULT;
+    }
+
+    function _minDeposit() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_MIN_DEPOSIT;
+    }
+
+    function _maxDeposit() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_MAX_DEPOSIT;
+    }
+
+    function _decimals() internal pure override returns (uint8) {
+        return SparkTestConfig.WETH_DECIMALS;
+    }
+
+    // ========== WETH TEST-SPECIFIC CONFIGURATION OVERRIDES ==========
+
+    function _vsrTestDeposit() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_VSR_TEST_DEPOSIT;
+    }
+
+    function _depositCapMaxCheck() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_DEPOSIT_CAP_MAX_CHECK;
+    }
+
+    function _depositCapExcess() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_DEPOSIT_CAP_EXCESS;
+    }
+
+    function _multiUserDeposit1() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_MULTI_USER_DEPOSIT_1;
+    }
+
+    function _multiUserDeposit2() internal pure override returns (uint256) {
+        return SparkTestConfig.WETH_MULTI_USER_DEPOSIT_2;
     }
 }

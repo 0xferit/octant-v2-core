@@ -38,6 +38,7 @@ contract ERC4626Strategy is BaseHealthCheck {
      * @param _targetVault Address of the ERC4626 vault this strategy deposits into
      * @param _asset Address of the underlying asset (must match target vault's asset)
      * @param _name Strategy display name (e.g., "Octant ERC4626 Strategy")
+     * @param _symbol Strategy token symbol (e.g., "osERC4626")
      * @param _management Address with management permissions
      * @param _keeper Address authorized to call report() and tend()
      * @param _emergencyAdmin Address authorized for emergency shutdown
@@ -49,6 +50,7 @@ contract ERC4626Strategy is BaseHealthCheck {
         address _targetVault,
         address _asset,
         string memory _name,
+        string memory _symbol,
         address _management,
         address _keeper,
         address _emergencyAdmin,
@@ -59,6 +61,7 @@ contract ERC4626Strategy is BaseHealthCheck {
         BaseHealthCheck(
             _asset,
             _name,
+            _symbol,
             _management,
             _keeper,
             _emergencyAdmin,

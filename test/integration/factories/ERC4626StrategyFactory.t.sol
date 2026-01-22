@@ -7,6 +7,7 @@ import { MockERC20 } from "test/mocks/MockERC20.sol";
 import { ERC4626Strategy } from "src/strategies/yieldDonating/ERC4626Strategy.sol";
 import { ERC4626StrategyFactory } from "src/factories/ERC4626StrategyFactory.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
+import { BaseERC4626StrategyFactory } from "src/factories/BaseERC4626StrategyFactory.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
@@ -82,7 +83,7 @@ contract ERC4626StrategyFactoryTest is Test {
         // Create a strategy and check events
         vm.startPrank(management);
         vm.expectEmit(true, true, true, false); // Check deployer, targetVault, and donationAddress; ignore strategy address
-        emit ERC4626StrategyFactory.StrategyDeploy(
+        emit BaseERC4626StrategyFactory.StrategyDeploy(
             management,
             USDC_SPARK_VAULT,
             donationAddress,
@@ -94,6 +95,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             strategyName,
+            "osSparkUSDC",
             management,
             keeper,
             emergencyAdmin,
@@ -125,7 +127,7 @@ contract ERC4626StrategyFactoryTest is Test {
         // Create a strategy and check events
         vm.startPrank(management);
         vm.expectEmit(true, true, true, false); // Check deployer, targetVault, and donationAddress; ignore strategy address
-        emit ERC4626StrategyFactory.StrategyDeploy(
+        emit BaseERC4626StrategyFactory.StrategyDeploy(
             management,
             WETH_SPARK_VAULT,
             donationAddress,
@@ -137,6 +139,7 @@ contract ERC4626StrategyFactoryTest is Test {
             WETH_SPARK_VAULT,
             WETH,
             strategyName,
+            "osSparkWETH",
             management,
             keeper,
             emergencyAdmin,
@@ -171,6 +174,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             firstStrategyName,
+            "osSparkUSDC1",
             management,
             keeper,
             emergencyAdmin,
@@ -186,6 +190,7 @@ contract ERC4626StrategyFactoryTest is Test {
             WETH_SPARK_VAULT,
             WETH,
             secondStrategyName,
+            "osSparkWETH1",
             management,
             keeper,
             emergencyAdmin,
@@ -228,6 +233,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             firstStrategyName,
+            "osUser1USDC",
             firstUser,
             keeper,
             emergencyAdmin,
@@ -243,6 +249,7 @@ contract ERC4626StrategyFactoryTest is Test {
             WETH_SPARK_VAULT,
             WETH,
             secondStrategyName,
+            "osUser2WETH",
             secondUser,
             keeper,
             emergencyAdmin,
@@ -275,6 +282,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             strategyName,
+            "osDET",
             management,
             keeper,
             emergencyAdmin,
@@ -291,6 +299,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             strategyName,
+            "osDET",
             management,
             keeper,
             emergencyAdmin,
@@ -307,6 +316,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             differentName,
+            "osDIFF",
             management,
             keeper,
             emergencyAdmin,
@@ -330,6 +340,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             strategyName,
+            "osSame1",
             management,
             keeper,
             emergencyAdmin,
@@ -343,6 +354,7 @@ contract ERC4626StrategyFactoryTest is Test {
             WETH_SPARK_VAULT,
             WETH,
             strategyName, // Same name
+            "osSame1", // Same symbol
             management, // Same management
             keeper, // Same keeper
             emergencyAdmin, // Same emergency admin
@@ -376,6 +388,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             WETH, // Wrong asset - should be USDC
             strategyName,
+            "osInvalid",
             management,
             keeper,
             emergencyAdmin,
@@ -392,6 +405,7 @@ contract ERC4626StrategyFactoryTest is Test {
             WETH_SPARK_VAULT,
             USDC, // Wrong asset - should be WETH
             strategyName,
+            "osInvalid",
             management,
             keeper,
             emergencyAdmin,
@@ -411,6 +425,7 @@ contract ERC4626StrategyFactoryTest is Test {
             USDC_SPARK_VAULT,
             USDC,
             strategyName,
+            "osBurning",
             management,
             keeper,
             emergencyAdmin,

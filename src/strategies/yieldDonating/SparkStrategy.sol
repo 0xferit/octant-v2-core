@@ -38,6 +38,7 @@ contract SparkStrategy is ERC4626Strategy {
      * @param _targetVault Address of the Spark ERC4626 vault this strategy deposits into
      * @param _asset Address of the underlying asset (must match target vault's asset)
      * @param _name Strategy display name (e.g., "Spark USDC Strategy")
+     * @param _symbol Strategy token symbol (e.g., "osSparkUSDC")
      * @param _management Address with management permissions
      * @param _keeper Address authorized to call report() and tend()
      * @param _emergencyAdmin Address authorized for emergency shutdown
@@ -49,6 +50,7 @@ contract SparkStrategy is ERC4626Strategy {
         address _targetVault,
         address _asset,
         string memory _name,
+        string memory _symbol,
         address _management,
         address _keeper,
         address _emergencyAdmin,
@@ -60,6 +62,7 @@ contract SparkStrategy is ERC4626Strategy {
             _targetVault,
             _asset,
             _name,
+            _symbol,
             _management,
             _keeper,
             _emergencyAdmin,
