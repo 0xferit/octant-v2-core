@@ -1227,39 +1227,13 @@ Parameters:
         <ol>
           <li><strong>Navigate to Decent:</strong> Go to the Shutter DAO governance interface on Decent</li>
           <li><strong>Create New Proposal:</strong> Click "New Proposal"</li>
-          <li><strong>Add 3 Custom Transactions:</strong> Add each transaction from <code>proposal-calldata.json</code></li>
+          <li><strong>Add 3 Custom Transactions:</strong> For each transaction, enter the target address. Decent will auto-populate the ABI from verified contracts. Enter parameter values from the tables above.</li>
           <li><strong>Submit:</strong> Review and submit the proposal</li>
         </ol>
 
-        <h4>Transaction Format</h4>
-        <p>Each transaction in <code>proposal-calldata.json</code> has:</p>
-        <table>
-          <thead>
-            <tr><th>Field</th><th>Description</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>target</strong></td>
-              <td>Contract address to call</td>
-            </tr>
-            <tr>
-              <td><strong>value</strong></td>
-              <td><code>0</code> (no ETH sent)</td>
-            </tr>
-            <tr>
-              <td><strong>operation</strong></td>
-              <td><code>0</code> (CALL)</td>
-            </tr>
-            <tr>
-              <td><strong>calldata</strong></td>
-              <td>Encoded function call</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h4>Generate Calldata</h4>
-        <pre><code>forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv</code></pre>
-        <p>The script outputs <code>proposal-calldata.json</code> with all 3 transactions ready for Decent UI.</p>
+        <div class="callout callout-info">
+          <p><strong>Note:</strong> In Decent's Transaction Builder, the "Parameter" field expects the <strong>type</strong> (e.g., <code>uint256</code>, <code>address</code>), not the parameter name.</p>
+        </div>
 
         <h4>Verification Checklist</h4>
         <ul>
@@ -1269,11 +1243,6 @@ Parameters:
           <li>All operations are CALL (value 0), not DELEGATECALL</li>
           <li>All ETH values are 0</li>
         </ul>
-
-        <h4>Re-generating Calldata</h4>
-        <p>If parameters change, regenerate the calldata:</p>
-        <pre><code>forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv</code></pre>
-        <p>The script outputs <code>partners/shutter_dao_0x36/proposal-calldata.json</code> with all values.</p>
       </section>
 
       <!-- POST-DEPLOYMENT -->

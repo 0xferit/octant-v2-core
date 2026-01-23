@@ -4,7 +4,6 @@ pragma solidity ^0.8.25;
 import { Script, console } from "forge-std/Script.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
-import { stdJson } from "forge-std/StdJson.sol";
 
 import { IMorphoCompounderStrategyFactoryV1 } from "src/interfaces/IMorphoCompounderStrategyFactoryV1.sol";
 import { MorphoCompounderStrategy } from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
@@ -18,17 +17,16 @@ import {
 
 /**
  * @title GenerateProposalCalldata
- * @notice Generates 3 separate CALL transactions for Shutter DAO governance proposal.
+ * @notice Verifies CREATE2 prediction for Shutter DAO governance proposal.
  * @dev Run on mainnet fork: forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv
  *
  *      This script:
  *      1. Predicts strategy address using CREATE2
  *      2. Verifies prediction by simulating deployment on the fork
  *      3. Fails if bytecode mismatch detected (prediction != actual)
- *      4. Outputs 3 separate CALL transactions for governance proposal (Decent UI compatible)
+ *      4. Logs transaction details for reference
  *
- *      The verification step ensures local bytecode matches the deployed factory,
- *      preventing invalid calldata generation.
+ *      The verification step ensures local bytecode matches the deployed factory.
  */
 contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
@@ -49,9 +47,6 @@ contract GenerateProposalCalldata is Script {
     address constant USDC = USDC_MAINNET;
     address constant MORPHO_STRATEGY_FACTORY = MORPHO_STRATEGY_FACTORY_MAINNET;
     address constant TOKENIZED_STRATEGY = YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET;
-
-    // Output file path (relative to project root)
-    string constant OUTPUT_FILE = "partners/shutter_dao_0x36/proposal-calldata.json";
 
     function run() public {
         console.log(unicode"══════════════════════════════════════════════════════════════════════════════");
@@ -175,12 +170,6 @@ contract GenerateProposalCalldata is Script {
         _logTx2(strategyAddress, tx2Calldata);
 
         // ══════════════════════════════════════════════════════════════════════════════
-        // WRITE JSON OUTPUT FILE
-        // ══════════════════════════════════════════════════════════════════════════════
-
-        _writeJsonOutput(strategyAddress, bytecodeHash, tx0Calldata, tx1Calldata, tx2Calldata);
-
-        // ══════════════════════════════════════════════════════════════════════════════
         // COPY-PASTE SUMMARY
         // ══════════════════════════════════════════════════════════════════════════════
 
@@ -225,143 +214,6 @@ contract GenerateProposalCalldata is Script {
         console.log("Calldata:");
         console.logBytes(callData);
         console.log("");
-    }
-
-    function _writeJsonOutput(
-        address strategyAddress,
-        bytes32 bytecodeHash,
-        bytes memory tx0Calldata,
-        bytes memory tx1Calldata,
-        bytes memory tx2Calldata
-    ) internal {
-        // Build JSON manually since forge's JSON serialization has limitations
-        string memory json = string.concat(
-            "{\n",
-            '  "generated_at": "',
-            vm.toString(block.timestamp),
-            '",\n',
-            '  "block_number": ',
-            vm.toString(block.number),
-            ",\n",
-            '  "chain_id": ',
-            vm.toString(block.chainid),
-            ",\n"
-        );
-
-        // Verification section
-        json = string.concat(
-            json,
-            '  "verification": {\n',
-            '    "predicted_strategy": "',
-            vm.toString(strategyAddress),
-            '",\n',
-            '    "bytecode_hash": "',
-            vm.toString(bytecodeHash),
-            '",\n',
-            '    "status": "VERIFIED"\n',
-            "  },\n"
-        );
-
-        // Transaction 0: Deploy Strategy (with ABI parameters for Decent UI)
-        json = string.concat(
-            json,
-            '  "transactions": [\n',
-            "    {\n",
-            '      "name": "Deploy Strategy",\n',
-            '      "target": "',
-            vm.toString(MORPHO_STRATEGY_FACTORY),
-            '",\n',
-            '      "value": "0",\n',
-            '      "operation": 0,\n',
-            '      "function": "createStrategy(string,address,address,address,address,bool,address)",\n',
-            '      "parameters": [\n'
-        );
-        json = string.concat(
-            json,
-            '        { "name": "_name", "type": "string", "value": "',
-            STRATEGY_NAME,
-            '" },\n',
-            '        { "name": "_management", "type": "address", "value": "',
-            vm.toString(SHUTTER_TREASURY),
-            '" },\n',
-            '        { "name": "_keeper", "type": "address", "value": "',
-            vm.toString(KEEPER_BOT),
-            '" },\n',
-            '        { "name": "_emergencyAdmin", "type": "address", "value": "',
-            vm.toString(SHUTTER_TREASURY),
-            '" },\n'
-        );
-        json = string.concat(
-            json,
-            '        { "name": "_donationAddress", "type": "address", "value": "',
-            vm.toString(DRAGON_FUNDING_POOL),
-            '" },\n',
-            '        { "name": "_enableBurning", "type": "bool", "value": false },\n',
-            '        { "name": "_tokenizedStrategyAddress", "type": "address", "value": "',
-            vm.toString(TOKENIZED_STRATEGY),
-            '" }\n',
-            "      ],\n",
-            '      "calldata": "',
-            vm.toString(tx0Calldata),
-            '"\n',
-            "    },\n"
-        );
-
-        // Transaction 1: Approve USDC (with ABI parameters for Decent UI)
-        json = string.concat(
-            json,
-            "    {\n",
-            '      "name": "Approve USDC",\n',
-            '      "target": "',
-            vm.toString(USDC),
-            '",\n',
-            '      "value": "0",\n',
-            '      "operation": 0,\n',
-            '      "function": "approve(address,uint256)",\n',
-            '      "parameters": [\n',
-            '        { "name": "spender", "type": "address", "value": "',
-            vm.toString(strategyAddress),
-            '" },\n',
-            '        { "name": "amount", "type": "uint256", "value": "',
-            vm.toString(DEPOSIT_AMOUNT),
-            '" }\n',
-            "      ],\n",
-            '      "calldata": "',
-            vm.toString(tx1Calldata),
-            '"\n',
-            "    },\n"
-        );
-
-        // Transaction 2: Deposit USDC (with ABI parameters for Decent UI)
-        json = string.concat(
-            json,
-            "    {\n",
-            '      "name": "Deposit USDC",\n',
-            '      "target": "',
-            vm.toString(strategyAddress),
-            '",\n',
-            '      "value": "0",\n',
-            '      "operation": 0,\n',
-            '      "function": "deposit(uint256,address)",\n',
-            '      "parameters": [\n',
-            '        { "name": "assets", "type": "uint256", "value": "',
-            vm.toString(DEPOSIT_AMOUNT),
-            '" },\n',
-            '        { "name": "receiver", "type": "address", "value": "',
-            vm.toString(SHUTTER_TREASURY),
-            '" }\n',
-            "      ],\n",
-            '      "calldata": "',
-            vm.toString(tx2Calldata),
-            '"\n',
-            "    }\n",
-            "  ]\n",
-            "}"
-        );
-
-        vm.writeFile(OUTPUT_FILE, json);
-        console.log("");
-        console.log("JSON output written to:", OUTPUT_FILE);
     }
 
     function _logCopyPasteSummary(
