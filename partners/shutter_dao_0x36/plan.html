@@ -1138,7 +1138,7 @@
         <h2>Execution Playbook</h2>
 
         <h3>Phase 1: Strategy Deployment</h3>
-        <p>If CREATE2 prediction is verified, the deployment can be executed in a <strong>single DAO proposal</strong> with <strong>3 separate CALL transactions</strong> containing 3 operations:</p>
+        <p>The deployment is executed in a <strong>single DAO proposal</strong> with <strong>3 separate CALL transactions</strong>:</p>
         <ol>
           <li>Deploy Strategy via Factory</li>
           <li>Approve USDC to Strategy (uses precomputed Strategy address)</li>
@@ -1146,11 +1146,7 @@
         </ol>
 
         <div class="callout callout-success">
-          <p><strong>CREATE2 Address Prediction:</strong> The script uses CREATE2 to precompute the strategy address, enabling batched execution. The script automatically verifies this prediction by simulating deployment on a mainnet fork and comparing bytecode. If verification fails, the script aborts with an error - ensuring calldata is never generated with an incorrect address.</p>
-        </div>
-
-        <div class="callout callout-warning">
-          <p><strong>The proposal uses 3 separate CALL transactions that are Decent UI compatible.</p>
+          <p><strong>CREATE2 Address Prediction:</strong> The script uses CREATE2 to precompute the strategy address. Transactions 2 and 3 can reference the strategy address before it's deployed because CREATE2 makes the address deterministic. The script verifies this prediction by simulating deployment on a mainnet fork.</p>
         </div>
 
         <h3>Gas Profile</h3>
@@ -1163,7 +1159,7 @@
           </thead>
           <tbody>
             <tr>
-              <td><strong>DAO Proposal (3 transactions)</strong></td>
+              <td><strong>DAO Proposal (3 CALL transactions)</strong></td>
               <td><strong>~1M</strong></td>
             </tr>
             <tr>
@@ -1220,57 +1216,58 @@ Parameters:
         <h3>Decent UI: Copy-Paste Ready Calldata</h3>
         
         <div class="callout callout-success">
-          <p><strong>Verification:</strong> The calldata below was generated on 2025-01-23 at mainnet block ~24293794 with CREATE2 prediction verified. The strategy bytecode hash is <code>0xd1a8fc6eca53927bc6ecf6a4e55e3bc4dcf00557c23d55b4d8f50fb37e76cf1e</code>.</p>
+          <p><strong>Verification:</strong> The calldata below was generated on 2025-01-23 at mainnet block ~24293794 with CREATE2 prediction verified. The strategy bytecode hash is <code>0x487cd863b24b8fd5051c7daa57216955f62d2c3667c0dfbcf7b7e6241bee3db9</code>.</p>
         </div>
 
         <h4>Predicted Strategy Address</h4>
-        <pre><code>0x4D76B195768dDDD8079BfB05275D6AFB475d0aa6</code></pre>
+        <pre><code>0xC5B26f6A954cf7480C6992e5C3E0c92F38B5695c</code></pre>
         <p>This address is deterministically computed via CREATE2. The USDC approval and deposit use this address.</p>
 
         <h4>Step-by-Step: Creating the Proposal in Decent</h4>
         <ol>
           <li><strong>Navigate to Decent:</strong> Go to the Shutter DAO governance interface on Decent</li>
           <li><strong>Create New Proposal:</strong> Click "New Proposal"</li>
-          <li><strong>Add Custom Transaction:</strong> Select "Custom Transaction" type</li>
-          <li><strong>Enter Values:</strong> Copy-paste the values below exactly</li>
+          <li><strong>Add 3 Custom Transactions:</strong> Add each transaction from <code>proposal-calldata.json</code></li>
           <li><strong>Submit:</strong> Review and submit the proposal</li>
         </ol>
 
-        <h4>Custom Transaction Values</h4>
+        <h4>Transaction Format</h4>
+        <p>Each transaction in <code>proposal-calldata.json</code> has:</p>
         <table>
           <thead>
-            <tr><th>Field</th><th>Value</th></tr>
+            <tr><th>Field</th><th>Description</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>Target Address</strong></td>
-              <td><code>0x052d20B0e0b141988bD32772C735085e45F357c1</code></td>
+              <td><strong>target</strong></td>
+              <td>Contract address to call</td>
             </tr>
             <tr>
-              <td><strong>Value (ETH)</strong></td>
-              <td><code>0</code></td>
+              <td><strong>value</strong></td>
+              <td><code>0</code> (no ETH sent)</td>
             </tr>
             <tr>
-              <td><strong>Operation</strong></td>
-              <td><code>CALL (0)</code></td>
+              <td><strong>operation</strong></td>
+              <td><code>0</code> (CALL)</td>
+            </tr>
+            <tr>
+              <td><strong>calldata</strong></td>
+              <td>Encoded function call</td>
             </tr>
           </tbody>
         </table>
 
-        <h4>Transaction 1 Calldata (Deploy Strategy)</h4>
-        <p>Copy the entire hex string below including the <code>0x</code> prefix:</p>
-        <pre><code>0x31d89943000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000002ab00052d20b0e0b141988bd32772c735085e45f357c10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012431d8994300000000000000000000000000000000000000000000000000000000000000e000000000000000000000000036bd3044ab68f600f6d3e081056f34f2a58432c400000000000000000000000006c2c4db3776d500636de63e4f109386dcba6ae200000000000000000000000036bd3044ab68f600f6d3e081056f34f2a58432c40000000000000000000000004b4505dede6408642511fc0586b62676111e49040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b27064a2c51b8c5b39a5bb911ad34db039c3ab9c000000000000000000000000000000000000000000000000000000000000000c5348554772616e74506f6f6c000000000000000000000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044095ea7b3000000000000000000000000c5b26f6a954cf7480c6992e5c3e0c92f38b5695c000000000000000000000000000000000000000000000000000001176592e00000c5b26f6a954cf7480c6992e5c3e0c92f38b5695c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000446e553f65000000000000000000000000000000000000000000000000000001176592e00000000000000000000000000036bd3044ab68f600f6d3e081056f34f2a58432c4000000000000000000000000000000000000000000</code></pre>
-
-        <div class="callout callout-warning">
-          <p><strong>Important:</strong> This calldata encodes 3 separate CALL transactions. The operations are: (1) Deploy Strategy, (2) Approve USDC to Strategy, (3) Deposit 1.2M USDC.</p>
-        </div>
+        <h4>Generate Calldata</h4>
+        <pre><code>forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv</code></pre>
+        <p>The script outputs <code>proposal-calldata.json</code> with all 3 transactions ready for Decent UI.</p>
 
         <h4>Verification Checklist</h4>
         <ul>
-          <li>Target is the Strategy Factory: <code>0x052d20B0e0b141988bD32772C735085e45F357c1</code></li>
-          <li>Operation is CALL (value 0)</li>
-          <li>Calldata starts with <code>0x31d89943</code> (createStrategy selector)</li>
-          <li>Bytecode hash matches: <code>0x487cd863b24b8fd5051c7daa57216955f62d2c3667c0dfbcf7b7e6241bee3db9</code></li>
+          <li>Transaction 1 target is Strategy Factory: <code>0x052d20B0e0b141988bD32772C735085e45F357c1</code></li>
+          <li>Transaction 2 target is USDC: <code>0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48</code></li>
+          <li>Transaction 3 target is the predicted Strategy address</li>
+          <li>All operations are CALL (value 0), not DELEGATECALL</li>
+          <li>All ETH values are 0</li>
         </ul>
 
         <h4>Re-generating Calldata</h4>

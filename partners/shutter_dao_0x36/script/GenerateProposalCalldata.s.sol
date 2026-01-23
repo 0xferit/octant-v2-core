@@ -138,12 +138,12 @@ contract GenerateProposalCalldata is Script {
 
         // Check prediction vs actual
         if (predictedAddress != strategyAddress) {
-            console.log("[INFO] Local bytecode differs from factory - using factory address");
-            console.log("       Predicted (local):", predictedAddress);
-            console.log("       Actual (factory): ", strategyAddress);
-        } else {
-            console.log("[PASS] Prediction matches factory deployment");
+            console.log("[FAIL] CREATE2 prediction mismatch!");
+            console.log("       Predicted:", predictedAddress);
+            console.log("       Actual:   ", strategyAddress);
+            revert("CREATE2 address mismatch - local bytecode differs from deployed factory");
         }
+        console.log("[PASS] Prediction matches factory deployment");
 
         console.log("Strategy Address:", strategyAddress);
         console.log("");
@@ -262,7 +262,7 @@ contract GenerateProposalCalldata is Script {
             "  },\n"
         );
 
-        // Transactions section (3 separate CALL transactions for Decent UI)
+        // Transaction 0: Deploy Strategy (with ABI parameters for Decent UI)
         json = string.concat(
             json,
             '  "transactions": [\n',
@@ -273,12 +273,41 @@ contract GenerateProposalCalldata is Script {
             '",\n',
             '      "value": "0",\n',
             '      "operation": 0,\n',
+            '      "function": "createStrategy(string,address,address,address,address,bool,address)",\n',
+            '      "parameters": [\n'
+        );
+        json = string.concat(
+            json,
+            '        { "name": "_name", "type": "string", "value": "',
+            STRATEGY_NAME,
+            '" },\n',
+            '        { "name": "_management", "type": "address", "value": "',
+            vm.toString(SHUTTER_TREASURY),
+            '" },\n',
+            '        { "name": "_keeper", "type": "address", "value": "',
+            vm.toString(KEEPER_BOT),
+            '" },\n',
+            '        { "name": "_emergencyAdmin", "type": "address", "value": "',
+            vm.toString(SHUTTER_TREASURY),
+            '" },\n'
+        );
+        json = string.concat(
+            json,
+            '        { "name": "_donationAddress", "type": "address", "value": "',
+            vm.toString(DRAGON_FUNDING_POOL),
+            '" },\n',
+            '        { "name": "_enableBurning", "type": "bool", "value": false },\n',
+            '        { "name": "_tokenizedStrategyAddress", "type": "address", "value": "',
+            vm.toString(TOKENIZED_STRATEGY),
+            '" }\n',
+            "      ],\n",
             '      "calldata": "',
             vm.toString(tx0Calldata),
             '"\n',
             "    },\n"
         );
 
+        // Transaction 1: Approve USDC (with ABI parameters for Decent UI)
         json = string.concat(
             json,
             "    {\n",
@@ -288,12 +317,22 @@ contract GenerateProposalCalldata is Script {
             '",\n',
             '      "value": "0",\n',
             '      "operation": 0,\n',
+            '      "function": "approve(address,uint256)",\n',
+            '      "parameters": [\n',
+            '        { "name": "spender", "type": "address", "value": "',
+            vm.toString(strategyAddress),
+            '" },\n',
+            '        { "name": "amount", "type": "uint256", "value": "',
+            vm.toString(DEPOSIT_AMOUNT),
+            '" }\n',
+            "      ],\n",
             '      "calldata": "',
             vm.toString(tx1Calldata),
             '"\n',
             "    },\n"
         );
 
+        // Transaction 2: Deposit USDC (with ABI parameters for Decent UI)
         json = string.concat(
             json,
             "    {\n",
@@ -303,6 +342,15 @@ contract GenerateProposalCalldata is Script {
             '",\n',
             '      "value": "0",\n',
             '      "operation": 0,\n',
+            '      "function": "deposit(uint256,address)",\n',
+            '      "parameters": [\n',
+            '        { "name": "assets", "type": "uint256", "value": "',
+            vm.toString(DEPOSIT_AMOUNT),
+            '" },\n',
+            '        { "name": "receiver", "type": "address", "value": "',
+            vm.toString(SHUTTER_TREASURY),
+            '" }\n',
+            "      ],\n",
             '      "calldata": "',
             vm.toString(tx2Calldata),
             '"\n',

@@ -13,6 +13,16 @@
       "target": "0x052d20B0e0b141988bD32772C735085e45F357c1",
       "value": "0",
       "operation": 0,
+      "function": "createStrategy(string,address,address,address,address,bool,address)",
+      "parameters": [
+        { "name": "_name", "type": "string", "value": "SHUGrantPool" },
+        { "name": "_management", "type": "address", "value": "0x36bD3044ab68f600f6d3e081056F34f2a58432c4" },
+        { "name": "_keeper", "type": "address", "value": "0x06c2c4dB3776D500636DE63e4F109386dCBa6Ae2" },
+        { "name": "_emergencyAdmin", "type": "address", "value": "0x36bD3044ab68f600f6d3e081056F34f2a58432c4" },
+        { "name": "_donationAddress", "type": "address", "value": "0x4B4505dEdE6408642511Fc0586b62676111e4904" },
+        { "name": "_enableBurning", "type": "bool", "value": false },
+        { "name": "_tokenizedStrategyAddress", "type": "address", "value": "0xb27064A2C51b8C5b39A5Bb911AD34DB039C3aB9c" }
+      ],
       "calldata": "0x31d8994300000000000000000000000000000000000000000000000000000000000000e000000000000000000000000036bd3044ab68f600f6d3e081056f34f2a58432c400000000000000000000000006c2c4db3776d500636de63e4f109386dcba6ae200000000000000000000000036bd3044ab68f600f6d3e081056f34f2a58432c40000000000000000000000004b4505dede6408642511fc0586b62676111e49040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b27064a2c51b8c5b39a5bb911ad34db039c3ab9c000000000000000000000000000000000000000000000000000000000000000c5348554772616e74506f6f6c0000000000000000000000000000000000000000"
     },
     {
@@ -20,6 +30,11 @@
       "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       "value": "0",
       "operation": 0,
+      "function": "approve(address,uint256)",
+      "parameters": [
+        { "name": "spender", "type": "address", "value": "0xC5B26f6A954cf7480C6992e5C3E0c92F38B5695c" },
+        { "name": "amount", "type": "uint256", "value": "1200000000000" }
+      ],
       "calldata": "0x095ea7b3000000000000000000000000c5b26f6a954cf7480c6992e5c3e0c92f38b5695c000000000000000000000000000000000000000000000000000001176592e000"
     },
     {
@@ -27,6 +42,11 @@
       "target": "0xC5B26f6A954cf7480C6992e5C3E0c92F38B5695c",
       "value": "0",
       "operation": 0,
+      "function": "deposit(uint256,address)",
+      "parameters": [
+        { "name": "assets", "type": "uint256", "value": "1200000000000" },
+        { "name": "receiver", "type": "address", "value": "0x36bD3044ab68f600f6d3e081056F34f2a58432c4" }
+      ],
       "calldata": "0x6e553f65000000000000000000000000000000000000000000000000000001176592e00000000000000000000000000036bd3044ab68f600f6d3e081056f34f2a58432c4"
     }
   ]

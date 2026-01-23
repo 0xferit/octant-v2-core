@@ -301,11 +301,17 @@ forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --f
 - `STRATEGY_NAME` — Strategy name (V1 does not use symbol)
 - `DEPOSIT_AMOUNT` — USDC deposit amount
 
-**Output:** The script:
-1. Predicts the strategy address using CREATE2
-2. Verifies prediction by simulating deployment on the fork
-3. Fails if bytecode mismatch detected
-4. Outputs 3 separate CALL transactions for governance proposal (Decent UI compatible)
+**Output:** The script generates `proposal-calldata.json` containing:
+1. `function` — Function signature for Decent UI ABI lookup
+2. `parameters` — Individual parameter values to enter in form fields
+3. `calldata` — Raw encoded calldata (for verification or manual entry)
+
+The script also:
+- Predicts the strategy address using CREATE2
+- Verifies prediction by simulating deployment on the fork
+- Fails if bytecode mismatch detected
+
+**Decent UI Usage:** Enter the target address in Decent UI. The ABI will auto-populate from verified contracts. Copy parameter values from `proposal-calldata.json` into each form field. See [`_INSTRUCTIONS_DECENT_UI.md`](./_INSTRUCTIONS_DECENT_UI.md) for step-by-step walkthrough.
 
 > **Manual Reference**: The transaction parameters below can be used for UI-based proposal creation.
 
