@@ -348,13 +348,13 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         );
     }
 
-    /// @notice Test that constructor validates asset compatibility
+    /// @notice Test that constructor validates asset is supported by Aave pool
     function testConstructorAssetValidation() public {
+        // Aave data provider reverts when querying unsupported assets
         vm.expectRevert();
         new AaveV3Strategy(
             AaveV3TestConfig.AAVE_ADDRESSES_PROVIDER,
-            AaveV3TestConfig.AUSDC_V3,
-            address(0x123), // Wrong asset
+            address(0x123), // Unsupported asset
             _strategyName(),
             _strategySymbol(),
             management,

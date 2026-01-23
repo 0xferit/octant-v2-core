@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.0;
+pragma solidity >=0.8.25;
 
 import { BaseHealthCheck } from "src/strategies/periphery/BaseHealthCheck.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -13,17 +13,17 @@ interface IPool {
     function withdraw(address asset, uint256 amount, address to) external returns (uint256);
 }
 
-interface IAToken {
-    /// @notice Returns the address of the underlying asset
-    function UNDERLYING_ASSET_ADDRESS() external view returns (address);
-}
-
 interface IPoolDataProvider {
     /// @notice Returns the supply and borrow caps for a reserve
     function getReserveCaps(address asset) external view returns (uint256 borrowCap, uint256 supplyCap);
 
     /// @notice Returns the total aToken supply for a specific asset
     function getATokenTotalSupply(address asset) external view returns (uint256);
+
+    /// @notice Returns the token addresses of a reserve
+    function getReserveTokensAddresses(
+        address asset
+    ) external view returns (address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress);
 }
 
 interface IPoolAddressesProvider {
@@ -72,10 +72,9 @@ contract AaveV3Strategy is BaseHealthCheck {
 
     /**
      * @notice Initializes the Aave V3 strategy
-     * @dev Sets up connections to Aave V3 pool and approves max allowance
+     * @dev Sets up connections to Aave V3 pool, derives aToken from pool registry, and approves max allowance
      * @param _addressesProvider Address of Aave V3 addresses provider
-     * @param _aToken Address of the aToken corresponding to the asset
-     * @param _asset Address of the underlying asset
+     * @param _asset Address of the underlying asset (must be supported by Aave pool)
      * @param _name Strategy display name (e.g., "Octant Aave V3 USDC Strategy")
      * @param _symbol Strategy share token symbol (e.g., "osAAVE")
      * @param _management Address with management permissions
@@ -87,7 +86,6 @@ contract AaveV3Strategy is BaseHealthCheck {
      */
     constructor(
         address _addressesProvider,
-        address _aToken,
         address _asset,
         string memory _name,
         string memory _symbol,
@@ -110,13 +108,16 @@ contract AaveV3Strategy is BaseHealthCheck {
             _tokenizedStrategyAddress
         )
     {
+        require(_addressesProvider != address(0), "Zero addressesProvider");
+
         addressesProvider = IPoolAddressesProvider(_addressesProvider);
         pool = IPool(addressesProvider.getPool());
         dataProvider = IPoolDataProvider(addressesProvider.getPoolDataProvider());
-        aToken = _aToken;
 
-        // verify asset that aToken is the correct one
-        require(IAToken(aToken).UNDERLYING_ASSET_ADDRESS() == _asset, "Asset mismatch with aToken");
+        // Derive aToken from pool's registry to ensure correctness
+        (address _aToken, , ) = dataProvider.getReserveTokensAddresses(_asset);
+        require(_aToken != address(0), "Asset not supported by pool");
+        aToken = _aToken;
 
         // Approve Aave pool to spend our asset
         IERC20(_asset).forceApprove(address(pool), type(uint256).max);

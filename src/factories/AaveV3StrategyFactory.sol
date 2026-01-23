@@ -20,9 +20,6 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
     /// @notice Aave V3 AddressesProvider on Ethereum mainnet
     address public constant AAVE_ADDRESSES_PROVIDER = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
 
-    /// @notice aUSDC V3 token address on Ethereum mainnet
-    address public constant AUSDC_V3 = 0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c;
-
     /// @notice USDC token address (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 on Ethereum mainnet)
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
@@ -64,7 +61,6 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
         bytes32 parameterHash = keccak256(
             abi.encode(
                 AAVE_ADDRESSES_PROVIDER,
-                AUSDC_V3,
                 USDC,
                 _name,
                 _symbol,
@@ -81,7 +77,6 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
             type(AaveV3Strategy).creationCode,
             abi.encode(
                 AAVE_ADDRESSES_PROVIDER,
-                AUSDC_V3,
                 USDC,
                 _name,
                 _symbol,
