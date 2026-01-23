@@ -18,10 +18,8 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { IERC20Staking } from "staker/interfaces/IERC20Staking.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import { ISafe } from "src/zodiac-core/interfaces/Safe.sol";
-import { MultiSendCallOnly } from "src/utils/libs/Safe/MultiSendCallOnly.sol";
 import {
     USDC_MAINNET,
-    SAFE_MULTISEND_MAINNET,
     EIP_7825_TX_GAS_LIMIT,
     MORPHO_STRATEGY_FACTORY_MAINNET,
     YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET
@@ -124,27 +122,9 @@ contract ShutterDAOIntegrationTest is Test {
         return result;
     }
 
-    /// @notice Encode a single transaction for MultiSend
-    /// @dev Format: operation (1 byte) + to (20 bytes) + value (32 bytes) + dataLength (32 bytes) + data
-    function _encodeMultiSendTx(address to, bytes memory data) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(0), to, uint256(0), data.length, data);
-    }
-
-    /// @notice Execute batched transactions via MultiSend through Azorius → Safe
-    function _executeBatchFromModule(bytes memory packedTransactions) internal {
-        bytes memory multiSendData = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTransactions));
-        // Must DELEGATECALL MultiSend so subcalls execute from the Safe (Treasury) address.
-        vm.prank(AZORIUS_MODULE);
-        bool success = ISafe(SHUTTER_TREASURY).execTransactionFromModule(SAFE_MULTISEND_MAINNET, 0, multiSendData, 1);
-        require(success, "Module batch execution failed");
-    }
-
     function _deployStrategy() internal {
         // ══════════════════════════════════════════════════════════════════════
-        // DEPLOY + FUND: Using real mainnet V1 factory
-        // Note: When using mainnet factory, CREATE2 prediction from test bytecode
-        // may differ from factory's compiled bytecode. We execute deploy first,
-        // get actual address, then approve+deposit.
+        // DEPLOY + FUND: 3 separate CALL transactions (mirrors Decent UI execution)
         // ══════════════════════════════════════════════════════════════════════
 
         // TX 0: Deploy Strategy via factory (returns address)
@@ -163,19 +143,11 @@ contract ShutterDAOIntegrationTest is Test {
         bytes memory returnData = _executeFromModuleReturnData(address(morphoStrategyFactory), deployCalldata);
         address strategyAddress = abi.decode(returnData, (address));
 
-        // TX 1+2: Approve USDC and Deposit (batched)
-        bytes memory batch = _encodeMultiSendTx(
-            USDC_TOKEN,
-            abi.encodeCall(IERC20.approve, (strategyAddress, TREASURY_USDC_BALANCE))
-        );
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(
-                strategyAddress,
-                abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY))
-            )
-        );
-        _executeBatchFromModule(batch);
+        // TX 1: Approve USDC
+        _executeFromModule(USDC_TOKEN, abi.encodeCall(IERC20.approve, (strategyAddress, TREASURY_USDC_BALANCE)));
+
+        // TX 2: Deposit USDC
+        _executeFromModule(strategyAddress, abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY)));
 
         // Store deployed contract
         strategy = MorphoCompounderStrategy(strategyAddress);
@@ -211,7 +183,7 @@ contract ShutterDAOIntegrationTest is Test {
     }
 
     function test_TreasuryDepositsUSDCIntoStrategy() public view {
-        // Deposit already happened in _deployStrategy() via batched MultiSend
+        // Deposit already happened in _deployStrategy()
         // Verify the deposit succeeded
         uint256 depositAmount = TREASURY_USDC_BALANCE;
 
@@ -221,7 +193,7 @@ contract ShutterDAOIntegrationTest is Test {
     }
 
     function test_TreasuryCanWithdraw() public {
-        // Funds already deposited in _deployStrategy() via batched MultiSend
+        // Funds already deposited in _deployStrategy()
         uint256 depositAmount = TREASURY_USDC_BALANCE;
 
         // Use maxWithdraw to account for precision in underlying vault
@@ -278,7 +250,7 @@ contract ShutterDAOIntegrationTest is Test {
     }
 
     function test_SharesAreTransferable() public {
-        // Funds already deposited in _deployStrategy() via batched MultiSend
+        // Funds already deposited in _deployStrategy()
         uint256 shares = IERC4626(address(strategy)).balanceOf(SHUTTER_TREASURY);
         uint256 halfShares = shares / 2;
 
@@ -350,27 +322,12 @@ contract ShutterDAOGasProfilingTest is Test {
         return result;
     }
 
-    function _encodeMultiSendTx(address to, bytes memory data) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(0), to, uint256(0), data.length, data);
-    }
-
-    function _executeBatchFromModule(bytes memory packedTransactions) internal {
-        bytes memory multiSendData = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTransactions));
-        // Use DELEGATECALL so batched calls keep msg.sender = Safe (Treasury).
-        vm.prank(AZORIUS_MODULE);
-        bool success = ISafe(SHUTTER_TREASURY).execTransactionFromModule(SAFE_MULTISEND_MAINNET, 0, multiSendData, 1);
-        require(success, "Module batch execution failed");
-    }
-
     function test_SimplifiedProposalGasProfile() public {
         address keeperBot = makeAddr("KeeperBot");
         address dragonFundingPool = makeAddr("DragonFundingPool");
 
         // ══════════════════════════════════════════════════════════════════════
-        // GAS PROFILING: Using real mainnet V1 factory
-        // Note: With mainnet factory, we can't batch all 3 ops because CREATE2
-        // prediction from test bytecode differs from factory's. We measure gas
-        // of deploy + approve/deposit batch separately.
+        // GAS PROFILING: 3 separate CALL transactions (mirrors Decent UI execution)
         // ══════════════════════════════════════════════════════════════════════
 
         uint256 gasStart = gasleft();
@@ -391,23 +348,15 @@ contract ShutterDAOGasProfilingTest is Test {
         bytes memory returnData = _executeFromModuleReturnData(address(morphoStrategyFactory), deployCalldata);
         address strategyAddress = abi.decode(returnData, (address));
 
-        // TX 1+2: Approve USDC and Deposit (batched)
-        bytes memory batch = _encodeMultiSendTx(
-            USDC_TOKEN,
-            abi.encodeCall(IERC20.approve, (strategyAddress, TREASURY_USDC_BALANCE))
-        );
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(
-                strategyAddress,
-                abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY))
-            )
-        );
-        _executeBatchFromModule(batch);
+        // TX 1: Approve USDC
+        _executeFromModule(USDC_TOKEN, abi.encodeCall(IERC20.approve, (strategyAddress, TREASURY_USDC_BALANCE)));
+
+        // TX 2: Deposit USDC
+        _executeFromModule(strategyAddress, abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY)));
 
         uint256 totalGas = gasStart - gasleft();
 
-        emit log_named_uint("=== TOTAL GAS (deploy + approve/deposit batch) ===", totalGas);
+        emit log_named_uint("=== TOTAL GAS (3 separate transactions) ===", totalGas);
         assertLt(totalGas, EIP_7825_TX_GAS_LIMIT, "Gas exceeds 16.7M per-tx limit");
 
         assertGt(strategyAddress.code.length, 0, "Strategy not deployed");

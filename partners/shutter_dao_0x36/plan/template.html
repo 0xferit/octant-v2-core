@@ -1138,7 +1138,7 @@
         <h2>Execution Playbook</h2>
 
         <h3>Phase 1: Strategy Deployment</h3>
-        <p>If CREATE2 prediction is verified, the deployment can be executed in a <strong>single DAO proposal</strong> with <strong>1 batched MultiSend</strong> containing 3 operations:</p>
+        <p>The deployment is executed in a <strong>single DAO proposal</strong> with <strong>3 separate CALL transactions</strong>:</p>
         <ol>
           <li>Deploy Strategy via Factory</li>
           <li>Approve USDC to Strategy (uses precomputed Strategy address)</li>
@@ -1146,11 +1146,7 @@
         </ol>
 
         <div class="callout callout-success">
-          <p><strong>CREATE2 Address Prediction:</strong> The script uses CREATE2 to precompute the strategy address, enabling batched execution. The script automatically verifies this prediction by simulating deployment on a mainnet fork and comparing bytecode. If verification fails, the script aborts with an error - ensuring calldata is never generated with an incorrect address.</p>
-        </div>
-
-        <div class="callout callout-warning">
-          <p><strong>MultiSend requirement:</strong> Execute MultiSend with <code>operation=DELEGATECALL</code>. Using CALL makes <code>msg.sender</code> the MultiSend contract and will break USDC approvals.</p>
+          <p><strong>CREATE2 Address Prediction:</strong> The script uses CREATE2 to precompute the strategy address. Transactions 2 and 3 can reference the strategy address before it's deployed because CREATE2 makes the address deterministic. The script verifies this prediction by simulating deployment on a mainnet fork.</p>
         </div>
 
         <h3>Gas Profile</h3>
@@ -1163,7 +1159,7 @@
           </thead>
           <tbody>
             <tr>
-              <td><strong>DAO Proposal (1 batched call, 3 operations)</strong></td>
+              <td><strong>DAO Proposal (3 CALL transactions)</strong></td>
               <td><strong>~1M</strong></td>
             </tr>
             <tr>
@@ -1231,47 +1227,47 @@ Parameters:
         <ol>
           <li><strong>Navigate to Decent:</strong> Go to the Shutter DAO governance interface on Decent</li>
           <li><strong>Create New Proposal:</strong> Click "New Proposal"</li>
-          <li><strong>Add Custom Transaction:</strong> Select "Custom Transaction" type</li>
-          <li><strong>Enter Values:</strong> Copy-paste the values below exactly</li>
+          <li><strong>Add 3 Custom Transactions:</strong> Add each transaction from <code>proposal-calldata.json</code></li>
           <li><strong>Submit:</strong> Review and submit the proposal</li>
         </ol>
 
-        <h4>Custom Transaction Values</h4>
+        <h4>Transaction Format</h4>
+        <p>Each transaction in <code>proposal-calldata.json</code> has:</p>
         <table>
           <thead>
-            <tr><th>Field</th><th>Value</th></tr>
+            <tr><th>Field</th><th>Description</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>Target Address</strong></td>
-              <td><code>0x40A2aCCbd92BCA938b02010E17A5b8929b49130D</code></td>
+              <td><strong>target</strong></td>
+              <td>Contract address to call</td>
             </tr>
             <tr>
-              <td><strong>Value (ETH)</strong></td>
-              <td><code>0</code></td>
+              <td><strong>value</strong></td>
+              <td><code>0</code> (no ETH sent)</td>
             </tr>
             <tr>
-              <td><strong>Operation</strong></td>
-              <td><code>DELEGATECALL (1)</code></td>
+              <td><strong>operation</strong></td>
+              <td><code>0</code> (CALL)</td>
+            </tr>
+            <tr>
+              <td><strong>calldata</strong></td>
+              <td>Encoded function call</td>
             </tr>
           </tbody>
         </table>
 
-        <h4>Calldata (MultiSend Batch)</h4>
-        <p>Generate calldata by running:</p>
+        <h4>Generate Calldata</h4>
         <pre><code>forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv</code></pre>
-        <p>The script will output the calldata and write it to <code>proposal-calldata.json</code>.</p>
-
-        <div class="callout callout-warning">
-          <p><strong>Important:</strong> This calldata encodes 3 batched operations executed via DELEGATECALL through the Safe's MultiSend contract. The operations are: (1) Deploy Strategy, (2) Approve USDC to Strategy, (3) Deposit 1.2M USDC.</p>
-        </div>
+        <p>The script outputs <code>proposal-calldata.json</code> with all 3 transactions ready for Decent UI.</p>
 
         <h4>Verification Checklist</h4>
         <ul>
-          <li>Target is the MultiSendCallOnly contract: <code>0x40A2aCCbd92BCA938b02010E17A5b8929b49130D</code></li>
-          <li>Operation is DELEGATECALL (value 1), not CALL</li>
-          <li>Calldata starts with <code>0x8d80ff0a</code> (multiSend selector)</li>
-          <li>Bytecode hash is output by the script and written to <code>proposal-calldata.json</code></li>
+          <li>Transaction 1 target is Strategy Factory: <code>0x052d20B0e0b141988bD32772C735085e45F357c1</code></li>
+          <li>Transaction 2 target is USDC: <code>0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48</code></li>
+          <li>Transaction 3 target is the predicted Strategy address</li>
+          <li>All operations are CALL (value 0), not DELEGATECALL</li>
+          <li>All ETH values are 0</li>
         </ul>
 
         <h4>Re-generating Calldata</h4>

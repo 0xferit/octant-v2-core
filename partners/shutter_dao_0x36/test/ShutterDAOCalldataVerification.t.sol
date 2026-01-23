@@ -11,10 +11,8 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import { ISafe } from "src/zodiac-core/interfaces/Safe.sol";
-import { MultiSendCallOnly } from "src/utils/libs/Safe/MultiSendCallOnly.sol";
 import {
     USDC_MAINNET,
-    SAFE_MULTISEND_MAINNET,
     MORPHO_STRATEGY_FACTORY_MAINNET,
     YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET
 } from "src/constants.sol";
@@ -46,7 +44,6 @@ contract ShutterDAOCalldataVerificationTest is Test {
 
     // === From src/constants.sol ===
     address constant USDC_TOKEN = USDC_MAINNET;
-    address constant MULTISEND = SAFE_MULTISEND_MAINNET;
 
     IMorphoCompounderStrategyFactoryV1 factory;
 
@@ -133,9 +130,9 @@ contract ShutterDAOCalldataVerificationTest is Test {
     }
 
     /**
-     * @notice Verifies the complete batched MultiSend calldata executes successfully.
-     * @dev Simulates the exact execution path:
-     *      Azorius -> Safe.execTransactionFromModule(MultiSend, DELEGATECALL) -> 3 operations
+     * @notice Verifies the 3 proposal transactions execute successfully end-to-end.
+     * @dev Simulates the exact execution path used by Decent UI:
+     *      Azorius -> Safe.execTransactionFromModule(target, CALL) for each transaction
      *
      *      This catches issues like:
      *      - Incorrect encoding
@@ -143,93 +140,7 @@ contract ShutterDAOCalldataVerificationTest is Test {
      *      - Missing approvals
      *      - Deposit reverts
      */
-    function test_GeneratedCalldataExecutesSuccessfully() public {
-        // Simulate deployment to get actual strategy address
-        // (Local bytecode may differ from deployed factory's embedded bytecode)
-        uint256 snapshot = vm.snapshot();
-        vm.prank(SHUTTER_TREASURY);
-        address strategyAddress = factory.createStrategy(
-            STRATEGY_NAME,
-            SHUTTER_TREASURY,
-            KEEPER_BOT,
-            SHUTTER_TREASURY,
-            DRAGON_FUNDING_POOL,
-            false,
-            TOKENIZED_STRATEGY
-        );
-        vm.revertTo(snapshot);
-
-        console2.log("Strategy Address (from simulation):", strategyAddress);
-
-        // Build batched MultiSend transactions (same format as GenerateProposalCalldata.s.sol)
-        bytes memory tx0 = _encodeMultiSendTx(
-            MORPHO_STRATEGY_FACTORY,
-            abi.encodeCall(
-                IMorphoCompounderStrategyFactoryV1.createStrategy,
-                (
-                    STRATEGY_NAME,
-                    SHUTTER_TREASURY,
-                    KEEPER_BOT,
-                    SHUTTER_TREASURY,
-                    DRAGON_FUNDING_POOL,
-                    false,
-                    TOKENIZED_STRATEGY
-                )
-            )
-        );
-
-        bytes memory tx1 = _encodeMultiSendTx(USDC_TOKEN, abi.encodeCall(IERC20.approve, (strategyAddress, DEPOSIT_AMOUNT)));
-
-        bytes memory tx2 =
-            _encodeMultiSendTx(strategyAddress, abi.encodeCall(IERC4626.deposit, (DEPOSIT_AMOUNT, SHUTTER_TREASURY)));
-
-        bytes memory packedTxs = abi.encodePacked(tx0, tx1, tx2);
-        bytes memory multiSendCalldata = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTxs));
-
-        // Record state before
-        uint256 treasuryUSDCBefore = IERC20(USDC_TOKEN).balanceOf(SHUTTER_TREASURY);
-        assertEq(treasuryUSDCBefore, DEPOSIT_AMOUNT, "Treasury should have USDC before execution");
-
-        // Execute via Azorius -> Safe path (operation=1 for DELEGATECALL)
-        vm.prank(AZORIUS_MODULE);
-        bool success = ISafe(SHUTTER_TREASURY).execTransactionFromModule(
-            MULTISEND,
-            0, // value
-            multiSendCalldata,
-            1 // operation = DELEGATECALL
-        );
-        assertTrue(success, "MultiSend execution failed");
-
-        // Verify all 3 operations succeeded
-        // 1. Strategy deployed at expected address
-        assertGt(strategyAddress.code.length, 0, "Strategy not deployed at expected address");
-
-        // 2. Treasury received shares
-        uint256 shares = IERC4626(strategyAddress).balanceOf(SHUTTER_TREASURY);
-        assertApproxEqAbs(shares, DEPOSIT_AMOUNT, 1000, "Treasury should hold ~1.2M shares");
-
-        // 3. Treasury USDC balance is 0
-        uint256 treasuryUSDCAfter = IERC20(USDC_TOKEN).balanceOf(SHUTTER_TREASURY);
-        assertEq(treasuryUSDCAfter, 0, "Treasury USDC should be 0 after deposit");
-
-        // 4. Strategy is properly configured - yield goes to Dragon Pool
-        (bool dragonRouterSuccess, bytes memory dragonRouterData) =
-            strategyAddress.staticcall(abi.encodeWithSignature("dragonRouter()"));
-        assertTrue(dragonRouterSuccess, "dragonRouter() call failed");
-        address dragonRouter = abi.decode(dragonRouterData, (address));
-        assertEq(dragonRouter, DRAGON_FUNDING_POOL, "Dragon Pool should be donation recipient");
-
-        console2.log("=== VERIFICATION PASSED ===");
-        console2.log("Strategy deployed at:", strategyAddress);
-        console2.log("Treasury shares:     ", shares);
-        console2.log("Treasury USDC:       ", treasuryUSDCAfter);
-    }
-
-    /**
-     * @notice Verifies the 3-transaction fallback works if DELEGATECALL isn't supported.
-     * @dev Uses sequential CALL operations instead of batched DELEGATECALL.
-     */
-    function test_FallbackSeparateTransactionsWork() public {
+    function test_ProposalTransactionsExecuteSuccessfully() public {
         // TX 0: Deploy Strategy
         bytes memory deployCalldata = abi.encodeCall(
             IMorphoCompounderStrategyFactoryV1.createStrategy,
@@ -266,13 +177,29 @@ contract ShutterDAOCalldataVerificationTest is Test {
         success = ISafe(SHUTTER_TREASURY).execTransactionFromModule(strategyAddress, 0, depositCalldata, 0);
         assertTrue(success, "TX 2: Deposit failed");
 
-        // Verify final state
+        // Verify all 3 operations succeeded
+        // 1. Strategy deployed at expected address
+        assertGt(strategyAddress.code.length, 0, "Strategy not deployed at expected address");
+
+        // 2. Treasury received shares
         uint256 shares = IERC4626(strategyAddress).balanceOf(SHUTTER_TREASURY);
         assertApproxEqAbs(shares, DEPOSIT_AMOUNT, 1000, "Treasury should hold ~1.2M shares");
-        assertEq(IERC20(USDC_TOKEN).balanceOf(SHUTTER_TREASURY), 0, "Treasury USDC should be 0");
 
-        console2.log("=== FALLBACK VERIFICATION PASSED ===");
-        console2.log("3 separate transactions executed successfully");
+        // 3. Treasury USDC balance is 0
+        uint256 treasuryUSDCAfter = IERC20(USDC_TOKEN).balanceOf(SHUTTER_TREASURY);
+        assertEq(treasuryUSDCAfter, 0, "Treasury USDC should be 0 after deposit");
+
+        // 4. Strategy is properly configured - yield goes to Dragon Pool
+        (bool dragonRouterSuccess, bytes memory dragonRouterData) =
+            strategyAddress.staticcall(abi.encodeWithSignature("dragonRouter()"));
+        assertTrue(dragonRouterSuccess, "dragonRouter() call failed");
+        address dragonRouter = abi.decode(dragonRouterData, (address));
+        assertEq(dragonRouter, DRAGON_FUNDING_POOL, "Dragon Pool should be donation recipient");
+
+        console2.log("=== VERIFICATION PASSED ===");
+        console2.log("Strategy deployed at:", strategyAddress);
+        console2.log("Treasury shares:     ", shares);
+        console2.log("Treasury USDC:       ", treasuryUSDCAfter);
     }
 
     /**
@@ -305,10 +232,5 @@ contract ShutterDAOCalldataVerificationTest is Test {
             false,
             TOKENIZED_STRATEGY
         );
-    }
-
-    /// @notice Encode a single transaction for MultiSend
-    function _encodeMultiSendTx(address to, bytes memory data) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(0), to, uint256(0), data.length, data);
     }
 }
