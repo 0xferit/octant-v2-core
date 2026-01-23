@@ -9,25 +9,23 @@ import { stdJson } from "forge-std/StdJson.sol";
 import { IMorphoCompounderStrategyFactoryV1 } from "src/interfaces/IMorphoCompounderStrategyFactoryV1.sol";
 import { MorphoCompounderStrategy } from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
-import { MultiSendCallOnly } from "src/utils/libs/Safe/MultiSendCallOnly.sol";
 
 import {
     USDC_MAINNET,
-    SAFE_MULTISEND_MAINNET,
     MORPHO_STRATEGY_FACTORY_MAINNET,
     YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET
 } from "src/constants.sol";
 
 /**
  * @title GenerateProposalCalldata
- * @notice Generates batched MultiSend calldata for Shutter DAO governance proposal.
+ * @notice Generates 3 separate CALL transactions for Shutter DAO governance proposal.
  * @dev Run on mainnet fork: forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv
  *
  *      This script:
  *      1. Predicts strategy address using CREATE2
  *      2. Verifies prediction by simulating deployment on the fork
  *      3. Fails if bytecode mismatch detected (prediction != actual)
- *      4. Outputs batched MultiSend calldata for governance proposal
+ *      4. Outputs 3 separate CALL transactions for governance proposal (Decent UI compatible)
  *
  *      The verification step ensures local bytecode matches the deployed factory,
  *      preventing invalid calldata generation.
@@ -51,7 +49,6 @@ contract GenerateProposalCalldata is Script {
     address constant USDC = USDC_MAINNET;
     address constant MORPHO_STRATEGY_FACTORY = MORPHO_STRATEGY_FACTORY_MAINNET;
     address constant TOKENIZED_STRATEGY = YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET;
-    address constant MULTISEND = SAFE_MULTISEND_MAINNET;
 
     // Output file path (relative to project root)
     string constant OUTPUT_FILE = "partners/shutter_dao_0x36/proposal-calldata.json";
@@ -172,31 +169,22 @@ contract GenerateProposalCalldata is Script {
         bytes memory tx1Calldata = abi.encodeCall(IERC20.approve, (strategyAddress, DEPOSIT_AMOUNT));
         bytes memory tx2Calldata = abi.encodeCall(IERC4626.deposit, (DEPOSIT_AMOUNT, SHUTTER_TREASURY));
 
-        // Generate batched MultiSend calldata
-        bytes memory packedTxs = abi.encodePacked(
-            _encodeMultiSendTx(MORPHO_STRATEGY_FACTORY, tx0Calldata),
-            _encodeMultiSendTx(USDC, tx1Calldata),
-            _encodeMultiSendTx(strategyAddress, tx2Calldata)
-        );
-        bytes memory multiSendCalldata = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTxs));
-
         // Log individual transactions
         _logTx0(tx0Calldata);
         _logTx1(strategyAddress, tx1Calldata);
         _logTx2(strategyAddress, tx2Calldata);
-        _logBatchedMultiSend(multiSendCalldata);
 
         // ══════════════════════════════════════════════════════════════════════════════
         // WRITE JSON OUTPUT FILE
         // ══════════════════════════════════════════════════════════════════════════════
 
-        _writeJsonOutput(strategyAddress, bytecodeHash, multiSendCalldata, tx0Calldata, tx1Calldata, tx2Calldata);
+        _writeJsonOutput(strategyAddress, bytecodeHash, tx0Calldata, tx1Calldata, tx2Calldata);
 
         // ══════════════════════════════════════════════════════════════════════════════
         // COPY-PASTE SUMMARY
         // ══════════════════════════════════════════════════════════════════════════════
 
-        _logCopyPasteSummary(multiSendCalldata);
+        _logCopyPasteSummary(strategyAddress, tx0Calldata, tx1Calldata, tx2Calldata);
     }
 
     function _logConfiguration(address dragonPool, address keeper) internal pure {
@@ -239,31 +227,9 @@ contract GenerateProposalCalldata is Script {
         console.log("");
     }
 
-    function _logBatchedMultiSend(bytes memory multiSendCalldata) internal pure {
-        console.log(unicode"══════════════════════════════════════════════════════════════════════════════");
-        console.log("BATCHED MULTISEND FOR GOVERNANCE PROPOSAL");
-        console.log(unicode"══════════════════════════════════════════════════════════════════════════════");
-        console.log("");
-        console.log("Target:", MULTISEND);
-        console.log("Operation: 1 (DELEGATECALL)");
-        console.log("Function: multiSend(bytes)");
-        console.log("");
-        console.log("Full Calldata for execTransactionFromModule:");
-        console.logBytes(multiSendCalldata);
-        console.log("");
-        console.log("Azorius call:");
-        console.log("  execTransactionFromModule(");
-        console.log("    to:", MULTISEND);
-        console.log("    value: 0");
-        console.log("    data: <calldata above>");
-        console.log("    operation: 1 (DELEGATECALL)");
-        console.log("  )");
-    }
-
     function _writeJsonOutput(
         address strategyAddress,
         bytes32 bytecodeHash,
-        bytes memory multiSendCalldata,
         bytes memory tx0Calldata,
         bytes memory tx1Calldata,
         bytes memory tx2Calldata
@@ -296,30 +262,17 @@ contract GenerateProposalCalldata is Script {
             "  },\n"
         );
 
-        // Proposal section (for Decent UI)
+        // Transactions section (3 separate CALL transactions for Decent UI)
         json = string.concat(
             json,
-            '  "proposal": {\n',
-            '    "target": "',
-            vm.toString(MULTISEND),
-            '",\n',
-            '    "value": "0",\n',
-            '    "operation": 1,\n',
-            '    "calldata": "',
-            vm.toString(multiSendCalldata),
-            '"\n',
-            "  },\n"
-        );
-
-        // Individual transactions section
-        json = string.concat(
-            json,
-            '  "individual_transactions": [\n',
+            '  "transactions": [\n',
             "    {\n",
             '      "name": "Deploy Strategy",\n',
             '      "target": "',
             vm.toString(MORPHO_STRATEGY_FACTORY),
             '",\n',
+            '      "value": "0",\n',
+            '      "operation": 0,\n',
             '      "calldata": "',
             vm.toString(tx0Calldata),
             '"\n',
@@ -333,6 +286,8 @@ contract GenerateProposalCalldata is Script {
             '      "target": "',
             vm.toString(USDC),
             '",\n',
+            '      "value": "0",\n',
+            '      "operation": 0,\n',
             '      "calldata": "',
             vm.toString(tx1Calldata),
             '"\n',
@@ -346,6 +301,8 @@ contract GenerateProposalCalldata is Script {
             '      "target": "',
             vm.toString(strategyAddress),
             '",\n',
+            '      "value": "0",\n',
+            '      "operation": 0,\n',
             '      "calldata": "',
             vm.toString(tx2Calldata),
             '"\n',
@@ -359,23 +316,38 @@ contract GenerateProposalCalldata is Script {
         console.log("JSON output written to:", OUTPUT_FILE);
     }
 
-    function _logCopyPasteSummary(bytes memory multiSendCalldata) internal pure {
+    function _logCopyPasteSummary(
+        address strategyAddress,
+        bytes memory tx0Calldata,
+        bytes memory tx1Calldata,
+        bytes memory tx2Calldata
+    ) internal pure {
         console.log("");
         console.log(unicode"════════════════════════════════════════════════════════════════════════════════");
-        console.log("COPY-PASTE VALUES FOR DECENT UI (Custom Transaction)");
+        console.log("COPY-PASTE VALUES FOR DECENT UI (3 Separate Transactions)");
         console.log(unicode"════════════════════════════════════════════════════════════════════════════════");
         console.log("");
-        console.log("Target Address: ", MULTISEND);
-        console.log("Value:          0");
-        console.log("Operation:      DELEGATECALL (1)");
-        console.log("");
+        console.log("--- Transaction 1: Deploy Strategy ---");
+        console.log("Target:    ", MORPHO_STRATEGY_FACTORY);
+        console.log("Value:      0");
+        console.log("Operation:  CALL (0)");
         console.log("Calldata:");
-        console.logBytes(multiSendCalldata);
+        console.logBytes(tx0Calldata);
+        console.log("");
+        console.log("--- Transaction 2: Approve USDC ---");
+        console.log("Target:    ", USDC);
+        console.log("Value:      0");
+        console.log("Operation:  CALL (0)");
+        console.log("Calldata:");
+        console.logBytes(tx1Calldata);
+        console.log("");
+        console.log("--- Transaction 3: Deposit USDC ---");
+        console.log("Target:    ", strategyAddress);
+        console.log("Value:      0");
+        console.log("Operation:  CALL (0)");
+        console.log("Calldata:");
+        console.logBytes(tx2Calldata);
         console.log("");
         console.log(unicode"════════════════════════════════════════════════════════════════════════════════");
-    }
-
-    function _encodeMultiSendTx(address to, bytes memory data) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(0), to, uint256(0), data.length, data);
     }
 }

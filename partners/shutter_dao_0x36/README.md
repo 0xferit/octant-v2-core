@@ -142,31 +142,14 @@ Shutter DAO also supports **Shielded Voting** on Snapshot, which encrypts votes 
 
 ### Phase 1: Strategy Deployment
 
-If CREATE2 prediction is verified (see tests below), the deployment can be executed in a **single DAO proposal** with **1 batched MultiSend** containing 3 operations:
+The deployment is executed as a **single DAO proposal** containing **3 separate CALL transactions**:
 1. Deploy Strategy via Factory
 2. Approve USDC to Strategy (uses precomputed Strategy address)
 3. Deposit USDC into Strategy
 
-**CREATE2 Address Prediction**: The script uses CREATE2 to precompute the strategy address, enabling batched execution. The script automatically verifies this prediction by simulating deployment on a mainnet fork and comparing bytecode. If verification fails, the script aborts with an error - ensuring calldata is never generated with an incorrect address.
+**CREATE2 Address Prediction**: The script uses CREATE2 to precompute the strategy address, enabling all 3 transactions to be prepared in advance. The script automatically verifies this prediction by simulating deployment on a mainnet fork. If verification fails, the script aborts with an error - ensuring calldata is never generated with an incorrect address.
 
-> **MultiSend requirement**: Execute MultiSend with `operation=DELEGATECALL` (Azorius `execTransactionFromModule(..., operation=1)`). Using CALL makes `msg.sender` the MultiSend contract and will break USDC approvals.
->
-> **UI Limitation**: The Safe UI may not support DELEGATECALL directly. Use the Transaction Builder or submit raw transactions via the Azorius module.
-
-<details>
-<summary><strong>Fallback: Individual Transactions (if DELEGATECALL batching unavailable)</strong></summary>
-
-If the Decent UI doesn't support DELEGATECALL batching, submit as **3 individual transactions** in a single proposal:
-
-| TX | Target | Function | Notes |
-|----|--------|----------|-------|
-| 0 | MorphoCompounderStrategyFactory | `createStrategy(name, symbol, mgmt, keeper, admin, donationAddr, false, tokenizedStrategy)` | Returns Strategy address |
-| 1 | USDC | `approve(strategyAddress, amount)` | Use Strategy address from TX 0 |
-| 2 | Strategy | `deposit(amount, treasury)` | Deposits treasury USDC |
-
-Each transaction uses `operation=0` (CALL). The Decent UI should support adding multiple transactions to a single proposal.
-
-</details>
+> **Execution**: Each transaction uses `operation=0` (CALL). The Decent UI supports adding multiple transactions to a single proposal.
 
 #### Step 1: Create Fractal Proposal (UI Walkthrough)
 
@@ -227,17 +210,17 @@ Navigate to the Proposals tab and click the "Create Proposal" button.
 
 Review all details and click "Submit Proposal". Sign the transaction with your wallet.
 
-> ✅ **Gas Verified**: The batched proposal (1 MultiSend with 3 operations) uses minimal gas - well under the 16.7M per-transaction limit (EIP-7825). See `ShutterDAOGasProfilingTest` for details.
+> **Gas**: The 3 transactions combined use minimal gas - well under the 16.7M per-transaction limit (EIP-7825). See `ShutterDAOGasProfilingTest` for details.
 
 ### Gas Profile
 
 | Component | Gas Cost |
 |-----------|----------|
-| **DAO Proposal (1 batched call, 3 operations)** | **~1M** |
+| **DAO Proposal (3 transactions)** | **~1M total** |
 | **EIP-7825 Limit** | 16,777,216 |
 | **Headroom** | >92% |
 
-*Note: Direct strategy deposits (no vault wrapper) and batched execution minimize gas costs.*
+*Note: Direct strategy deposits (no vault wrapper) minimize gas costs.*
 
 #### Step 2: Vote
 
@@ -322,7 +305,7 @@ forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --f
 1. Predicts the strategy address using CREATE2
 2. Verifies prediction by simulating deployment on the fork
 3. Fails if bytecode mismatch detected
-4. Outputs batched MultiSend calldata for governance proposal
+4. Outputs 3 separate CALL transactions for governance proposal (Decent UI compatible)
 
 > **Manual Reference**: The transaction parameters below can be used for UI-based proposal creation.
 
@@ -509,35 +492,14 @@ The Treasury accepts these layered risks in exchange for optimized yield (~4-6% 
 
 | Failure Mode | Impact | Recovery |
 |--------------|--------|----------|
-| CREATE2 address prediction mismatch | Proposal fails atomically (batched mode) | Script aborts; re-verify factory bytecode or use UI-based manual transactions |
-| Azorius rejects DELEGATECALL | Batched proposal fails | Use 3 separate transactions |
+| CREATE2 address prediction mismatch | Script aborts | Re-verify factory bytecode |
 | Yearn vault shutdown | Deposit reverts | USDC stays in Treasury, no loss |
 | Morpho market pause | Withdrawals delayed | Wait for unpause or accept loss |
 | Strategy keeper offline | Yield not harvested | Management can call report() |
 
 **No permanent fund loss scenarios identified** - all failure modes are recoverable.
 
-### Fallback: Separate Transactions
-
-> **Note**: This is a **UI-based manual alternative**, not a script-generated fallback. The `GenerateProposalCalldata.s.sol` script only generates batched MultiSend calldata. If batching fails, use the Decent UI to manually create individual transactions.
-
-If the DAO UI (Decent/Fractal) doesn't support DELEGATECALL batching, the proposal can be executed as 3 separate transactions:
-
-1. **TX 1: Deploy Strategy**
-   - Target: MorphoCompounderStrategyFactory
-   - Note the returned strategy address from transaction logs
-
-2. **TX 2: Approve USDC**
-   - Target: USDC
-   - Spender: Strategy address from TX 1
-
-3. **TX 3: Deposit USDC**
-   - Target: Strategy address from TX 1
-   - Receiver: Treasury
-
-Each transaction must be executed sequentially and approved separately through DAO governance.
-
-See `partners/shutter_dao_0x36/test/ShutterDAOCalldataVerification.t.sol` for verification tests that cover both execution paths.
+See `partners/shutter_dao_0x36/test/ShutterDAOCalldataVerification.t.sol` for verification tests.
 
 ---
 
@@ -552,9 +514,8 @@ ETH_RPC_URL=<mainnet-rpc> forge test --match-contract ShutterDAOCalldataVerifica
 ```
 
 This verifies:
-- CREATE2 predicted address matches actual factory deployment (required for batched mode)
-- Batched MultiSend calldata executes successfully (batched mode)
-- 3-transaction fallback works if needed
+- CREATE2 predicted address matches actual factory deployment
+- 3 separate CALL transactions execute successfully
 
 ### Post-Execution Verification
 
