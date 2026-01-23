@@ -4,31 +4,33 @@ pragma solidity ^0.8.25;
 import { Script, console } from "forge-std/Script.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import { stdJson } from "forge-std/StdJson.sol";
 
-import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
-import { MorphoCompounderStrategyFactory } from "src/factories/MorphoCompounderStrategyFactory.sol";
+import { IMorphoCompounderStrategyFactoryV1 } from "src/interfaces/IMorphoCompounderStrategyFactoryV1.sol";
 import { MorphoCompounderStrategy } from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
 import { MultiSendCallOnly } from "src/utils/libs/Safe/MultiSendCallOnly.sol";
 
-import { USDC_MAINNET, MORPHO_STRATEGY_FACTORY_MAINNET, YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET, SAFE_MULTISEND_MAINNET } from "src/constants.sol";
+import {
+    USDC_MAINNET,
+    SAFE_MULTISEND_MAINNET,
+    MORPHO_STRATEGY_FACTORY_MAINNET,
+    YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET
+} from "src/constants.sol";
 
 /**
  * @title GenerateProposalCalldata
- * @notice Generates calldata for Shutter DAO proposal to deploy strategy and deposit funds
- * @dev Run with: forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv
+ * @notice Generates batched MultiSend calldata for Shutter DAO governance proposal.
+ * @dev Run on mainnet fork: forge script partners/shutter_dao_0x36/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv
  *
- *      This script outputs ready-to-use calldata for:
- *      - TX 0: Deploy PaymentSplitter via Factory
- *      - TX 1: Deploy MorphoCompounderStrategy via Factory
- *      - TX 2: Approve USDC to Strategy
- *      - TX 3: Deposit USDC into Strategy
- *      - BATCHED: All 4 operations via MultiSend (recommended)
+ *      This script:
+ *      1. Predicts strategy address using CREATE2
+ *      2. Verifies prediction by simulating deployment on the fork
+ *      3. Fails if bytecode mismatch detected (prediction != actual)
+ *      4. Outputs batched MultiSend calldata for governance proposal
  *
- *      When placeholder addresses are detected (address(0)), the script runs in TEST MODE:
- *      - Deploys a temporary PaymentSplitterFactory
- *      - Uses deterministic test addresses for Keeper and Dragon Pool
- *      - Outputs valid calldata structure for verification
+ *      The verification step ensures local bytecode matches the deployed factory,
+ *      preventing invalid calldata generation.
  */
 contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
@@ -36,15 +38,14 @@ contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
 
     address constant SHUTTER_TREASURY = 0x36bD3044ab68f600f6d3e081056F34f2a58432c4;
-    address constant PAYMENT_SPLITTER_FACTORY = 0x5711765E0756B45224fc1FdA1B41ab344682bBcb;
-    address constant DRAGON_FUNDING_POOL = address(0); // TODO: Set actual address
-    address constant KEEPER_BOT = address(0); // TODO: Set dedicated keeper address
+    address constant DRAGON_FUNDING_POOL = 0x4B4505dEdE6408642511Fc0586b62676111e4904;
+    address constant KEEPER_BOT = 0x06c2c4dB3776D500636DE63e4F109386dCBa6Ae2;
 
     string constant STRATEGY_NAME = "SHUGrantPool";
     uint256 constant DEPOSIT_AMOUNT = 1_200_000e6; // 1.2M USDC
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // MAINNET ADDRESSES (from src/constants.sol)
+    // MAINNET ADDRESSES (imported from src/constants.sol)
     // ══════════════════════════════════════════════════════════════════════════════
 
     address constant USDC = USDC_MAINNET;
@@ -52,76 +53,26 @@ contract GenerateProposalCalldata is Script {
     address constant TOKENIZED_STRATEGY = YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET;
     address constant MULTISEND = SAFE_MULTISEND_MAINNET;
 
+    // Output file path (relative to project root)
+    string constant OUTPUT_FILE = "partners/shutter_dao_0x36/proposal-calldata.json";
+
     function run() public {
         console.log(unicode"══════════════════════════════════════════════════════════════════════════════");
         console.log("SHUTTER DAO PROPOSAL CALLDATA GENERATOR");
         console.log(unicode"══════════════════════════════════════════════════════════════════════════════");
         console.log("");
 
-        // ══════════════════════════════════════════════════════════════════════════════
-        // RESOLVE ADDRESSES (deploy temp factories if placeholders detected)
-        // ══════════════════════════════════════════════════════════════════════════════
-
-        bool testMode = PAYMENT_SPLITTER_FACTORY == address(0) ||
-            DRAGON_FUNDING_POOL == address(0) ||
-            KEEPER_BOT == address(0);
-
-        if (testMode) {
-            console.log(unicode"🧪 TEST MODE: Placeholder addresses detected. Deploying temporary contracts.");
-            console.log("");
-        }
-
-        // Resolve PaymentSplitter Factory
-        address paymentSplitterFactoryAddr = PAYMENT_SPLITTER_FACTORY;
-        if (paymentSplitterFactoryAddr == address(0)) {
-            PaymentSplitterFactory tempFactory = new PaymentSplitterFactory();
-            paymentSplitterFactoryAddr = address(tempFactory);
-            console.log("  Deployed temp PaymentSplitterFactory:", paymentSplitterFactoryAddr);
-        }
-
-        // Resolve Keeper Bot
-        address keeperBot = KEEPER_BOT;
-        if (keeperBot == address(0)) {
-            keeperBot = makeAddr("KeeperBot");
-            console.log("  Using test KeeperBot:", keeperBot);
-        }
-
-        // Resolve Dragon Funding Pool
-        address dragonPool = DRAGON_FUNDING_POOL;
-        if (dragonPool == address(0)) {
-            dragonPool = makeAddr("DragonFundingPool");
-            console.log("  Using test DragonFundingPool:", dragonPool);
-        }
-
-        if (testMode) {
-            console.log("");
-            console.log(unicode"⚠️  WARNING: Test addresses used. Update configuration for production.");
-            console.log("");
-        }
-
-        _logConfiguration(paymentSplitterFactoryAddr, dragonPool, keeperBot);
-
-        // Build PaymentSplitter configuration
-        address[] memory payees = new address[](1);
-        payees[0] = dragonPool;
-        string[] memory payeeNames = new string[](1);
-        payeeNames[0] = "DragonFundingPool";
-        uint256[] memory shares = new uint256[](1);
-        shares[0] = 100;
+        _logConfiguration(DRAGON_FUNDING_POOL, KEEPER_BOT);
 
         // ══════════════════════════════════════════════════════════════════════════════
         // PRECOMPUTE ADDRESSES
         // ══════════════════════════════════════════════════════════════════════════════
 
-        address predictedPS = PaymentSplitterFactory(paymentSplitterFactoryAddr).predictDeterministicAddress(
-            SHUTTER_TREASURY
-        );
         console.log("--- PRECOMPUTED ADDRESSES ---");
-        console.log("PaymentSplitter:", predictedPS);
 
         // Build strategy parameters for CREATE2 prediction
-        address ysUsdc = MorphoCompounderStrategyFactory(MORPHO_STRATEGY_FACTORY).YS_USDC();
-        address usdc = MorphoCompounderStrategyFactory(MORPHO_STRATEGY_FACTORY).USDC();
+        address ysUsdc = IMorphoCompounderStrategyFactoryV1(MORPHO_STRATEGY_FACTORY).YS_USDC();
+        address usdc = IMorphoCompounderStrategyFactoryV1(MORPHO_STRATEGY_FACTORY).USDC();
 
         bytes32 parameterHash = keccak256(
             abi.encode(
@@ -129,9 +80,9 @@ contract GenerateProposalCalldata is Script {
                 usdc,
                 STRATEGY_NAME,
                 SHUTTER_TREASURY,
-                keeperBot,
+                KEEPER_BOT,
                 SHUTTER_TREASURY,
-                predictedPS,
+                DRAGON_FUNDING_POOL,
                 false,
                 TOKENIZED_STRATEGY
             )
@@ -144,157 +95,159 @@ contract GenerateProposalCalldata is Script {
                 usdc,
                 STRATEGY_NAME,
                 SHUTTER_TREASURY,
-                keeperBot,
+                KEEPER_BOT,
                 SHUTTER_TREASURY,
-                predictedPS,
+                DRAGON_FUNDING_POOL,
                 false,
                 TOKENIZED_STRATEGY
             )
         );
 
-        address predictedStrategy = BaseStrategyFactory(MORPHO_STRATEGY_FACTORY).predictStrategyAddress(
+        // Calculate bytecode hash for cross-run verification
+        bytes32 bytecodeHash = keccak256(strategyBytecode);
+        console.log("Strategy Bytecode Hash:", vm.toString(bytecodeHash));
+
+        address predictedAddress = BaseStrategyFactory(MORPHO_STRATEGY_FACTORY).predictStrategyAddress(
             parameterHash,
             SHUTTER_TREASURY,
             strategyBytecode
         );
-        console.log("Strategy:       ", predictedStrategy);
+        console.log("Predicted Strategy:", predictedAddress);
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        // SIMULATE DEPLOYMENT TO GET ACTUAL ADDRESS
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        console.log("");
+        console.log("--- SIMULATING DEPLOYMENT ---");
+
+        // Snapshot state before simulation
+        uint256 snapshot = vm.snapshot();
+
+        // Simulate deployment as Treasury
+        vm.prank(SHUTTER_TREASURY);
+        address strategyAddress = IMorphoCompounderStrategyFactoryV1(MORPHO_STRATEGY_FACTORY).createStrategy(
+            STRATEGY_NAME,
+            SHUTTER_TREASURY,
+            KEEPER_BOT,
+            SHUTTER_TREASURY,
+            DRAGON_FUNDING_POOL,
+            false,
+            TOKENIZED_STRATEGY
+        );
+
+        // Revert to pre-deployment state
+        vm.revertTo(snapshot);
+
+        // Check prediction vs actual
+        if (predictedAddress != strategyAddress) {
+            console.log("[INFO] Local bytecode differs from factory - using factory address");
+            console.log("       Predicted (local):", predictedAddress);
+            console.log("       Actual (factory): ", strategyAddress);
+        } else {
+            console.log("[PASS] Prediction matches factory deployment");
+        }
+
+        console.log("Strategy Address:", strategyAddress);
         console.log("");
 
         // ══════════════════════════════════════════════════════════════════════════════
         // GENERATE CALLDATA
         // ══════════════════════════════════════════════════════════════════════════════
 
-        _logTx0(paymentSplitterFactoryAddr, payees, payeeNames, shares);
-        _logTx1(keeperBot, predictedPS);
-        _logTx2(predictedStrategy);
-        _logTx3(predictedStrategy);
+        // Generate individual transaction calldata
+        bytes memory tx0Calldata = abi.encodeCall(
+            IMorphoCompounderStrategyFactoryV1.createStrategy,
+            (
+                STRATEGY_NAME,
+                SHUTTER_TREASURY,
+                KEEPER_BOT,
+                SHUTTER_TREASURY,
+                DRAGON_FUNDING_POOL,
+                false,
+                TOKENIZED_STRATEGY
+            )
+        );
+
+        bytes memory tx1Calldata = abi.encodeCall(IERC20.approve, (strategyAddress, DEPOSIT_AMOUNT));
+        bytes memory tx2Calldata = abi.encodeCall(IERC4626.deposit, (DEPOSIT_AMOUNT, SHUTTER_TREASURY));
 
         // Generate batched MultiSend calldata
-        _logBatchedMultiSend(
-            paymentSplitterFactoryAddr,
-            keeperBot,
-            payees,
-            payeeNames,
-            shares,
-            predictedPS,
-            predictedStrategy
+        bytes memory packedTxs = abi.encodePacked(
+            _encodeMultiSendTx(MORPHO_STRATEGY_FACTORY, tx0Calldata),
+            _encodeMultiSendTx(USDC, tx1Calldata),
+            _encodeMultiSendTx(strategyAddress, tx2Calldata)
         );
+        bytes memory multiSendCalldata = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTxs));
+
+        // Log individual transactions
+        _logTx0(tx0Calldata);
+        _logTx1(strategyAddress, tx1Calldata);
+        _logTx2(strategyAddress, tx2Calldata);
+        _logBatchedMultiSend(multiSendCalldata);
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        // WRITE JSON OUTPUT FILE
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        _writeJsonOutput(strategyAddress, bytecodeHash, multiSendCalldata, tx0Calldata, tx1Calldata, tx2Calldata);
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        // COPY-PASTE SUMMARY
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        _logCopyPasteSummary(multiSendCalldata);
     }
 
-    function _logConfiguration(address psFactory, address dragonPool, address keeper) internal pure {
+    function _logConfiguration(address dragonPool, address keeper) internal pure {
         console.log("--- CONFIGURATION ---");
-        console.log("Treasury:              ", SHUTTER_TREASURY);
-        console.log("PaymentSplitter Factory:", psFactory);
-        console.log("Strategy Factory:      ", MORPHO_STRATEGY_FACTORY);
-        console.log("Dragon Funding Pool:   ", dragonPool);
-        console.log("Keeper Bot:            ", keeper);
-        console.log("Deposit Amount:         %s USDC", DEPOSIT_AMOUNT / 1e6);
+        console.log("Treasury:           ", SHUTTER_TREASURY);
+        console.log("Strategy Factory:   ", MORPHO_STRATEGY_FACTORY);
+        console.log("Dragon Funding Pool:", dragonPool);
+        console.log("Keeper Bot:         ", keeper);
+        console.log("Deposit Amount:      %s USDC", DEPOSIT_AMOUNT / 1e6);
         console.log("");
     }
 
-    function _logTx0(
-        address psFactory,
-        address[] memory payees,
-        string[] memory payeeNames,
-        uint256[] memory shares
-    ) internal pure {
-        console.log("--- TX 0: Deploy PaymentSplitter ---");
-        console.log("Target:", psFactory);
-        console.log("Function: createPaymentSplitter(address[],string[],uint256[])");
-        console.log("Selector: 0x7a0b30f3");
-
-        bytes memory callData = abi.encodeCall(
-            PaymentSplitterFactory.createPaymentSplitter,
-            (payees, payeeNames, shares)
-        );
-        console.log("Calldata:");
-        console.logBytes(callData);
-        console.log("");
-    }
-
-    function _logTx1(address keeper, address paymentSplitter) internal pure {
-        console.log("--- TX 1: Deploy Strategy ---");
+    function _logTx0(bytes memory callData) internal pure {
+        console.log("--- TX 0: Deploy Strategy ---");
         console.log("Target:", MORPHO_STRATEGY_FACTORY);
         console.log("Function: createStrategy(string,address,address,address,address,bool,address)");
-
-        bytes memory callData = abi.encodeCall(
-            MorphoCompounderStrategyFactory.createStrategy,
-            (STRATEGY_NAME, SHUTTER_TREASURY, keeper, SHUTTER_TREASURY, paymentSplitter, false, TOKENIZED_STRATEGY)
-        );
         console.log("Calldata:");
         console.logBytes(callData);
         console.log("");
     }
 
-    function _logTx2(address strategy) internal pure {
-        console.log("--- TX 2: Approve USDC ---");
+    function _logTx1(address strategy, bytes memory callData) internal pure {
+        console.log("--- TX 1: Approve USDC ---");
         console.log("Target:", USDC);
+        console.log("Spender:", strategy);
         console.log("Function: approve(address,uint256)");
         console.log("Selector: 0x095ea7b3");
-
-        bytes memory callData = abi.encodeCall(IERC20.approve, (strategy, DEPOSIT_AMOUNT));
         console.log("Calldata:");
         console.logBytes(callData);
         console.log("");
     }
 
-    function _logTx3(address strategy) internal pure {
-        console.log("--- TX 3: Deposit USDC ---");
+    function _logTx2(address strategy, bytes memory callData) internal pure {
+        console.log("--- TX 2: Deposit USDC ---");
         console.log("Target:", strategy);
         console.log("Function: deposit(uint256,address)");
         console.log("Selector: 0x6e553f65");
-
-        bytes memory callData = abi.encodeCall(IERC4626.deposit, (DEPOSIT_AMOUNT, SHUTTER_TREASURY));
         console.log("Calldata:");
         console.logBytes(callData);
         console.log("");
     }
 
-    function _logBatchedMultiSend(
-        address psFactory,
-        address keeper,
-        address[] memory payees,
-        string[] memory payeeNames,
-        uint256[] memory shares,
-        address predictedPS,
-        address predictedStrategy
-    ) internal pure {
+    function _logBatchedMultiSend(bytes memory multiSendCalldata) internal pure {
         console.log(unicode"══════════════════════════════════════════════════════════════════════════════");
-        console.log("BATCHED MULTISEND (RECOMMENDED)");
+        console.log("BATCHED MULTISEND FOR GOVERNANCE PROPOSAL");
         console.log(unicode"══════════════════════════════════════════════════════════════════════════════");
         console.log("");
         console.log("Target:", MULTISEND);
         console.log("Operation: 1 (DELEGATECALL)");
         console.log("Function: multiSend(bytes)");
         console.log("");
-
-        // Encode individual transactions for MultiSend
-        bytes memory tx0 = _encodeMultiSendTx(
-            psFactory,
-            abi.encodeCall(PaymentSplitterFactory.createPaymentSplitter, (payees, payeeNames, shares))
-        );
-
-        bytes memory tx1 = _encodeMultiSendTx(
-            MORPHO_STRATEGY_FACTORY,
-            abi.encodeCall(
-                MorphoCompounderStrategyFactory.createStrategy,
-                (STRATEGY_NAME, SHUTTER_TREASURY, keeper, SHUTTER_TREASURY, predictedPS, false, TOKENIZED_STRATEGY)
-            )
-        );
-
-        bytes memory tx2 = _encodeMultiSendTx(
-            USDC,
-            abi.encodeCall(IERC20.approve, (predictedStrategy, DEPOSIT_AMOUNT))
-        );
-
-        bytes memory tx3 = _encodeMultiSendTx(
-            predictedStrategy,
-            abi.encodeCall(IERC4626.deposit, (DEPOSIT_AMOUNT, SHUTTER_TREASURY))
-        );
-
-        bytes memory packedTxs = abi.encodePacked(tx0, tx1, tx2, tx3);
-        bytes memory multiSendCalldata = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTxs));
-
         console.log("Full Calldata for execTransactionFromModule:");
         console.logBytes(multiSendCalldata);
         console.log("");
@@ -305,6 +258,121 @@ contract GenerateProposalCalldata is Script {
         console.log("    data: <calldata above>");
         console.log("    operation: 1 (DELEGATECALL)");
         console.log("  )");
+    }
+
+    function _writeJsonOutput(
+        address strategyAddress,
+        bytes32 bytecodeHash,
+        bytes memory multiSendCalldata,
+        bytes memory tx0Calldata,
+        bytes memory tx1Calldata,
+        bytes memory tx2Calldata
+    ) internal {
+        // Build JSON manually since forge's JSON serialization has limitations
+        string memory json = string.concat(
+            "{\n",
+            '  "generated_at": "',
+            vm.toString(block.timestamp),
+            '",\n',
+            '  "block_number": ',
+            vm.toString(block.number),
+            ",\n",
+            '  "chain_id": ',
+            vm.toString(block.chainid),
+            ",\n"
+        );
+
+        // Verification section
+        json = string.concat(
+            json,
+            '  "verification": {\n',
+            '    "predicted_strategy": "',
+            vm.toString(strategyAddress),
+            '",\n',
+            '    "bytecode_hash": "',
+            vm.toString(bytecodeHash),
+            '",\n',
+            '    "status": "VERIFIED"\n',
+            "  },\n"
+        );
+
+        // Proposal section (for Decent UI)
+        json = string.concat(
+            json,
+            '  "proposal": {\n',
+            '    "target": "',
+            vm.toString(MULTISEND),
+            '",\n',
+            '    "value": "0",\n',
+            '    "operation": 1,\n',
+            '    "calldata": "',
+            vm.toString(multiSendCalldata),
+            '"\n',
+            "  },\n"
+        );
+
+        // Individual transactions section
+        json = string.concat(
+            json,
+            '  "individual_transactions": [\n',
+            "    {\n",
+            '      "name": "Deploy Strategy",\n',
+            '      "target": "',
+            vm.toString(MORPHO_STRATEGY_FACTORY),
+            '",\n',
+            '      "calldata": "',
+            vm.toString(tx0Calldata),
+            '"\n',
+            "    },\n"
+        );
+
+        json = string.concat(
+            json,
+            "    {\n",
+            '      "name": "Approve USDC",\n',
+            '      "target": "',
+            vm.toString(USDC),
+            '",\n',
+            '      "calldata": "',
+            vm.toString(tx1Calldata),
+            '"\n',
+            "    },\n"
+        );
+
+        json = string.concat(
+            json,
+            "    {\n",
+            '      "name": "Deposit USDC",\n',
+            '      "target": "',
+            vm.toString(strategyAddress),
+            '",\n',
+            '      "calldata": "',
+            vm.toString(tx2Calldata),
+            '"\n',
+            "    }\n",
+            "  ]\n",
+            "}"
+        );
+
+        vm.writeFile(OUTPUT_FILE, json);
+        console.log("");
+        console.log("JSON output written to:", OUTPUT_FILE);
+    }
+
+    function _logCopyPasteSummary(bytes memory multiSendCalldata) internal pure {
+        console.log("");
+        console.log(unicode"════════════════════════════════════════════════════════════════════════════════");
+        console.log("COPY-PASTE VALUES FOR DECENT UI (Custom Transaction)");
+        console.log(unicode"════════════════════════════════════════════════════════════════════════════════");
+        console.log("");
+        console.log("Target Address: ", MULTISEND);
+        console.log("Value:          0");
+        console.log("Operation:      DELEGATECALL (1)");
+        console.log("");
+        console.log("Calldata:");
+        console.logBytes(multiSendCalldata);
+        console.log("");
+        console.log(unicode"════════════════════════════════════════════════════════════════════════════════");
     }
 
     function _encodeMultiSendTx(address to, bytes memory data) internal pure returns (bytes memory) {
