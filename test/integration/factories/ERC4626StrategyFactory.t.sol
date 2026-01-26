@@ -36,12 +36,11 @@ contract ERC4626StrategyFactoryTest is Test {
 
     // Test constants
     uint256 public mainnetFork;
-    uint256 public mainnetForkBlock = 22508883 - 6500 * 90; // latest alchemy block - 90 days
     YieldDonatingTokenizedStrategy public implementation;
 
     function setUp() public {
         // Create a mainnet fork
-        mainnetFork = vm.createFork("mainnet", mainnetForkBlock);
+        mainnetFork = vm.createFork("mainnet");
         vm.selectFork(mainnetFork);
 
         // Etch YieldDonatingTokenizedStrategy
