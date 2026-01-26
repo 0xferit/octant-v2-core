@@ -4,8 +4,6 @@ pragma solidity ^0.8.25;
 import { Test } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
 
-import { PaymentSplitter } from "src/core/PaymentSplitter.sol";
-
 import { RegenStaker } from "src/regen/RegenStaker.sol";
 import { RegenEarningPowerCalculator } from "src/regen/RegenEarningPowerCalculator.sol";
 import { AddressSet } from "src/utils/AddressSet.sol";
@@ -13,16 +11,19 @@ import { IAddressSet } from "src/utils/IAddressSet.sol";
 import { AccessMode } from "src/constants.sol";
 
 import { MorphoCompounderStrategy } from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
-import { MorphoCompounderStrategyFactory } from "src/factories/MorphoCompounderStrategyFactory.sol";
+import { IMorphoCompounderStrategyFactoryV1 } from "src/interfaces/IMorphoCompounderStrategyFactoryV1.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IERC20Staking } from "staker/interfaces/IERC20Staking.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import { ISafe } from "src/zodiac-core/interfaces/Safe.sol";
-import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
-import { MultiSendCallOnly } from "src/utils/libs/Safe/MultiSendCallOnly.sol";
-import { USDC_MAINNET, MORPHO_STRATEGY_FACTORY_MAINNET, YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET, SAFE_MULTISEND_MAINNET, EIP_7825_TX_GAS_LIMIT } from "src/constants.sol";
+import {
+    USDC_MAINNET,
+    EIP_7825_TX_GAS_LIMIT,
+    MORPHO_STRATEGY_FACTORY_MAINNET,
+    YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET
+} from "src/constants.sol";
 
 /**
  * @title ShutterDAOIntegrationTest
@@ -40,8 +41,13 @@ contract ShutterDAOIntegrationTest is Test {
 
     // === From src/constants.sol ===
     address constant USDC_TOKEN = USDC_MAINNET;
-    address constant MORPHO_STRATEGY_FACTORY = MORPHO_STRATEGY_FACTORY_MAINNET;
-    address constant TOKENIZED_STRATEGY_ADDRESS = YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET;
+
+    // === V1 Deployed Contracts (imported from src/constants.sol) ===
+    address constant MORPHO_STRATEGY_FACTORY_V1 = MORPHO_STRATEGY_FACTORY_MAINNET;
+    address constant TOKENIZED_STRATEGY_V1 = YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET;
+
+    IMorphoCompounderStrategyFactoryV1 morphoStrategyFactory;
+    address tokenizedStrategyImpl;
 
     string constant STRATEGY_NAME = "SHUGrantPool";
 
@@ -51,9 +57,7 @@ contract ShutterDAOIntegrationTest is Test {
     uint256 constant REWARD_DURATION = 90 days;
 
     // === System Contracts ===
-    PaymentSplitterFactory paymentSplitterFactory;
     MorphoCompounderStrategy strategy;
-    PaymentSplitter paymentSplitter;
 
     RegenStaker regenStaker;
     RegenEarningPowerCalculator calculator;
@@ -62,6 +66,7 @@ contract ShutterDAOIntegrationTest is Test {
     // === Roles ===
     address octantGovernance;
     address keeperBot;
+    address dragonFundingPool;
     address shuHolder1;
     address shuHolder2;
     address shuHolder3;
@@ -76,9 +81,14 @@ contract ShutterDAOIntegrationTest is Test {
 
         octantGovernance = makeAddr("OctantGovernance");
         keeperBot = makeAddr("KeeperBot");
+        dragonFundingPool = makeAddr("DragonFundingPool");
         shuHolder1 = makeAddr("SHUHolder1");
         shuHolder2 = makeAddr("SHUHolder2");
         shuHolder3 = makeAddr("SHUHolder3");
+
+        // Use real mainnet V1 contracts
+        morphoStrategyFactory = IMorphoCompounderStrategyFactoryV1(MORPHO_STRATEGY_FACTORY_V1);
+        tokenizedStrategyImpl = TOKENIZED_STRATEGY_V1;
 
         // Setup balances
         deal(USDC_TOKEN, SHUTTER_TREASURY, TREASURY_USDC_BALANCE);
@@ -86,14 +96,8 @@ contract ShutterDAOIntegrationTest is Test {
         deal(SHU_TOKEN, shuHolder2, SHU_HOLDER_BALANCE);
         deal(SHU_TOKEN, shuHolder3, SHU_HOLDER_BALANCE);
 
-        _deployInfrastructure();
         _deployStrategy();
         _deployRegenStaker();
-    }
-
-    function _deployInfrastructure() internal {
-        vm.prank(octantGovernance);
-        paymentSplitterFactory = new PaymentSplitterFactory();
     }
 
     /// @notice Simulates Azorius module executing a transaction through the Safe
@@ -118,142 +122,38 @@ contract ShutterDAOIntegrationTest is Test {
         return result;
     }
 
-    /// @notice Encode a single transaction for MultiSend
-    /// @dev Format: operation (1 byte) + to (20 bytes) + value (32 bytes) + dataLength (32 bytes) + data
-    function _encodeMultiSendTx(address to, bytes memory data) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(0), to, uint256(0), data.length, data);
-    }
-
-    /// @notice Execute batched transactions via MultiSend through Azorius → Safe
-    function _executeBatchFromModule(bytes memory packedTransactions) internal {
-        bytes memory multiSendData = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTransactions));
-        // Must DELEGATECALL MultiSend so subcalls execute from the Safe (Treasury) address.
-        vm.prank(AZORIUS_MODULE);
-        bool success = ISafe(SHUTTER_TREASURY).execTransactionFromModule(SAFE_MULTISEND_MAINNET, 0, multiSendData, 1);
-        require(success, "Module batch execution failed");
-    }
-
-    /// @notice Predict Strategy address using CREATE2 (mirrors script logic)
-    function _predictStrategyAddress(address _paymentSplitter, address _keeper) internal view returns (address) {
-        address ysUsdc = MorphoCompounderStrategyFactory(MORPHO_STRATEGY_FACTORY).YS_USDC();
-        address usdc = MorphoCompounderStrategyFactory(MORPHO_STRATEGY_FACTORY).USDC();
-        string memory strategySymbol = "osSHU";
-
-        bytes32 parameterHash = keccak256(
-            abi.encode(
-                ysUsdc,
-                usdc,
-                STRATEGY_NAME,
-                strategySymbol,
-                SHUTTER_TREASURY,
-                _keeper,
-                SHUTTER_TREASURY,
-                _paymentSplitter,
-                false,
-                TOKENIZED_STRATEGY_ADDRESS
-            )
-        );
-
-        bytes memory strategyBytecode = abi.encodePacked(
-            type(MorphoCompounderStrategy).creationCode,
-            abi.encode(
-                ysUsdc,
-                usdc,
-                STRATEGY_NAME,
-                strategySymbol,
-                SHUTTER_TREASURY,
-                _keeper,
-                SHUTTER_TREASURY,
-                _paymentSplitter,
-                false,
-                TOKENIZED_STRATEGY_ADDRESS
-            )
-        );
-
-        return
-            BaseStrategyFactory(MORPHO_STRATEGY_FACTORY).predictStrategyAddress(
-                parameterHash,
-                SHUTTER_TREASURY,
-                strategyBytecode
-            );
-    }
-
     function _deployStrategy() internal {
         // ══════════════════════════════════════════════════════════════════════
-        // DEPLOY + FUND: Single batched MultiSend with 4 operations
-        // Uses CREATE2 prediction for both PaymentSplitter and Strategy addresses
+        // DEPLOY + FUND: 3 separate CALL transactions (mirrors Decent UI execution)
         // ══════════════════════════════════════════════════════════════════════
 
-        // --- PaymentSplitter setup ---
-        address[] memory payees = new address[](1);
-        payees[0] = makeAddr("DragonFundingPool");
-        string[] memory payeeNames = new string[](1);
-        payeeNames[0] = "DragonFundingPool";
-        uint256[] memory shares = new uint256[](1);
-        shares[0] = 100;
-
-        // Precompute PaymentSplitter address (CREATE2 deterministic)
-        address predictedPaymentSplitter = paymentSplitterFactory.predictDeterministicAddress(SHUTTER_TREASURY);
-
-        // Precompute Strategy address (CREATE2 deterministic)
-        address predictedStrategyAddress = _predictStrategyAddress(predictedPaymentSplitter, keeperBot);
-
-        // Build 4-operation batch:
-        // TX 0: Deploy PaymentSplitter
-        bytes memory batch = _encodeMultiSendTx(
-            address(paymentSplitterFactory),
-            abi.encodeCall(PaymentSplitterFactory.createPaymentSplitter, (payees, payeeNames, shares))
-        );
-
-        // TX 1: Deploy Strategy
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(
-                MORPHO_STRATEGY_FACTORY,
-                abi.encodeCall(
-                    MorphoCompounderStrategyFactory.createStrategy,
-                    (
-                        STRATEGY_NAME,
-                        "osSHU",
-                        SHUTTER_TREASURY,
-                        keeperBot,
-                        SHUTTER_TREASURY,
-                        predictedPaymentSplitter,
-                        false,
-                        TOKENIZED_STRATEGY_ADDRESS
-                    )
-                )
+        // TX 0: Deploy Strategy via factory (returns address)
+        bytes memory deployCalldata = abi.encodeCall(
+            IMorphoCompounderStrategyFactoryV1.createStrategy,
+            (
+                STRATEGY_NAME,
+                SHUTTER_TREASURY,
+                keeperBot,
+                SHUTTER_TREASURY,
+                dragonFundingPool,
+                false,
+                tokenizedStrategyImpl
             )
         );
+        bytes memory returnData = _executeFromModuleReturnData(address(morphoStrategyFactory), deployCalldata);
+        address strategyAddress = abi.decode(returnData, (address));
 
-        // TX 2: Approve USDC to Strategy
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(
-                USDC_TOKEN,
-                abi.encodeCall(IERC20.approve, (predictedStrategyAddress, TREASURY_USDC_BALANCE))
-            )
-        );
+        // TX 1: Approve USDC
+        _executeFromModule(USDC_TOKEN, abi.encodeCall(IERC20.approve, (strategyAddress, TREASURY_USDC_BALANCE)));
 
-        // TX 3: Deposit USDC into Strategy
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(
-                predictedStrategyAddress,
-                abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY))
-            )
-        );
+        // TX 2: Deposit USDC
+        _executeFromModule(strategyAddress, abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY)));
 
-        // Execute single batched MultiSend
-        _executeBatchFromModule(batch);
+        // Store deployed contract
+        strategy = MorphoCompounderStrategy(strategyAddress);
 
-        // Store deployed contracts
-        paymentSplitter = PaymentSplitter(payable(predictedPaymentSplitter));
-        strategy = MorphoCompounderStrategy(predictedStrategyAddress);
-
-        // Verify deployments succeeded
-        require(predictedPaymentSplitter.code.length > 0, "PaymentSplitter not deployed");
-        require(predictedStrategyAddress.code.length > 0, "Strategy not deployed");
+        // Verify deployment succeeded
+        require(strategyAddress.code.length > 0, "Strategy not deployed");
     }
 
     function _deployRegenStaker() internal {
@@ -283,7 +183,7 @@ contract ShutterDAOIntegrationTest is Test {
     }
 
     function test_TreasuryDepositsUSDCIntoStrategy() public view {
-        // Deposit already happened in _deployStrategy() via batched MultiSend
+        // Deposit already happened in _deployStrategy()
         // Verify the deposit succeeded
         uint256 depositAmount = TREASURY_USDC_BALANCE;
 
@@ -293,7 +193,7 @@ contract ShutterDAOIntegrationTest is Test {
     }
 
     function test_TreasuryCanWithdraw() public {
-        // Funds already deposited in _deployStrategy() via batched MultiSend
+        // Funds already deposited in _deployStrategy()
         uint256 depositAmount = TREASURY_USDC_BALANCE;
 
         // Use maxWithdraw to account for precision in underlying vault
@@ -350,7 +250,7 @@ contract ShutterDAOIntegrationTest is Test {
     }
 
     function test_SharesAreTransferable() public {
-        // Funds already deposited in _deployStrategy() via batched MultiSend
+        // Funds already deposited in _deployStrategy()
         uint256 shares = IERC4626(address(strategy)).balanceOf(SHUTTER_TREASURY);
         uint256 halfShares = shares / 2;
 
@@ -378,8 +278,13 @@ contract ShutterDAOGasProfilingTest is Test {
 
     // === From src/constants.sol ===
     address constant USDC_TOKEN = USDC_MAINNET;
-    address constant MORPHO_STRATEGY_FACTORY = MORPHO_STRATEGY_FACTORY_MAINNET;
-    address constant TOKENIZED_STRATEGY_ADDRESS = YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET;
+
+    // === V1 Deployed Contracts (imported from src/constants.sol) ===
+    address constant MORPHO_STRATEGY_FACTORY_V1 = MORPHO_STRATEGY_FACTORY_MAINNET;
+    address constant TOKENIZED_STRATEGY_V1 = YIELD_DONATING_TOKENIZED_STRATEGY_MAINNET;
+
+    IMorphoCompounderStrategyFactoryV1 morphoStrategyFactory;
+    address tokenizedStrategyImpl;
 
     // === Test Values ===
     uint256 constant TREASURY_USDC_BALANCE = 1_200_000e6;
@@ -391,6 +296,11 @@ contract ShutterDAOGasProfilingTest is Test {
         } catch {
             vm.skip(true);
         }
+
+        // Use real mainnet V1 contracts
+        morphoStrategyFactory = IMorphoCompounderStrategyFactoryV1(MORPHO_STRATEGY_FACTORY_V1);
+        tokenizedStrategyImpl = TOKENIZED_STRATEGY_V1;
+
         deal(USDC_TOKEN, SHUTTER_TREASURY, TREASURY_USDC_BALANCE);
     }
 
@@ -412,143 +322,44 @@ contract ShutterDAOGasProfilingTest is Test {
         return result;
     }
 
-    function _encodeMultiSendTx(address to, bytes memory data) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(0), to, uint256(0), data.length, data);
-    }
-
-    function _executeBatchFromModule(bytes memory packedTransactions) internal {
-        bytes memory multiSendData = abi.encodeCall(MultiSendCallOnly.multiSend, (packedTransactions));
-        // Use DELEGATECALL so batched calls keep msg.sender = Safe (Treasury).
-        vm.prank(AZORIUS_MODULE);
-        bool success = ISafe(SHUTTER_TREASURY).execTransactionFromModule(SAFE_MULTISEND_MAINNET, 0, multiSendData, 1);
-        require(success, "Module batch execution failed");
-    }
-
-    function _buildStrategyParams(
-        address predictedPaymentSplitter,
-        address keeper
-    ) internal view returns (bytes32 parameterHash, bytes memory strategyBytecode) {
-        address ysUsdc = MorphoCompounderStrategyFactory(MORPHO_STRATEGY_FACTORY).YS_USDC();
-        address usdc = MorphoCompounderStrategyFactory(MORPHO_STRATEGY_FACTORY).USDC();
-        string memory strategySymbol = "osSHU";
-
-        parameterHash = keccak256(
-            abi.encode(
-                ysUsdc,
-                usdc,
-                STRATEGY_NAME,
-                strategySymbol,
-                SHUTTER_TREASURY,
-                keeper,
-                SHUTTER_TREASURY,
-                predictedPaymentSplitter,
-                false,
-                TOKENIZED_STRATEGY_ADDRESS
-            )
-        );
-
-        strategyBytecode = abi.encodePacked(
-            type(MorphoCompounderStrategy).creationCode,
-            abi.encode(
-                ysUsdc,
-                usdc,
-                STRATEGY_NAME,
-                strategySymbol,
-                SHUTTER_TREASURY,
-                keeper,
-                SHUTTER_TREASURY,
-                predictedPaymentSplitter,
-                false,
-                TOKENIZED_STRATEGY_ADDRESS
-            )
-        );
-    }
-
-    /// @notice Predict Strategy address using CREATE2 (mirrors script logic)
-    function _predictStrategyAddress(address _paymentSplitter, address _keeper) internal view returns (address) {
-        (bytes32 parameterHash, bytes memory strategyBytecode) = _buildStrategyParams(_paymentSplitter, _keeper);
-        return
-            BaseStrategyFactory(MORPHO_STRATEGY_FACTORY).predictStrategyAddress(
-                parameterHash,
-                SHUTTER_TREASURY,
-                strategyBytecode
-            );
-    }
-
     function test_SimplifiedProposalGasProfile() public {
         address keeperBot = makeAddr("KeeperBot");
-        PaymentSplitterFactory splitterFactory = new PaymentSplitterFactory();
+        address dragonFundingPool = makeAddr("DragonFundingPool");
 
-        // Precompute PaymentSplitter address (CREATE2 deterministic)
-        address predictedPS = splitterFactory.predictDeterministicAddress(SHUTTER_TREASURY);
-
-        // Precompute Strategy address (CREATE2 deterministic)
-        address predictedStrategy = _predictStrategyAddress(predictedPS, keeperBot);
-
-        // --- PaymentSplitter config ---
-        address[] memory payees = new address[](1);
-        payees[0] = makeAddr("DragonFundingPool");
-        string[] memory payeeNames = new string[](1);
-        payeeNames[0] = "DragonFundingPool";
-        uint256[] memory shares = new uint256[](1);
-        shares[0] = 100;
+        // ══════════════════════════════════════════════════════════════════════
+        // GAS PROFILING: 3 separate CALL transactions (mirrors Decent UI execution)
+        // ══════════════════════════════════════════════════════════════════════
 
         uint256 gasStart = gasleft();
 
-        // ══════════════════════════════════════════════════════════════════════
-        // REALISTIC DAO EXECUTION: 1 batched MultiSend with 4 operations
-        // Uses CREATE2 prediction for both PaymentSplitter and Strategy addresses
-        // ══════════════════════════════════════════════════════════════════════
-
-        // Build 4-operation batch
-        bytes memory batch = _encodeMultiSendTx(
-            address(splitterFactory),
-            abi.encodeCall(PaymentSplitterFactory.createPaymentSplitter, (payees, payeeNames, shares))
-        );
-
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(
-                MORPHO_STRATEGY_FACTORY,
-                abi.encodeCall(
-                    MorphoCompounderStrategyFactory.createStrategy,
-                    (
-                        STRATEGY_NAME,
-                        "osSHU",
-                        SHUTTER_TREASURY,
-                        keeperBot,
-                        SHUTTER_TREASURY,
-                        predictedPS,
-                        false,
-                        TOKENIZED_STRATEGY_ADDRESS
-                    )
-                )
+        // TX 0: Deploy Strategy via factory (returns address)
+        bytes memory deployCalldata = abi.encodeCall(
+            IMorphoCompounderStrategyFactoryV1.createStrategy,
+            (
+                STRATEGY_NAME,
+                SHUTTER_TREASURY,
+                keeperBot,
+                SHUTTER_TREASURY,
+                dragonFundingPool,
+                false,
+                tokenizedStrategyImpl
             )
         );
+        bytes memory returnData = _executeFromModuleReturnData(address(morphoStrategyFactory), deployCalldata);
+        address strategyAddress = abi.decode(returnData, (address));
 
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(USDC_TOKEN, abi.encodeCall(IERC20.approve, (predictedStrategy, TREASURY_USDC_BALANCE)))
-        );
+        // TX 1: Approve USDC
+        _executeFromModule(USDC_TOKEN, abi.encodeCall(IERC20.approve, (strategyAddress, TREASURY_USDC_BALANCE)));
 
-        batch = abi.encodePacked(
-            batch,
-            _encodeMultiSendTx(
-                predictedStrategy,
-                abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY))
-            )
-        );
-
-        // Execute single batched MultiSend
-        _executeBatchFromModule(batch);
+        // TX 2: Deposit USDC
+        _executeFromModule(strategyAddress, abi.encodeCall(IERC4626.deposit, (TREASURY_USDC_BALANCE, SHUTTER_TREASURY)));
 
         uint256 totalGas = gasStart - gasleft();
 
-        emit log_named_uint("=== TOTAL GAS (1 batched call, 4 operations) ===", totalGas);
+        emit log_named_uint("=== TOTAL GAS (3 separate transactions) ===", totalGas);
         assertLt(totalGas, EIP_7825_TX_GAS_LIMIT, "Gas exceeds 16.7M per-tx limit");
 
-        assertGt(predictedPS.code.length, 0, "PaymentSplitter not deployed");
-        assertGt(predictedStrategy.code.length, 0, "Strategy not deployed");
-        assertApproxEqAbs(IERC4626(predictedStrategy).balanceOf(SHUTTER_TREASURY), TREASURY_USDC_BALANCE, 1000);
+        assertGt(strategyAddress.code.length, 0, "Strategy not deployed");
+        assertApproxEqAbs(IERC4626(strategyAddress).balanceOf(SHUTTER_TREASURY), TREASURY_USDC_BALANCE, 1000);
     }
 }
