@@ -2,8 +2,6 @@
 pragma solidity ^0.8.0;
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
-import { MockERC20 } from "test/mocks/MockERC20.sol";
 import { ERC4626Strategy } from "src/strategies/yieldDonating/ERC4626Strategy.sol";
 import { ERC4626StrategyFactory } from "src/factories/ERC4626StrategyFactory.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
@@ -43,7 +41,7 @@ contract ERC4626StrategyFactoryTest is Test {
 
     function setUp() public {
         // Create a mainnet fork
-        mainnetFork = vm.createFork("mainnet");
+        mainnetFork = vm.createFork("mainnet", mainnetForkBlock);
         vm.selectFork(mainnetFork);
 
         // Etch YieldDonatingTokenizedStrategy

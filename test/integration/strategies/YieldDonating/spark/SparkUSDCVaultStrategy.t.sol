@@ -2,7 +2,6 @@
 pragma solidity ^0.8.25;
 
 import { SparkDonatingStrategyTest } from "../SparkStrategy.t.sol";
-import { SparkTestConfig } from "../../config/SparkTestConfig.sol";
 
 /// @title Spark USDC Vault Strategy Test
 /// @author Octant
