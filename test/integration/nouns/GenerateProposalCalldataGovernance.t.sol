@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.25;
 
-import { Test } from "forge-std/Test.sol";
+import { Test, Vm } from "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
 // Import the actual script we're testing
 import { GenerateProposalCalldata } from "partners/nouns_dao/script/GenerateProposalCalldata.s.sol";
+
+// Import factories for event definitions
+import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
+import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
 
 /// @notice Nouns DAO Governor interface (minimal)
 interface INounsDAOProxy {
@@ -85,12 +89,12 @@ contract GenerateProposalCalldataGovernanceTest is Test {
     /// @notice Nouns Treasury address (from script)
     address public nounsTreasury;
 
-    /// @notice Predicted addresses (from script)
-    address public predictedPaymentSplitter;
-    address public predictedStrategy;
-
     /// @notice Deposit amount (from script)
     uint256 public depositAmount;
+
+    /// @notice Actual deployed addresses (captured from events after execution)
+    address public deployedPaymentSplitter;
+    address public deployedStrategy;
 
     // ══════════════════════════════════════════════════════════════════════════════
     // SETUP
@@ -113,15 +117,12 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         // Get values directly from the script
         nounsTreasury = script.getNounsTreasury();
         depositAmount = script.getDepositAmount();
-        (predictedPaymentSplitter, predictedStrategy) = script.getPrecomputedAddresses();
 
         // Label addresses for better traces
         vm.label(NOUNS_DAO_PROXY, "NounsDAOProxy");
         vm.label(nounsTreasury, "NounsExecutor");
         vm.label(NOUNS_TOKEN, "NounsToken");
         vm.label(WSTETH, "wstETH");
-        vm.label(predictedPaymentSplitter, "PredictedPaymentSplitter");
-        vm.label(predictedStrategy, "PredictedStrategy");
         vm.label(testProposer, "TestProposer");
         vm.label(testVoter, "TestVoter");
         vm.label(address(script), "GenerateProposalCalldata");
@@ -294,41 +295,77 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         // Warp to after ETA
         vm.warp(_getProposalEta(proposalId) + 1);
 
+        // Record logs to capture deployment events
+        vm.recordLogs();
+
         // Execute
         dao.execute(proposalId);
 
         // Verify Executed
         uint8 state = dao.state(proposalId);
         assertEq(state, 7, "Proposal should be Executed");
+
+        // Parse logs to get actual deployed addresses
+        _parseDeploymentEvents();
+    }
+
+    /**
+     * @notice Parse deployment events to extract actual deployed addresses
+     * @dev This makes the test independent of bytecode prediction, working across different compiler versions
+     */
+    function _parseDeploymentEvents() internal {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        // Event signatures
+        bytes32 strategyDeploySelector = keccak256("StrategyDeploy(address,address,address,string)");
+        bytes32 paymentSplitterCreatedSelector = keccak256(
+            "PaymentSplitterCreated(address,address,address[],string[],uint256[])"
+        );
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == strategyDeploySelector) {
+                // StrategyDeploy: topic1=deployer, topic2=donationAddress, topic3=strategyAddress
+                deployedStrategy = address(uint160(uint256(logs[i].topics[3])));
+                vm.label(deployedStrategy, "DeployedStrategy");
+            } else if (logs[i].topics[0] == paymentSplitterCreatedSelector) {
+                // PaymentSplitterCreated: topic1=deployer, topic2=paymentSplitter
+                deployedPaymentSplitter = address(uint160(uint256(logs[i].topics[2])));
+                vm.label(deployedPaymentSplitter, "DeployedPaymentSplitter");
+            }
+        }
+
+        // Verify we found both addresses
+        require(deployedStrategy != address(0), "StrategyDeploy event not found");
+        require(deployedPaymentSplitter != address(0), "PaymentSplitterCreated event not found");
     }
 
     function _verifyExecution() internal view {
         // ════════════════════════════════════════════════════════════════════════
-        // VERIFY: PaymentSplitter deployed to predicted address (from script)
+        // VERIFY: PaymentSplitter deployed (address captured from event)
         // ════════════════════════════════════════════════════════════════════════
-        assertTrue(predictedPaymentSplitter.code.length > 0, "PaymentSplitter should be deployed at predicted address");
+        assertTrue(deployedPaymentSplitter.code.length > 0, "PaymentSplitter should have bytecode deployed");
 
         // ════════════════════════════════════════════════════════════════════════
-        // VERIFY: LidoStrategy deployed to predicted address (from script)
+        // VERIFY: LidoStrategy deployed (address captured from event)
         // ════════════════════════════════════════════════════════════════════════
-        assertTrue(predictedStrategy.code.length > 0, "LidoStrategy should be deployed at predicted address");
+        assertTrue(deployedStrategy.code.length > 0, "LidoStrategy should have bytecode deployed");
 
         // ════════════════════════════════════════════════════════════════════════
         // VERIFY: Treasury has strategy shares
         // ════════════════════════════════════════════════════════════════════════
-        uint256 treasuryShares = IERC4626(predictedStrategy).balanceOf(nounsTreasury);
+        uint256 treasuryShares = IERC4626(deployedStrategy).balanceOf(nounsTreasury);
         assertGt(treasuryShares, 0, "Treasury should have strategy shares");
 
         // ════════════════════════════════════════════════════════════════════════
         // VERIFY: Strategy has the deposited assets (amount from script)
         // ════════════════════════════════════════════════════════════════════════
-        uint256 strategyAssets = IERC4626(predictedStrategy).totalAssets();
+        uint256 strategyAssets = IERC4626(deployedStrategy).totalAssets();
         assertEq(strategyAssets, depositAmount, "Strategy should have deposited assets");
 
         // ════════════════════════════════════════════════════════════════════════
         // VERIFY: Shares are redeemable for approximately the deposit amount
         // ════════════════════════════════════════════════════════════════════════
-        uint256 redeemableAssets = IERC4626(predictedStrategy).convertToAssets(treasuryShares);
+        uint256 redeemableAssets = IERC4626(deployedStrategy).convertToAssets(treasuryShares);
         assertApproxEqRel(
             redeemableAssets,
             depositAmount,

@@ -4,8 +4,8 @@ pragma solidity ^0.8.25;
 import { Script, console } from "forge-std/Script.sol";
 
 import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
-import { LidoStrategy } from "src/strategies/yieldSkimming/LidoStrategy.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
+import { LidoStrategy } from "src/strategies/yieldSkimming/LidoStrategy.sol";
 
 /**
  * @title GenerateProposalCalldata
@@ -48,10 +48,10 @@ contract GenerateProposalCalldata is Script {
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /// @notice Tokenized Strategy implementation (YieldSkimmingTokenizedStrategy) - PRODUCTION
-    address constant TOKENIZED_STRATEGY = 0x94fB5d6A39C89499349F880A375b778Da12745Aa;
+    address constant TOKENIZED_STRATEGY = 0xae2d523179CF2eA3a0750B2015c38c57aB94f77E;
 
     /// @notice LidoStrategyFactory address - PRODUCTION
-    address constant LIDO_STRATEGY_FACTORY = 0xc1C0d3C020074A0d0E102cc7EC8d26e8F10766aF;
+    address constant LIDO_STRATEGY_FACTORY = 0x4E1dB81b337231B778C51AB4Bf0c4E8DAE79F9Df;
 
     /// @notice Dragon Funding Pool recipient address
     /// @dev For testing: using deployer address. Update for production.
@@ -68,6 +68,9 @@ contract GenerateProposalCalldata is Script {
 
     /// @notice Strategy name (appears in token metadata)
     string constant STRATEGY_NAME = "NounsLidoStrategy";
+
+    /// @notice Strategy symbol (share token symbol)
+    string constant STRATEGY_SYMBOL = "ysNounsLido";
 
     /// @notice Amount of wstETH to deposit (18 decimals)
     /// @dev 1000 wstETH = 1000e18 = 1000000000000000000000
@@ -179,11 +182,13 @@ contract GenerateProposalCalldata is Script {
         // Predict PaymentSplitter address
         predictedPS = PaymentSplitterFactory(PAYMENT_SPLITTER_FACTORY).predictDeterministicAddress(NOUNS_TREASURY);
 
-        // Predict Strategy address
+        // Predict Strategy address using same logic as LidoStrategyFactory.createStrategy()
+        // Must match EXACTLY: WSTETH, name, symbol, management, keeper, emergencyAdmin, donationAddress, enableBurning, tokenizedStrategy
         bytes32 parameterHash = keccak256(
             abi.encode(
                 WSTETH,
                 STRATEGY_NAME,
+                STRATEGY_SYMBOL,
                 NOUNS_TREASURY,
                 KEEPER_BOT,
                 EMERGENCY_ADMIN,
@@ -198,6 +203,7 @@ contract GenerateProposalCalldata is Script {
             abi.encode(
                 WSTETH,
                 STRATEGY_NAME,
+                STRATEGY_SYMBOL,
                 NOUNS_TREASURY,
                 KEEPER_BOT,
                 EMERGENCY_ADMIN,
@@ -258,9 +264,10 @@ contract GenerateProposalCalldata is Script {
     {
         target = LIDO_STRATEGY_FACTORY;
         value = 0;
-        signature = "createStrategy(string,address,address,address,address,bool,address)";
+        signature = "createStrategy(string,string,address,address,address,address,bool,address)";
         calldataParams = abi.encode(
             STRATEGY_NAME,
+            STRATEGY_SYMBOL,
             NOUNS_TREASURY,
             KEEPER_BOT,
             EMERGENCY_ADMIN,
@@ -357,6 +364,7 @@ contract GenerateProposalCalldata is Script {
         console.log("");
         console.log("PARAMETERS:");
         console.log("  _name:                     %s", STRATEGY_NAME);
+        console.log("  _symbol:                   %s", STRATEGY_SYMBOL);
         console.log("  _management:               ", NOUNS_TREASURY);
         console.log("  _keeper:                   ", KEEPER_BOT);
         console.log("  _emergencyAdmin:           ", EMERGENCY_ADMIN);
@@ -440,7 +448,7 @@ contract GenerateProposalCalldata is Script {
         console.log("TX 2 - Deploy LidoStrategy");
         console.log("--------------------------------------------------------------------------------");
         console.log("Target:   ", LIDO_STRATEGY_FACTORY);
-        console.log("Function: createStrategy(string,address,address,address,address,bool,address)");
+        console.log("Function: createStrategy(string,string,address,address,address,address,bool,address)");
         console.log("");
         console.log("--------------------------------------------------------------------------------");
         console.log("TX 3 - Approve wstETH");
@@ -481,6 +489,7 @@ contract GenerateProposalCalldata is Script {
         console.log("  wstETH Token:             ", WSTETH);
         console.log("  Tokenized Strategy Impl:  ", TOKENIZED_STRATEGY);
         console.log("  Strategy Name:             %s", STRATEGY_NAME);
+        console.log("  Strategy Symbol:           %s", STRATEGY_SYMBOL);
         console.log("  Deposit Amount:            %s wstETH", DEPOSIT_AMOUNT / 1e18);
         console.log("");
     }
