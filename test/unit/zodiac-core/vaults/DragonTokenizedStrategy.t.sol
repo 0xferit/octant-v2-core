@@ -156,7 +156,7 @@ contract DragonTokenizedStrategyTest is BaseTest {
         vm.deal(randomUser, depositAmount);
         vm.startPrank(randomUser);
 
-        if (lockupDuration <= module.minimumLockupDuration()) {
+        if (lockupDuration < module.minimumLockupDuration()) {
             // Should revert for durations under minimum
             vm.expectRevert(DragonTokenizedStrategy__InsufficientLockupDuration.selector);
             module.depositWithLockup{ value: depositAmount }(depositAmount, randomUser, lockupDuration);
