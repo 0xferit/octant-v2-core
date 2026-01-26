@@ -22,7 +22,6 @@ compilation_restrictions = [
     { paths = "src/mechanisms/TokenizedAllocationMechanism.sol", optimizer_runs = 16 },
     { paths = "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol", optimizer_runs = 4096 },
     { paths = "src/guards/KeeperBotGuard.sol", optimizer_runs = 4096 },
-    { paths = "src/utils/routers-transformers/Trader.sol", optimizer_runs = 65536 },
 ]
 
 via_ir = false
