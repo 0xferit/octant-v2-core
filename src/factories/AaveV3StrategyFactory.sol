@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.25;
 
-import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 import { AaveV3Strategy } from "src/strategies/yieldDonating/AaveV3Strategy.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
 
