@@ -4,6 +4,9 @@ pragma solidity ^0.8.25;
 /// @title SkyCompounderTestConfig
 /// @notice Configuration constants for SkyCompounder strategy integration tests
 library SkyCompounderTestConfig {
+    /// @notice Fork block number (latest - 90 days)
+    uint256 internal constant FORK_BLOCK = 22508883 - 6500 * 90;
+
     /// @notice USDS token address on mainnet
     address internal constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
 

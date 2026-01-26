@@ -56,6 +56,11 @@ contract SkyCompounderTest is BaseYieldDonatingIntegrationTest {
 
     // ========== SETUP ==========
 
+    function _setupFork() internal override {
+        mainnetFork = vm.createFork("mainnet", SkyCompounderTestConfig.FORK_BLOCK);
+        vm.selectFork(mainnetFork);
+    }
+
     function _etchImplementation() internal override {
         implementation = new YieldDonatingTokenizedStrategy{ salt: keccak256("OCT_YIELD_DONATING_STRATEGY_V1") }();
     }
