@@ -4,8 +4,7 @@ pragma solidity ^0.8.25;
 import { Script, console } from "forge-std/Script.sol";
 
 import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
-import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
-import { LidoStrategy } from "src/strategies/yieldSkimming/LidoStrategy.sol";
+import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
 
 /**
  * @title GenerateProposalCalldata
@@ -51,7 +50,7 @@ contract GenerateProposalCalldata is Script {
     address constant TOKENIZED_STRATEGY = 0xae2d523179CF2eA3a0750B2015c38c57aB94f77E;
 
     /// @notice LidoStrategyFactory address - PRODUCTION
-    address constant LIDO_STRATEGY_FACTORY = 0x4E1dB81b337231B778C51AB4Bf0c4E8DAE79F9Df;
+    address constant LIDO_STRATEGY_FACTORY = 0xB248Df1fc187Fdb6C89bDc30071e68D235DeC3c2;
 
     /// @notice Dragon Funding Pool recipient address
     /// @dev For testing: using deployer address. Update for production.
@@ -116,7 +115,11 @@ contract GenerateProposalCalldata is Script {
      * @return predictedPaymentSplitter The deterministic address where PaymentSplitter will deploy
      * @return predictedStrategy The deterministic address where LidoStrategy will deploy
      */
-    function getPrecomputedAddresses() public view returns (address predictedPaymentSplitter, address predictedStrategy) {
+    function getPrecomputedAddresses()
+        public
+        view
+        returns (address predictedPaymentSplitter, address predictedStrategy)
+    {
         return _computeAddresses();
     }
 
@@ -182,41 +185,19 @@ contract GenerateProposalCalldata is Script {
         // Predict PaymentSplitter address
         predictedPS = PaymentSplitterFactory(PAYMENT_SPLITTER_FACTORY).predictDeterministicAddress(NOUNS_TREASURY);
 
-        // Predict Strategy address using same logic as LidoStrategyFactory.createStrategy()
-        // Must match EXACTLY: WSTETH, name, symbol, management, keeper, emergencyAdmin, donationAddress, enableBurning, tokenizedStrategy
-        bytes32 parameterHash = keccak256(
-            abi.encode(
-                WSTETH,
-                STRATEGY_NAME,
-                STRATEGY_SYMBOL,
-                NOUNS_TREASURY,
-                KEEPER_BOT,
-                EMERGENCY_ADMIN,
-                predictedPS,
-                false,
-                TOKENIZED_STRATEGY
-            )
-        );
-
-        bytes memory strategyBytecode = abi.encodePacked(
-            type(LidoStrategy).creationCode,
-            abi.encode(
-                WSTETH,
-                STRATEGY_NAME,
-                STRATEGY_SYMBOL,
-                NOUNS_TREASURY,
-                KEEPER_BOT,
-                EMERGENCY_ADMIN,
-                predictedPS,
-                false,
-                TOKENIZED_STRATEGY
-            )
-        );
-
-        predictedStrategy = BaseStrategyFactory(LIDO_STRATEGY_FACTORY).predictStrategyAddress(
-            parameterHash,
-            NOUNS_TREASURY,
-            strategyBytecode
+        // Predict Strategy address using LidoStrategyFactory.computeStrategyAddress()
+        predictedStrategy = LidoStrategyFactory(LIDO_STRATEGY_FACTORY).computeStrategyAddress(
+            WSTETH, // _vault
+            WSTETH, // _asset
+            STRATEGY_NAME,
+            STRATEGY_SYMBOL,
+            NOUNS_TREASURY, // _management
+            KEEPER_BOT, // _keeper
+            EMERGENCY_ADMIN, // _emergencyAdmin
+            predictedPS, // _donationAddress
+            false, // _enableBurning
+            TOKENIZED_STRATEGY, // _tokenizedStrategyAddress
+            NOUNS_TREASURY // _deployer (Treasury will deploy via governance)
         );
     }
 
@@ -257,11 +238,9 @@ contract GenerateProposalCalldata is Script {
      * @return signature Function signature
      * @return calldataParams ABI-encoded parameters
      */
-    function _getTransaction2_DeployStrategy(address paymentSplitter)
-        internal
-        pure
-        returns (address target, uint256 value, string memory signature, bytes memory calldataParams)
-    {
+    function _getTransaction2_DeployStrategy(
+        address paymentSplitter
+    ) internal pure returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
         target = LIDO_STRATEGY_FACTORY;
         value = 0;
         signature = "createStrategy(string,string,address,address,address,address,bool,address)";
@@ -285,11 +264,9 @@ contract GenerateProposalCalldata is Script {
      * @return signature Function signature
      * @return calldataParams ABI-encoded parameters
      */
-    function _getTransaction3_ApproveWstETH(address strategy)
-        internal
-        pure
-        returns (address target, uint256 value, string memory signature, bytes memory calldataParams)
-    {
+    function _getTransaction3_ApproveWstETH(
+        address strategy
+    ) internal pure returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
         target = WSTETH;
         value = 0;
         signature = "approve(address,uint256)";
@@ -304,11 +281,9 @@ contract GenerateProposalCalldata is Script {
      * @return signature Function signature
      * @return calldataParams ABI-encoded parameters
      */
-    function _getTransaction4_DepositWstETH(address strategy)
-        internal
-        pure
-        returns (address target, uint256 value, string memory signature, bytes memory calldataParams)
-    {
+    function _getTransaction4_DepositWstETH(
+        address strategy
+    ) internal pure returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
         target = strategy;
         value = 0;
         signature = "deposit(uint256,address)";
@@ -320,7 +295,12 @@ contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
 
     function _printTransaction1_DeployPaymentSplitter() internal pure {
-        (address target, , string memory signature, bytes memory calldataParams) = _getTransaction1_DeployPaymentSplitter();
+        (
+            address target,
+            ,
+            string memory signature,
+            bytes memory calldataParams
+        ) = _getTransaction1_DeployPaymentSplitter();
 
         console.log("");
         console.log("================================================================================");
@@ -338,7 +318,7 @@ contract GenerateProposalCalldata is Script {
         console.log("");
         console.log("PARAMETERS:");
         console.log("  payees:     [", DRAGON_FUNDING_POOL, "]");
-        console.log("  payeeNames: [\"NounsGrants\"]");
+        console.log('  payeeNames: ["NounsGrants"]');
         console.log("  shares:     [100]");
         console.log("");
         console.log("CALLDATA (copy this - parameters only, no selector):");
@@ -346,7 +326,9 @@ contract GenerateProposalCalldata is Script {
     }
 
     function _printTransaction2_DeployStrategy(address paymentSplitter) internal pure {
-        (address target, , string memory signature, bytes memory calldataParams) = _getTransaction2_DeployStrategy(paymentSplitter);
+        (address target, , string memory signature, bytes memory calldataParams) = _getTransaction2_DeployStrategy(
+            paymentSplitter
+        );
 
         console.log("");
         console.log("================================================================================");
@@ -377,7 +359,9 @@ contract GenerateProposalCalldata is Script {
     }
 
     function _printTransaction3_ApproveWstETH(address strategy) internal pure {
-        (address target, , string memory signature, bytes memory calldataParams) = _getTransaction3_ApproveWstETH(strategy);
+        (address target, , string memory signature, bytes memory calldataParams) = _getTransaction3_ApproveWstETH(
+            strategy
+        );
 
         console.log("");
         console.log("================================================================================");
@@ -402,7 +386,9 @@ contract GenerateProposalCalldata is Script {
     }
 
     function _printTransaction4_DepositWstETH(address strategy) internal pure {
-        (address target, , string memory signature, bytes memory calldataParams) = _getTransaction4_DepositWstETH(strategy);
+        (address target, , string memory signature, bytes memory calldataParams) = _getTransaction4_DepositWstETH(
+            strategy
+        );
 
         console.log("");
         console.log("================================================================================");
