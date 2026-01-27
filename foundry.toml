@@ -5,24 +5,7 @@ libs = ["dependencies"]
 evm_version = "prague"
 optimizer = true
 # Default runs target balanced gas/size; size-limited contracts override below.
-optimizer_runs = 1048576
-additional_compiler_profiles = [
-    { name = "enormous", optimizer = true, optimizer_runs = 1 },
-    { name = "gigantic", optimizer = true, optimizer_runs = 16 },
-    { name = "huge", optimizer = true, optimizer_runs = 256 },
-    { name = "large", optimizer = true, optimizer_runs = 4096 },
-    { name = "medium", optimizer = true, optimizer_runs = 65536 },
-]
-compilation_restrictions = [
-    { paths = "src/zodiac-core/vaults/Passport.sol", optimizer_runs = 1 },
-    { paths = "src/core/MultistrategyLockedVault.sol", optimizer_runs = 16 },
-    { paths = "src/core/MultistrategyVault.sol", optimizer_runs = 16 },
-    { paths = "src/regen/RegenStaker.sol", optimizer_runs = 16 },
-    { paths = "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol", optimizer_runs = 16 },
-    { paths = "src/mechanisms/TokenizedAllocationMechanism.sol", optimizer_runs = 16 },
-    { paths = "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol", optimizer_runs = 4096 },
-    { paths = "src/guards/KeeperBotGuard.sol", optimizer_runs = 4096 },
-]
+optimizer_runs = 1
 
 via_ir = false
 solc = "0.8.33"
