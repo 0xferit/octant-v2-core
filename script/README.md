@@ -9,4 +9,3 @@ Script directories:
 - `deployment` - scripts used to deploy on CD envs
 - `helpers` - TBD
 - `prod` - TBD
-- `trader` - TBD

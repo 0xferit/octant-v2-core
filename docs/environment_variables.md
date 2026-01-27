@@ -23,7 +23,6 @@
 | `SAFE_TOTAL_OWNERS`                |                                                                                                                      |
 | `TOKEN`                            |                                                                                                                      |
 | `TOTAL_VALIDATORS`                 |                                                                                                                      |
-| `TRADER`                           |                                                                                                                      |
 | `TREASURY`                         |                                                                                                                      |
 
 ## Tests

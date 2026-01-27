@@ -21,7 +21,6 @@ contract HelperConfig is Script {
         address nonfungiblePositionManager;
         uint256 deployerKey;
         address uniswapV3Router;
-        address trader;
         address swapperFactory;
         address oracleFactory;
         address uniV3Swap;
@@ -75,7 +74,6 @@ contract HelperConfig is Script {
                 nonfungiblePositionManager: 0xC8118AcDf29cBa90c3142437c0e84AE3902bfA74,
                 uniswapV3Router: 0xD6601e25cF43CAc433A23cB95a39D38012B2e9f0,
                 deployerKey: deployerKey,
-                trader: 0xc654a254EEab4c65F8a786f8c1516ea7e9824daF,
                 swapperFactory: 0xa244bbe019cf1BA177EE5A532250be2663Fb55cA,
                 oracleFactory: 0x074827E8bD77B0A66c6008a51AF9BD1F33105caf,
                 uniV3Swap: 0x981a6aC55c7D39f50666938CcD0df53D59797e87,
@@ -101,7 +99,6 @@ contract HelperConfig is Script {
                 nonfungiblePositionManager: 0xC36442b4a4522E871399CD717aBDD847Ab11FE88,
                 uniswapV3Router: 0xE592427A0AEce92De3Edee1F18E0157C05861564,
                 deployerKey: deployerKey,
-                trader: address(0),
                 swapperFactory: 0xa244bbe019cf1BA177EE5A532250be2663Fb55cA,
                 oracleFactory: 0x498f316fEB85a250fdC64B859a130515491EC888,
                 uniV3Swap: 0x981a6aC55c7D39f50666938CcD0df53D59797e87,
@@ -143,7 +140,6 @@ contract HelperConfig is Script {
                 nonfungiblePositionManager: address(0), // deploy
                 uniswapV3Router: address(0),
                 deployerKey: DEFAULT_ANVIL_KEY,
-                trader: address(0),
                 swapperFactory: address(0),
                 oracleFactory: address(0),
                 uniV3Swap: address(0),

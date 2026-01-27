@@ -147,9 +147,6 @@ Shared utilities and helper contracts:
 - **libs/**: Utility libraries
   - `Maths/WadRay.sol`: Mathematical operations with WAD/RAY precision
   - `Safe/MultiSendCallOnly.sol`: Safe multi-transaction utilities
-- **routers-transformers/**: Trading and transformation utilities
-  - `Trader.sol`: DCA trading functionality
-  - `TraderBotEntry.sol`: Bot entry point for automated trading
 - **vendor/**: Third-party integrations and interfaces
   - `0xSplits/`: 0xSplits protocol interfaces and utilities
   - `shamirlabs/`: Shamir Labs interfaces
@@ -174,7 +171,6 @@ Module-specific focused testing:
   - `harness/`: Test harness contracts
 - **factories/**: Factory contract tests
 - **utils/**: Utility contract tests
-  - `routers-transformers/`: Trading functionality tests
   - `addressset/`: Address set functionality tests
 - **zodiac-core/**: Dragon protocol unit tests
   - `vaults/`: Dragon-specific vault tests
