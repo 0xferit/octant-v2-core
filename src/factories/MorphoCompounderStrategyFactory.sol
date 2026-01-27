@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.25;
 
-import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 import { MorphoCompounderStrategy } from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
 import { BaseStrategyFactory } from "src/factories/BaseStrategyFactory.sol";
 
@@ -95,5 +94,56 @@ contract MorphoCompounderStrategyFactory is BaseStrategyFactory {
 
         emit StrategyDeploy(msg.sender, _donationAddress, strategyAddress, _name);
         return strategyAddress;
+    }
+
+    /// @inheritdoc BaseStrategyFactory
+    function computeStrategyAddress(
+        address _vault,
+        address _asset,
+        string memory _name,
+        string memory _symbol,
+        address _management,
+        address _keeper,
+        address _emergencyAdmin,
+        address _donationAddress,
+        bool _enableBurning,
+        address _tokenizedStrategyAddress,
+        address _deployer
+    ) public view override returns (address) {
+        if (_vault != YS_USDC) revert InvalidVault(_vault, YS_USDC);
+        if (_asset != USDC) revert InvalidAsset(_asset, USDC);
+
+        bytes32 parameterHash = keccak256(
+            abi.encode(
+                YS_USDC,
+                USDC,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        bytes memory bytecode = abi.encodePacked(
+            type(MorphoCompounderStrategy).creationCode,
+            abi.encode(
+                YS_USDC,
+                USDC,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        return _predictStrategyAddress(parameterHash, _deployer, bytecode);
     }
 }

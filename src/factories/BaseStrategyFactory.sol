@@ -37,43 +37,78 @@ abstract contract BaseStrategyFactory {
 
     // Custom errors
     error StrategyAlreadyExists(address existingStrategy);
+    error InvalidVault(address provided, address expected);
+    error InvalidAsset(address provided, address expected);
 
     // Note: Child factories should declare and emit their own `StrategyDeploy` event for compatibility.
 
     /**
-     * @notice Predict deployment address using strategy parameter hash
-     * @dev Combines parameter hash with deployer address for deterministic deployment
+     * @notice Compute the deterministic address where a strategy will be deployed
+     * @dev Must be implemented by child factories using their own bytecode
+     * @param _vault Vault address (e.g., Yearn vault, or factory constant for hardcoded vaults)
+     * @param _asset Underlying asset address (or factory constant for hardcoded assets)
+     * @param _name Strategy share token name
+     * @param _symbol Strategy share token symbol
+     * @param _management Management address
+     * @param _keeper Keeper address
+     * @param _emergencyAdmin Emergency admin address
+     * @param _donationAddress Donation address
+     * @param _enableBurning Enable burning flag
+     * @param _tokenizedStrategyAddress TokenizedStrategy implementation
+     * @param _deployer Address that will deploy the strategy
+     * @return Predicted strategy address
+     */
+    function computeStrategyAddress(
+        address _vault,
+        address _asset,
+        string memory _name,
+        string memory _symbol,
+        address _management,
+        address _keeper,
+        address _emergencyAdmin,
+        address _donationAddress,
+        bool _enableBurning,
+        address _tokenizedStrategyAddress,
+        address _deployer
+    ) public view virtual returns (address);
+
+    /**
+     * @dev Internal helper to predict deterministic deployment address
+     * @dev Single source of truth for salt computation - used by child factories' computeStrategyAddress
      * @param _parameterHash Hash of all strategy parameters
-     * @param deployer Deployer address
-     * @param bytecode Deployment bytecode (including constructor args)
+     * @param _deployer Deployer address
+     * @param _bytecode Deployment bytecode (including constructor args)
      * @return Predicted contract address
      */
-    function predictStrategyAddress(
+    function _predictStrategyAddress(
         bytes32 _parameterHash,
-        address deployer,
-        bytes memory bytecode
-    ) external view returns (address) {
-        bytes32 finalSalt = keccak256(abi.encodePacked(_parameterHash, deployer));
-        return Create2.computeAddress(finalSalt, keccak256(bytecode));
+        address _deployer,
+        bytes memory _bytecode
+    ) internal view returns (address) {
+        bytes32 finalSalt = keccak256(abi.encodePacked(_parameterHash, _deployer));
+        return Create2.computeAddress(finalSalt, keccak256(_bytecode));
     }
 
     /**
      * @dev Internal function to deploy strategy using CREATE2
-     * @param bytecode Deployment bytecode including constructor args
+     * @param _bytecode Deployment bytecode including constructor args
      * @param _parameterHash Hash of all strategy parameters for deterministic deployment
      * @return strategyAddress Deployed strategy address
      */
-    function _deployStrategy(bytes memory bytecode, bytes32 _parameterHash) internal returns (address strategyAddress) {
+    function _deployStrategy(
+        bytes memory _bytecode,
+        bytes32 _parameterHash
+    ) internal returns (address strategyAddress) {
         bytes32 finalSalt = keccak256(abi.encodePacked(_parameterHash, msg.sender));
 
         // Check if strategy would be deployed to an existing address
-        address predictedAddress = Create2.computeAddress(finalSalt, keccak256(bytecode));
+        address predictedAddress = _predictStrategyAddress(_parameterHash, msg.sender, _bytecode);
 
         if (predictedAddress.code.length > 0) {
             revert StrategyAlreadyExists(predictedAddress);
         }
 
-        strategyAddress = Create2.deploy(0, finalSalt, bytecode);
+        strategyAddress = Create2.deploy(0, finalSalt, _bytecode);
     }
 
     /**

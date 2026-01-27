@@ -91,6 +91,39 @@ abstract contract BaseERC4626StrategyFactory is BaseStrategyFactory {
      */
     function _getCreationCode() internal pure virtual returns (bytes memory);
 
+    /// @inheritdoc BaseStrategyFactory
+    function computeStrategyAddress(
+        address _vault,
+        address _asset,
+        string memory _name,
+        string memory _symbol,
+        address _management,
+        address _keeper,
+        address _emergencyAdmin,
+        address _donationAddress,
+        bool _enableBurning,
+        address _tokenizedStrategyAddress,
+        address _deployer
+    ) public view override returns (address) {
+        bytes memory constructorArgs = abi.encode(
+            _vault,
+            _asset,
+            _name,
+            _symbol,
+            _management,
+            _keeper,
+            _emergencyAdmin,
+            _donationAddress,
+            _enableBurning,
+            _tokenizedStrategyAddress
+        );
+
+        bytes32 parameterHash = keccak256(constructorArgs);
+        bytes memory bytecode = abi.encodePacked(_getCreationCode(), constructorArgs);
+
+        return _predictStrategyAddress(parameterHash, _deployer, bytecode);
+    }
+
     /**
      * @dev Internal function to deploy strategy with given parameters
      * @param params Strategy creation parameters

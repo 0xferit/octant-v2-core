@@ -108,4 +108,52 @@ contract YearnV3StrategyFactory is BaseStrategyFactory {
         emit StrategyDeploy(_management, _donationAddress, strategyAddress, _name);
         return strategyAddress;
     }
+
+    /// @inheritdoc BaseStrategyFactory
+    function computeStrategyAddress(
+        address _vault,
+        address _asset,
+        string memory _name,
+        string memory _symbol,
+        address _management,
+        address _keeper,
+        address _emergencyAdmin,
+        address _donationAddress,
+        bool _enableBurning,
+        address _tokenizedStrategyAddress,
+        address _deployer
+    ) public view override returns (address) {
+        bytes32 parameterHash = keccak256(
+            abi.encode(
+                _vault,
+                _asset,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        bytes memory bytecode = abi.encodePacked(
+            type(YearnV3Strategy).creationCode,
+            abi.encode(
+                _vault,
+                _asset,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        return _predictStrategyAddress(parameterHash, _deployer, bytecode);
+    }
 }

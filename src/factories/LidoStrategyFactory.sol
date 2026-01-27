@@ -101,4 +101,53 @@ contract LidoStrategyFactory is BaseStrategyFactory {
         // Record the deployment
         _recordStrategy(_name, _donationAddress, strategyAddress);
     }
+
+    /// @inheritdoc BaseStrategyFactory
+    function computeStrategyAddress(
+        address _vault,
+        address _asset,
+        string memory _name,
+        string memory _symbol,
+        address _management,
+        address _keeper,
+        address _emergencyAdmin,
+        address _donationAddress,
+        bool _enableBurning,
+        address _tokenizedStrategyAddress,
+        address _deployer
+    ) public view override returns (address) {
+        if (_vault != WSTETH) revert InvalidVault(_vault, WSTETH);
+        if (_asset != WSTETH) revert InvalidAsset(_asset, WSTETH);
+
+        bytes32 parameterHash = keccak256(
+            abi.encode(
+                WSTETH,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        bytes memory bytecode = abi.encodePacked(
+            type(LidoStrategy).creationCode,
+            abi.encode(
+                WSTETH,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        return _predictStrategyAddress(parameterHash, _deployer, bytecode);
+    }
 }

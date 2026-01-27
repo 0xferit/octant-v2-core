@@ -88,4 +88,53 @@ contract RocketPoolStrategyFactory is BaseStrategyFactory {
         // Record the deployment
         _recordStrategy(_name, _donationAddress, strategyAddress);
     }
+
+    /// @inheritdoc BaseStrategyFactory
+    function computeStrategyAddress(
+        address _vault,
+        address _asset,
+        string memory _name,
+        string memory _symbol,
+        address _management,
+        address _keeper,
+        address _emergencyAdmin,
+        address _donationAddress,
+        bool _enableBurning,
+        address _tokenizedStrategyAddress,
+        address _deployer
+    ) public view override returns (address) {
+        if (_vault != R_ETH) revert InvalidVault(_vault, R_ETH);
+        if (_asset != R_ETH) revert InvalidAsset(_asset, R_ETH);
+
+        bytes32 parameterHash = keccak256(
+            abi.encode(
+                R_ETH,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        bytes memory bytecode = abi.encodePacked(
+            type(RocketPoolStrategy).creationCode,
+            abi.encode(
+                R_ETH,
+                _name,
+                _symbol,
+                _management,
+                _keeper,
+                _emergencyAdmin,
+                _donationAddress,
+                _enableBurning,
+                _tokenizedStrategyAddress
+            )
+        );
+
+        return _predictStrategyAddress(parameterHash, _deployer, bytecode);
+    }
 }
