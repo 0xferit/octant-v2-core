@@ -21,7 +21,9 @@ Before running, update the constants in the script (lines 46-77):
 | `KEEPER_BOT` | Address authorized to call `report()` |
 | `EMERGENCY_ADMIN` | Emergency admin address |
 | `STRATEGY_NAME` | Name for the strategy token |
-| `DEPOSIT_AMOUNT` | wstETH amount to deposit (in wei) |
+| `TARGET_ETH_VALUE` | ETH value to deposit (converted to wstETH at current exchange rate) |
+
+**Note:** The `TARGET_ETH_VALUE` is specified in ETH (e.g., `1000 ether`). At script execution time, it is converted to the equivalent wstETH amount by calling `wstETH.getWstETHByStETH()`. This ensures the deposited amount is always worth the target ETH value, regardless of the stETH/wstETH exchange rate.
 
 ## Output
 

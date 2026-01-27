@@ -37,6 +37,12 @@ interface INounsToken {
     function balanceOf(address owner) external view returns (uint256);
 }
 
+/// @notice Minimal wstETH interface for ETH value conversion
+interface IWstETH {
+    /// @notice Get amount of stETH (≈ ETH) for a given amount of wstETH
+    function getStETHByWstETH(uint256 _wstETHAmount) external view returns (uint256);
+}
+
 /**
  * @title GenerateProposalCalldata Governance Flow Test
  * @notice End-to-end test that DIRECTLY CALLS GenerateProposalCalldata.s.sol to get proposal data
@@ -89,7 +95,10 @@ contract GenerateProposalCalldataGovernanceTest is Test {
     /// @notice Nouns Treasury address (from script)
     address public nounsTreasury;
 
-    /// @notice Deposit amount (from script)
+    /// @notice Target ETH value to deposit (from script)
+    uint256 public targetEthValue;
+
+    /// @notice Deposit amount in wstETH (from script, computed at current rate)
     uint256 public depositAmount;
 
     /// @notice Actual deployed addresses (captured from events after execution)
@@ -116,6 +125,7 @@ contract GenerateProposalCalldataGovernanceTest is Test {
 
         // Get values directly from the script
         nounsTreasury = script.getNounsTreasury();
+        targetEthValue = script.getTargetEthValue();
         depositAmount = script.getDepositAmount();
 
         // Label addresses for better traces
@@ -371,6 +381,18 @@ contract GenerateProposalCalldataGovernanceTest is Test {
             depositAmount,
             0.01e18, // 1% tolerance
             "Shares should be redeemable for ~deposit amount"
+        );
+
+        // ════════════════════════════════════════════════════════════════════════
+        // VERIFY: Deposited wstETH is worth TARGET_ETH_VALUE (1000 ETH)
+        // ════════════════════════════════════════════════════════════════════════
+        // Convert deposited wstETH back to stETH (≈ ETH) to verify the value
+        uint256 depositedEthValue = IWstETH(WSTETH).getStETHByWstETH(strategyAssets);
+        assertApproxEqRel(
+            depositedEthValue,
+            targetEthValue,
+            0.001e16, // 0.001% tolerance (exchange rate shouldn't change much during test)
+            "Deposited wstETH should be worth ~1000 ETH"
         );
     }
 

@@ -6,6 +6,19 @@ import { Script, console } from "forge-std/Script.sol";
 import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
 import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
 
+/// @notice Minimal interface for wstETH conversion functions
+interface IWstETH {
+    /// @notice Get amount of wstETH for a given amount of stETH
+    /// @param _stETHAmount Amount of stETH (≈ ETH value)
+    /// @return Amount of wstETH
+    function getWstETHByStETH(uint256 _stETHAmount) external view returns (uint256);
+
+    /// @notice Get amount of stETH for a given amount of wstETH
+    /// @param _wstETHAmount Amount of wstETH
+    /// @return Amount of stETH (≈ ETH value)
+    function getStETHByWstETH(uint256 _wstETHAmount) external view returns (uint256);
+}
+
 /**
  * @title GenerateProposalCalldata
  * @notice Generates calldata for Nouns DAO proposal to deploy Lido yield strategy
@@ -71,10 +84,10 @@ contract GenerateProposalCalldata is Script {
     /// @notice Strategy symbol (share token symbol)
     string constant STRATEGY_SYMBOL = "ysNounsLido";
 
-    /// @notice Amount of wstETH to deposit (18 decimals)
-    /// @dev 1000 wstETH = 1000e18 = 1000000000000000000000
-    /// @dev TODO: Set actual deposit amount
-    uint256 constant DEPOSIT_AMOUNT = 1000e18;
+    /// @notice Target ETH value to deposit (will be converted to wstETH at current rate)
+    /// @dev 1000 ETH = 1000e18 = 1000000000000000000000
+    /// @dev The actual wstETH amount deposited depends on the stETH/wstETH exchange rate at execution time
+    uint256 constant TARGET_ETH_VALUE = 1000 ether;
 
     // ══════════════════════════════════════════════════════════════════════════════
     // MAIN SCRIPT
@@ -162,11 +175,21 @@ contract GenerateProposalCalldata is Script {
     }
 
     /**
-     * @notice Get the deposit amount configured in the script
-     * @return The wstETH deposit amount in wei
+     * @notice Get the target ETH value to deposit
+     * @return The target ETH value (before conversion to wstETH)
      */
-    function getDepositAmount() public pure returns (uint256) {
-        return DEPOSIT_AMOUNT;
+    function getTargetEthValue() public pure returns (uint256) {
+        return TARGET_ETH_VALUE;
+    }
+
+    /**
+     * @notice Get the wstETH deposit amount by converting TARGET_ETH_VALUE at current exchange rate
+     * @dev Calls wstETH contract to convert stETH amount (≈ ETH) to wstETH
+     *      Since stETH ≈ ETH (1:1 peg), TARGET_ETH_VALUE in stETH ≈ TARGET_ETH_VALUE in ETH
+     * @return The wstETH deposit amount at current exchange rate
+     */
+    function getDepositAmount() public view returns (uint256) {
+        return IWstETH(WSTETH).getWstETHByStETH(TARGET_ETH_VALUE);
     }
 
     /**
@@ -266,11 +289,11 @@ contract GenerateProposalCalldata is Script {
      */
     function _getTransaction3_ApproveWstETH(
         address strategy
-    ) internal pure returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
+    ) internal view returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
         target = WSTETH;
         value = 0;
         signature = "approve(address,uint256)";
-        calldataParams = abi.encode(strategy, DEPOSIT_AMOUNT);
+        calldataParams = abi.encode(strategy, getDepositAmount());
     }
 
     /**
@@ -283,11 +306,11 @@ contract GenerateProposalCalldata is Script {
      */
     function _getTransaction4_DepositWstETH(
         address strategy
-    ) internal pure returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
+    ) internal view returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
         target = strategy;
         value = 0;
         signature = "deposit(uint256,address)";
-        calldataParams = abi.encode(DEPOSIT_AMOUNT, NOUNS_TREASURY);
+        calldataParams = abi.encode(getDepositAmount(), NOUNS_TREASURY);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -358,10 +381,11 @@ contract GenerateProposalCalldata is Script {
         console.logBytes(calldataParams);
     }
 
-    function _printTransaction3_ApproveWstETH(address strategy) internal pure {
+    function _printTransaction3_ApproveWstETH(address strategy) internal view {
         (address target, , string memory signature, bytes memory calldataParams) = _getTransaction3_ApproveWstETH(
             strategy
         );
+        uint256 depositAmount = getDepositAmount();
 
         console.log("");
         console.log("================================================================================");
@@ -379,16 +403,17 @@ contract GenerateProposalCalldata is Script {
         console.log("");
         console.log("PARAMETERS:");
         console.log("  spender: ", strategy);
-        console.log("  amount:  %s (%s wstETH)", DEPOSIT_AMOUNT, DEPOSIT_AMOUNT / 1e18);
+        console.log("  amount:  %s wstETH (= %s ETH value)", depositAmount / 1e18, TARGET_ETH_VALUE / 1e18);
         console.log("");
         console.log("CALLDATA (copy this - parameters only, no selector):");
         console.logBytes(calldataParams);
     }
 
-    function _printTransaction4_DepositWstETH(address strategy) internal pure {
+    function _printTransaction4_DepositWstETH(address strategy) internal view {
         (address target, , string memory signature, bytes memory calldataParams) = _getTransaction4_DepositWstETH(
             strategy
         );
+        uint256 depositAmount = getDepositAmount();
 
         console.log("");
         console.log("================================================================================");
@@ -405,7 +430,7 @@ contract GenerateProposalCalldata is Script {
         console.log("  ", signature);
         console.log("");
         console.log("PARAMETERS:");
-        console.log("  assets:   %s (%s wstETH)", DEPOSIT_AMOUNT, DEPOSIT_AMOUNT / 1e18);
+        console.log("  assets:   %s wstETH (= %s ETH value)", depositAmount / 1e18, TARGET_ETH_VALUE / 1e18);
         console.log("  receiver: ", NOUNS_TREASURY);
         console.log("");
         console.log("CALLDATA (copy this - parameters only, no selector):");
@@ -463,7 +488,8 @@ contract GenerateProposalCalldata is Script {
         console.log("");
     }
 
-    function _printConfiguration() internal pure {
+    function _printConfiguration() internal view {
+        uint256 depositAmount = getDepositAmount();
         console.log("CONFIGURATION:");
         console.log("--------------------------------------------------------------------------------");
         console.log("  Treasury (Management):    ", NOUNS_TREASURY);
@@ -476,7 +502,8 @@ contract GenerateProposalCalldata is Script {
         console.log("  Tokenized Strategy Impl:  ", TOKENIZED_STRATEGY);
         console.log("  Strategy Name:             %s", STRATEGY_NAME);
         console.log("  Strategy Symbol:           %s", STRATEGY_SYMBOL);
-        console.log("  Deposit Amount:            %s wstETH", DEPOSIT_AMOUNT / 1e18);
+        console.log("  Target ETH Value:          %s ETH", TARGET_ETH_VALUE / 1e18);
+        console.log("  Deposit Amount:            %s wstETH (at current rate)", depositAmount / 1e18);
         console.log("");
     }
 
