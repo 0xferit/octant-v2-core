@@ -86,8 +86,6 @@ contract GenerateProposalCalldataGovernanceTest is Test {
 
     uint256 public mainnetFork;
     uint256 public proposalId;
-    address public testProposer;
-    address public testVoter;
 
     /// @notice The script instance - this is what we're testing
     GenerateProposalCalldata public script;
@@ -114,10 +112,6 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         mainnetFork = vm.createFork("mainnet");
         vm.selectFork(mainnetFork);
 
-        // Create test addresses
-        testProposer = makeAddr("testProposer");
-        testVoter = makeAddr("testVoter");
-
         // ════════════════════════════════════════════════════════════════════════
         // INSTANTIATE THE SCRIPT - This is the key part!
         // ════════════════════════════════════════════════════════════════════════
@@ -133,8 +127,6 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         vm.label(nounsTreasury, "NounsExecutor");
         vm.label(NOUNS_TOKEN, "NounsToken");
         vm.label(WSTETH, "wstETH");
-        vm.label(testProposer, "TestProposer");
-        vm.label(testVoter, "TestVoter");
         vm.label(address(script), "GenerateProposalCalldata");
     }
 
@@ -145,17 +137,19 @@ contract GenerateProposalCalldataGovernanceTest is Test {
     /**
      * @notice Full governance flow test using calldata directly from GenerateProposalCalldata.s.sol
      * @dev The test calls script.getProposalTransactions() to get the exact calldata
+     *      Uses the treasury directly for proposing and voting (it has sufficient voting power)
      */
     function test_fullGovernanceFlowWithScriptCalldata() public {
         INounsDAOProxy dao = INounsDAOProxy(NOUNS_DAO_PROXY);
-        INounsToken nounsToken = INounsToken(NOUNS_TOKEN);
 
         // Precondition: Treasury must have sufficient wstETH
         uint256 treasuryWstETH = IERC20(WSTETH).balanceOf(nounsTreasury);
         require(treasuryWstETH >= depositAmount, "Treasury has insufficient wstETH");
 
-        // Step 0: Setup voting power
-        _setupVotingPower(dao, nounsToken);
+        // Precondition: Treasury must have sufficient voting power
+        uint96 treasuryVotes = INounsToken(NOUNS_TOKEN).getCurrentVotes(nounsTreasury);
+        uint256 proposalThreshold = dao.proposalThreshold();
+        require(treasuryVotes > proposalThreshold, "Treasury needs more votes to propose");
 
         // Step 1: Create proposal using EXACT calldata from the script
         _createProposalFromScript(dao);
@@ -177,64 +171,9 @@ contract GenerateProposalCalldataGovernanceTest is Test {
     // STEP IMPLEMENTATIONS
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function _setupVotingPower(INounsDAOProxy dao, INounsToken nounsToken) internal {
-        uint256 proposalThreshold = dao.proposalThreshold();
-
-        // Transfer Nouns from treasury to proposer (need threshold + 1)
-        uint256 proposerNounsNeeded = proposalThreshold + 1;
-        uint256 found = 0;
-
-        for (uint256 tokenId = 20; tokenId < 1000 && found < proposerNounsNeeded; tokenId++) {
-            try nounsToken.ownerOf(tokenId) returns (address owner) {
-                if (owner == nounsTreasury) {
-                    vm.prank(nounsTreasury);
-                    nounsToken.transferFrom(nounsTreasury, testProposer, tokenId);
-                    found++;
-                }
-            } catch {
-                continue;
-            }
-        }
-        require(found >= proposerNounsNeeded, "Could not find enough Nouns for proposer");
-
-        // Delegate proposer's Nouns to self
-        vm.prank(testProposer);
-        nounsToken.delegate(testProposer);
-
-        // Transfer Nouns to voter (need ~150 for quorum)
-        uint256 voterNounsNeeded = 150;
-        found = 0;
-
-        for (uint256 tokenId = 100; tokenId < 2000 && found < voterNounsNeeded; tokenId++) {
-            try nounsToken.ownerOf(tokenId) returns (address owner) {
-                if (owner == nounsTreasury) {
-                    vm.prank(nounsTreasury);
-                    nounsToken.transferFrom(nounsTreasury, testVoter, tokenId);
-                    found++;
-                }
-            } catch {
-                continue;
-            }
-        }
-        require(found >= 100, "Could not find enough Nouns for voter");
-
-        // Delegate voter's Nouns to self
-        vm.prank(testVoter);
-        nounsToken.delegate(testVoter);
-
-        // Roll forward to ensure delegation takes effect
-        vm.roll(block.number + 1);
-
-        // Verify voting power
-        uint96 proposerVotes = nounsToken.getCurrentVotes(testProposer);
-        uint96 voterVotes = nounsToken.getCurrentVotes(testVoter);
-        require(proposerVotes > proposalThreshold, "Proposer needs more votes");
-        require(voterVotes >= 100, "Voter needs more votes");
-    }
-
     /**
      * @notice Create proposal by calling getProposalTransactions() on the actual script
-     * @dev This is the key test - we use the EXACT output from GenerateProposalCalldata.s.sol
+     * @dev Uses the treasury directly as proposer (it already has sufficient voting power)
      */
     function _createProposalFromScript(INounsDAOProxy dao) internal {
         // ════════════════════════════════════════════════════════════════════════
@@ -254,7 +193,8 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         assertEq(calldatas.length, 4, "Script should return 4 calldatas");
 
         // Create the proposal using the script's exact output
-        vm.prank(testProposer);
+        // Treasury proposes directly (it has sufficient voting power)
+        vm.prank(nounsTreasury);
         proposalId = dao.propose(
             targets,
             values,
@@ -276,15 +216,10 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         uint8 state = dao.state(proposalId);
         assertEq(state, 1, "Proposal should be Active");
 
-        // Vote from proposer
-        vm.prank(testProposer);
-        (bool success1, ) = address(dao).call(abi.encodeWithSignature("castVote(uint256,uint8)", proposalId, VOTE_FOR));
-        require(success1, "Proposer vote failed");
-
-        // Vote from voter
-        vm.prank(testVoter);
-        (bool success2, ) = address(dao).call(abi.encodeWithSignature("castVote(uint256,uint8)", proposalId, VOTE_FOR));
-        require(success2, "Voter vote failed");
+        // Vote from treasury (it has sufficient voting power for quorum)
+        vm.prank(nounsTreasury);
+        (bool success, ) = address(dao).call(abi.encodeWithSignature("castVote(uint256,uint8)", proposalId, VOTE_FOR));
+        require(success, "Treasury vote failed");
 
         // Roll to end of voting
         vm.roll(_getProposalEndBlock(proposalId) + 1);
