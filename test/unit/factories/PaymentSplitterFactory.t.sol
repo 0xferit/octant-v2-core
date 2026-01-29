@@ -281,6 +281,354 @@ contract PaymentSplitterFactoryTest is Test {
         }
     }
 
+    // Test creating PaymentSplitter with explicit salt
+    function testCreatePaymentSplitterWithSalt() public {
+        // Prepare payees and shares
+        address[] memory payees = new address[](2);
+        payees[0] = alice;
+        payees[1] = bob;
+
+        string[] memory payeeNames = new string[](2);
+        payeeNames[0] = "Recipient1";
+        payeeNames[1] = "Recipient2";
+
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = 60;
+        shares[1] = 40;
+
+        bytes32 salt = keccak256("test-salt-v1");
+
+        // Predict address before deployment (now includes payees and shares)
+        address predictedAddress = factory.predictDeterministicAddressWithSalt(address(this), payees, shares, salt);
+
+        // Create PaymentSplitter with salt
+        address splitterAddress = factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt);
+
+        // Verify predicted address matches actual
+        assertEq(splitterAddress, predictedAddress, "Address should match prediction");
+
+        // Verify splitter state
+        PaymentSplitter splitter = PaymentSplitter(payable(splitterAddress));
+        assertEq(splitter.totalShares(), 100);
+        assertEq(splitter.shares(alice), 60);
+        assertEq(splitter.shares(bob), 40);
+    }
+
+    // Test that salt-based deployment is independent of deployment count
+    function testSaltIndependentOfDeploymentCount() public {
+        // Prepare payees and shares
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 fixedSalt = keccak256("governance-proposal-v1");
+
+        // Predict address with salt BEFORE any deployments (includes payees and shares)
+        address predictedWithSalt = factory.predictDeterministicAddressWithSalt(
+            address(this),
+            payees,
+            shares,
+            fixedSalt
+        );
+
+        // Deploy some splitters using the count-based method
+        factory.createPaymentSplitter(payees, payeeNames, shares);
+        factory.createPaymentSplitter(payees, payeeNames, shares);
+        factory.createPaymentSplitter(payees, payeeNames, shares);
+
+        // Verify count has changed
+        assertEq(factory.getSplittersByDeployer(address(this)).length, 3);
+
+        // Predict address with same salt AFTER deployments - should be unchanged
+        address predictedWithSaltAfter = factory.predictDeterministicAddressWithSalt(
+            address(this),
+            payees,
+            shares,
+            fixedSalt
+        );
+        assertEq(predictedWithSaltAfter, predictedWithSalt, "Salt-based prediction should be independent of count");
+
+        // Actually deploy with salt - should match original prediction
+        address actualAddress = factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, fixedSalt);
+        assertEq(actualAddress, predictedWithSalt, "Deployed address should match original prediction");
+    }
+
+    // Test that same salt cannot be used twice by same deployer
+    function testCannotReuseSalt() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 salt = keccak256("unique-salt");
+
+        // First deployment succeeds
+        factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt);
+
+        // Second deployment with same salt should fail (CREATE2 collision)
+        vm.expectRevert();
+        factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt);
+    }
+
+    // Test creating PaymentSplitter with ETH and explicit salt
+    function testCreatePaymentSplitterWithETHAndSalt() public {
+        address[] memory payees = new address[](2);
+        payees[0] = alice;
+        payees[1] = bob;
+
+        string[] memory payeeNames = new string[](2);
+        payeeNames[0] = "Recipient1";
+        payeeNames[1] = "Recipient2";
+
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = 70;
+        shares[1] = 30;
+
+        bytes32 salt = keccak256("eth-salt-test-v1");
+        uint256 ethAmount = 5 ether;
+
+        // Predict address before deployment
+        address predictedAddress = factory.predictDeterministicAddressWithSalt(address(this), payees, shares, salt);
+
+        // Create PaymentSplitter with ETH and salt
+        address splitterAddress = factory.createPaymentSplitterWithETHAndSalt{ value: ethAmount }(
+            payees,
+            payeeNames,
+            shares,
+            salt
+        );
+
+        // Verify predicted address matches actual
+        assertEq(splitterAddress, predictedAddress, "Address should match prediction");
+
+        // Verify splitter state
+        PaymentSplitter splitter = PaymentSplitter(payable(splitterAddress));
+        assertEq(splitter.totalShares(), 100);
+        assertEq(splitter.shares(alice), 70);
+        assertEq(splitter.shares(bob), 30);
+
+        // Verify splitter received ETH
+        assertEq(address(splitter).balance, ethAmount);
+
+        // Verify releasable amounts
+        assertEq(splitter.releasable(alice), (ethAmount * 70) / 100);
+        assertEq(splitter.releasable(bob), (ethAmount * 30) / 100);
+    }
+
+    // Test that different deployers can use same salt
+    function testDifferentDeployersCanUseSameSalt() public {
+        address[] memory payees = new address[](1);
+        payees[0] = charlie;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 salt = keccak256("shared-salt");
+
+        // Deploy from this contract
+        address addr1 = factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt);
+
+        // Deploy from alice with same salt
+        vm.prank(alice);
+        address addr2 = factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt);
+
+        // Addresses should be different (because deployer is part of final salt)
+        assertTrue(addr1 != addr2, "Different deployers should get different addresses");
+    }
+
+    // Test PaymentSplitterCreatedWithSalt event emission
+    function testEmitsPaymentSplitterCreatedWithSaltEvent() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 salt = keccak256("event-test-salt");
+
+        // Predict address for event check
+        address predictedAddress = factory.predictDeterministicAddressWithSalt(address(this), payees, shares, salt);
+
+        // Expect the event with indexed salt
+        vm.expectEmit(true, true, true, true);
+        emit PaymentSplitterFactory.PaymentSplitterCreatedWithSalt(
+            address(this),
+            predictedAddress,
+            salt,
+            payees,
+            payeeNames,
+            shares
+        );
+
+        factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt);
+    }
+
+    // Test ETH+salt event emission
+    function testEmitsPaymentSplitterCreatedWithSaltEventForETH() public {
+        address[] memory payees = new address[](1);
+        payees[0] = bob;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 salt = keccak256("eth-event-test-salt");
+        uint256 ethAmount = 1 ether;
+
+        address predictedAddress = factory.predictDeterministicAddressWithSalt(address(this), payees, shares, salt);
+
+        vm.expectEmit(true, true, true, true);
+        emit PaymentSplitterFactory.PaymentSplitterCreatedWithSalt(
+            address(this),
+            predictedAddress,
+            salt,
+            payees,
+            payeeNames,
+            shares
+        );
+
+        factory.createPaymentSplitterWithETHAndSalt{ value: ethAmount }(payees, payeeNames, shares, salt);
+    }
+
+    // Test ETH+salt cannot reuse same salt (CREATE2 collision)
+    function testCannotReuseSaltWithETH() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 salt = keccak256("eth-unique-salt");
+
+        // First deployment succeeds
+        factory.createPaymentSplitterWithETHAndSalt{ value: 1 ether }(payees, payeeNames, shares, salt);
+
+        // Second deployment with same salt should fail
+        vm.expectRevert();
+        factory.createPaymentSplitterWithETHAndSalt{ value: 1 ether }(payees, payeeNames, shares, salt);
+    }
+
+    // Test ETH+salt is independent of deployment count
+    function testETHSaltIndependentOfDeploymentCount() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 fixedSalt = keccak256("eth-governance-v1");
+        uint256 ethAmount = 2 ether;
+
+        // Predict address BEFORE any deployments
+        address predictedWithSalt = factory.predictDeterministicAddressWithSalt(
+            address(this),
+            payees,
+            shares,
+            fixedSalt
+        );
+
+        // Deploy some splitters using count-based methods
+        factory.createPaymentSplitter(payees, payeeNames, shares);
+        factory.createPaymentSplitterWithETH{ value: 0.1 ether }(payees, payeeNames, shares);
+
+        // Prediction should be unchanged
+        address predictedAfter = factory.predictDeterministicAddressWithSalt(address(this), payees, shares, fixedSalt);
+        assertEq(predictedAfter, predictedWithSalt, "Prediction should not change");
+
+        // Deploy with ETH+salt - should match original prediction
+        address actual = factory.createPaymentSplitterWithETHAndSalt{ value: ethAmount }(
+            payees,
+            payeeNames,
+            shares,
+            fixedSalt
+        );
+        assertEq(actual, predictedWithSalt, "Should match original prediction");
+        assertEq(address(actual).balance, ethAmount, "Should have ETH balance");
+    }
+
+    // Test ETH+salt length mismatch validation
+    function testETHSaltLengthMismatchReverts() public {
+        address[] memory payees = new address[](2);
+        payees[0] = alice;
+        payees[1] = bob;
+
+        string[] memory payeeNames = new string[](1); // Mismatched length
+        payeeNames[0] = "Recipient";
+
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = 50;
+        shares[1] = 50;
+
+        bytes32 salt = keccak256("mismatch-test");
+
+        vm.expectRevert("PaymentSplitterFactory: length mismatch");
+        factory.createPaymentSplitterWithETHAndSalt{ value: 1 ether }(payees, payeeNames, shares, salt);
+    }
+
+    // Test ETH+salt with zero ETH (should work like regular salt version)
+    function testETHSaltWithZeroETH() public {
+        address[] memory payees = new address[](1);
+        payees[0] = charlie;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 salt = keccak256("zero-eth-salt");
+
+        address predictedAddress = factory.predictDeterministicAddressWithSalt(address(this), payees, shares, salt);
+
+        // Deploy with 0 ETH
+        address splitterAddress = factory.createPaymentSplitterWithETHAndSalt{ value: 0 }(
+            payees,
+            payeeNames,
+            shares,
+            salt
+        );
+
+        assertEq(splitterAddress, predictedAddress, "Address should match prediction");
+        assertEq(address(splitterAddress).balance, 0, "Should have zero balance");
+    }
+
+    // Test that salt+ETH and salt-only use same address calculation
+    function testSaltAndETHSaltUseSameAddressCalculation() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        bytes32 salt1 = keccak256("test-salt-1");
+        bytes32 salt2 = keccak256("test-salt-2");
+
+        // Deploy with salt (no ETH)
+        address addr1 = factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt1);
+
+        // Deploy with ETH+salt
+        address addr2 = factory.createPaymentSplitterWithETHAndSalt{ value: 1 ether }(
+            payees,
+            payeeNames,
+            shares,
+            salt2
+        );
+
+        // Both should be tracked in deployer's splitters
+        PaymentSplitterFactory.SplitterInfo[] memory splitters = factory.getSplittersByDeployer(address(this));
+        assertEq(splitters.length, 2, "Should have 2 splitters");
+        assertEq(splitters[0].splitterAddress, addr1);
+        assertEq(splitters[1].splitterAddress, addr2);
+    }
+
     // Helper function for receiving ETH
     receive() external payable {}
 }

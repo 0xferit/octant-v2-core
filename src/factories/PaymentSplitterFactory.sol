@@ -67,6 +67,17 @@ contract PaymentSplitterFactory {
         uint256[] shares
     );
 
+    /// @notice Emitted when a new PaymentSplitter is created with an explicit salt
+    /// @dev Includes the salt for indexing, enabling off-chain tracking of salt-based deployments
+    event PaymentSplitterCreatedWithSalt(
+        address indexed deployer,
+        address indexed paymentSplitter,
+        bytes32 indexed salt,
+        address[] payees,
+        string[] payeeNames,
+        uint256[] shares
+    );
+
     /**
      * @notice Deploys the factory and PaymentSplitter implementation
      * @dev Deploys implementation contract used as base for all minimal proxies
@@ -191,6 +202,113 @@ contract PaymentSplitterFactory {
      */
     function predictDeterministicAddress(address deployer) external view returns (address) {
         bytes32 finalSalt = keccak256(abi.encode(deployer, deployerToSplitters[deployer].length));
+        return Clones.predictDeterministicAddress(implementation, finalSalt);
+    }
+
+    /**
+     * @notice Creates a new PaymentSplitter instance with an explicit salt
+     * @dev Uses CREATE2 with caller-provided salt for deterministic deployment
+     *      This allows governance proposals to use a fixed salt, avoiding race conditions
+     *      where the deployment count could change between proposal creation and execution.
+     *      The final salt includes deployer, payees, shares, and caller-provided salt.
+     * @param payees Addresses of payees to receive payments
+     * @param payeeNames Names for each payee (e.g., "GrantRoundOperator", "ESF", "OpEx")
+     * @param shares Number of shares assigned to each payee
+     * @param salt Caller-provided salt for deterministic address
+     * @return paymentSplitter Address of newly created PaymentSplitter
+     */
+    function createPaymentSplitterWithSalt(
+        address[] memory payees,
+        string[] memory payeeNames,
+        uint256[] memory shares,
+        bytes32 salt
+    ) external returns (address) {
+        require(
+            payees.length == payeeNames.length && payees.length == shares.length,
+            "PaymentSplitterFactory: length mismatch"
+        );
+
+        // Combine deployer, payees, shares, and caller-provided salt for uniqueness
+        bytes32 finalSalt = keccak256(abi.encode(msg.sender, payees, shares, salt));
+
+        // Create a deterministic minimal proxy
+        address paymentSplitter = Clones.cloneDeterministic(implementation, finalSalt);
+
+        // Initialize the proxy; revert with a factory-specific error if initialization fails
+        bytes memory initData = abi.encodeWithSelector(PaymentSplitter.initialize.selector, payees, shares);
+        (bool success, ) = paymentSplitter.call(initData);
+        require(success, "PaymentSplitterFactory: initialization failed");
+
+        // Store the deployed splitter info
+        deployerToSplitters[msg.sender].push(SplitterInfo(paymentSplitter, payees, payeeNames));
+
+        // Emit event for tracking (includes salt for indexing)
+        emit PaymentSplitterCreatedWithSalt(msg.sender, paymentSplitter, salt, payees, payeeNames, shares);
+
+        return paymentSplitter;
+    }
+
+    /**
+     * @notice Creates a new PaymentSplitter with ETH and an explicit salt
+     * @dev Uses CREATE2 with caller-provided salt for deterministic deployment
+     *      This allows governance proposals to use a fixed salt, avoiding race conditions
+     *      where the deployment count could change between proposal creation and execution.
+     *      Forwards msg.value to the new splitter contract.
+     * @param payees Addresses of payees to receive payments
+     * @param payeeNames Names for each payee (e.g., "GrantRoundOperator", "ESF", "OpEx")
+     * @param shares Number of shares assigned to each payee
+     * @param salt Caller-provided salt for deterministic address
+     * @return paymentSplitter Address of newly created PaymentSplitter
+     */
+    function createPaymentSplitterWithETHAndSalt(
+        address[] memory payees,
+        string[] memory payeeNames,
+        uint256[] memory shares,
+        bytes32 salt
+    ) external payable returns (address) {
+        require(
+            payees.length == payeeNames.length && payees.length == shares.length,
+            "PaymentSplitterFactory: length mismatch"
+        );
+
+        // Combine deployer, payees, shares, and caller-provided salt for uniqueness
+        bytes32 finalSalt = keccak256(abi.encode(msg.sender, payees, shares, salt));
+
+        // Create a deterministic minimal proxy with value
+        address paymentSplitter = Clones.cloneDeterministic(implementation, finalSalt, msg.value);
+
+        // Initialize the proxy; revert with a factory-specific error if initialization fails
+        bytes memory initData = abi.encodeWithSelector(PaymentSplitter.initialize.selector, payees, shares);
+        (bool success, ) = paymentSplitter.call(initData);
+        require(success, "PaymentSplitterFactory: initialization failed");
+
+        // Store the deployed splitter info
+        deployerToSplitters[msg.sender].push(SplitterInfo(paymentSplitter, payees, payeeNames));
+
+        // Emit event for tracking (includes salt for indexing)
+        emit PaymentSplitterCreatedWithSalt(msg.sender, paymentSplitter, salt, payees, payeeNames, shares);
+
+        return paymentSplitter;
+    }
+
+    /**
+     * @notice Predicts the address of a deterministic clone with an explicit salt
+     * @dev Uses CREATE2 with caller-provided salt for deterministic prediction
+     *      Use this with createPaymentSplitterWithSalt to avoid race conditions in governance.
+     *      Must pass the same payees and shares that will be used in createPaymentSplitterWithSalt.
+     * @param deployer Address that will call createPaymentSplitterWithSalt
+     * @param payees Addresses of payees (must match createPaymentSplitterWithSalt call)
+     * @param shares Shares for each payee (must match createPaymentSplitterWithSalt call)
+     * @param salt The same salt that will be passed to createPaymentSplitterWithSalt
+     * @return predicted Predicted address of deployment
+     */
+    function predictDeterministicAddressWithSalt(
+        address deployer,
+        address[] memory payees,
+        uint256[] memory shares,
+        bytes32 salt
+    ) external view returns (address) {
+        bytes32 finalSalt = keccak256(abi.encode(deployer, payees, shares, salt));
         return Clones.predictDeterministicAddress(implementation, finalSalt);
     }
 }
