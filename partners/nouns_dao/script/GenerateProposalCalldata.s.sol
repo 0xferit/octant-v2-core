@@ -89,6 +89,11 @@ contract GenerateProposalCalldata is Script {
     /// @dev The actual wstETH amount deposited depends on the stETH/wstETH exchange rate at execution time
     uint256 constant TARGET_ETH_VALUE = 1000 ether;
 
+    /// @notice Salt for deterministic PaymentSplitter deployment
+    /// @dev Using an explicit salt avoids race conditions where the deployment count
+    ///      could change between proposal creation and execution
+    bytes32 constant PAYMENT_SPLITTER_SALT = keccak256("NounsDAO-LidoStrategy-PaymentSplitter-v1");
+
     // ══════════════════════════════════════════════════════════════════════════════
     // MAIN SCRIPT
     // ══════════════════════════════════════════════════════════════════════════════
@@ -205,8 +210,19 @@ contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
 
     function _computeAddresses() internal view returns (address predictedPS, address predictedStrategy) {
-        // Predict PaymentSplitter address
-        predictedPS = PaymentSplitterFactory(PAYMENT_SPLITTER_FACTORY).predictDeterministicAddress(NOUNS_TREASURY);
+        // Build payees and shares for salt-based prediction
+        address[] memory payees = new address[](1);
+        payees[0] = DRAGON_FUNDING_POOL;
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        // Predict PaymentSplitter address with explicit salt (avoids race conditions in governance)
+        predictedPS = PaymentSplitterFactory(PAYMENT_SPLITTER_FACTORY).predictDeterministicAddressWithSalt(
+            NOUNS_TREASURY,
+            payees,
+            shares,
+            PAYMENT_SPLITTER_SALT
+        );
 
         // Predict Strategy address using LidoStrategyFactory.computeStrategyAddress()
         predictedStrategy = LidoStrategyFactory(LIDO_STRATEGY_FACTORY).computeStrategyAddress(
@@ -249,8 +265,8 @@ contract GenerateProposalCalldata is Script {
 
         target = PAYMENT_SPLITTER_FACTORY;
         value = 0;
-        signature = "createPaymentSplitter(address[],string[],uint256[])";
-        calldataParams = abi.encode(payees, payeeNames, shares);
+        signature = "createPaymentSplitterWithSalt(address[],string[],uint256[],bytes32)";
+        calldataParams = abi.encode(payees, payeeNames, shares, PAYMENT_SPLITTER_SALT);
     }
 
     /**
@@ -343,6 +359,8 @@ contract GenerateProposalCalldata is Script {
         console.log("  payees:     [", DRAGON_FUNDING_POOL, "]");
         console.log('  payeeNames: ["NounsGrants"]');
         console.log("  shares:     [100]");
+        console.log("  salt:       ");
+        console.logBytes32(PAYMENT_SPLITTER_SALT);
         console.log("");
         console.log("CALLDATA (copy this - parameters only, no selector):");
         console.logBytes(calldataParams);
@@ -453,7 +471,7 @@ contract GenerateProposalCalldata is Script {
         console.log("TX 1 - Deploy PaymentSplitter");
         console.log("--------------------------------------------------------------------------------");
         console.log("Target:   ", PAYMENT_SPLITTER_FACTORY);
-        console.log("Function: createPaymentSplitter(address[],string[],uint256[])");
+        console.log("Function: createPaymentSplitterWithSalt(address[],string[],uint256[],bytes32)");
         console.log("");
         console.log("--------------------------------------------------------------------------------");
         console.log("TX 2 - Deploy LidoStrategy");

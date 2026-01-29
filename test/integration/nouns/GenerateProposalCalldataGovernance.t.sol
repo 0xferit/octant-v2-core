@@ -264,7 +264,7 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         // Event signatures
         bytes32 strategyDeploySelector = keccak256("StrategyDeploy(address,address,address,string)");
         bytes32 paymentSplitterCreatedSelector = keccak256(
-            "PaymentSplitterCreated(address,address,address[],string[],uint256[])"
+            "PaymentSplitterCreatedWithSalt(address,address,bytes32,address[],string[],uint256[])"
         );
 
         for (uint256 i = 0; i < logs.length; i++) {
