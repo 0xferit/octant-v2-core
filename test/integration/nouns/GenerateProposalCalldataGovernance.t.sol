@@ -74,6 +74,9 @@ contract GenerateProposalCalldataGovernanceTest is Test {
     /// @notice wstETH token address
     address public constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
+    /// @notice PaymentSplitterFactory mainnet address (needs bytecode etch for new salt-based methods)
+    address public constant PAYMENT_SPLITTER_FACTORY = 0x5711765E0756B45224fc1FdA1B41ab344682bBcb;
+
     /// @notice Vote type: For
     uint8 public constant VOTE_FOR = 1;
 
@@ -111,6 +114,15 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         // Fork mainnet
         mainnetFork = vm.createFork("mainnet");
         vm.selectFork(mainnetFork);
+
+        // ════════════════════════════════════════════════════════════════════════
+        // ETCH UPDATED FACTORY BYTECODE
+        // The mainnet-deployed PaymentSplitterFactory doesn't have the new
+        // salt-based methods yet. Deploy a fresh instance and etch its
+        // runtime bytecode onto the mainnet address.
+        // ════════════════════════════════════════════════════════════════════════
+        PaymentSplitterFactory updatedFactory = new PaymentSplitterFactory();
+        vm.etch(PAYMENT_SPLITTER_FACTORY, address(updatedFactory).code);
 
         // ════════════════════════════════════════════════════════════════════════
         // INSTANTIATE THE SCRIPT - This is the key part!
