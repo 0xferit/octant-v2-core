@@ -14,7 +14,6 @@ import { Enum } from "@gnosis.pm/safe-contracts/contracts/common/Enum.sol";
 import { Hats } from "hats-protocol/Hats.sol";
 import { DragonHatter } from "src/utils/hats/DragonHatter.sol";
 import { SimpleEligibilityAndToggle } from "src/utils/hats/SimpleEligibilityAndToggle.sol";
-import { DragonRouter } from "src/zodiac-core/DragonRouter.sol";
 import { SplitChecker } from "src/zodiac-core/SplitChecker.sol";
 import { DragonTokenizedStrategy } from "src/zodiac-core/vaults/DragonTokenizedStrategy.sol";
 import { ModuleProxyFactory } from "src/zodiac-core/ModuleProxyFactory.sol";
@@ -48,8 +47,8 @@ contract SetupIntegrationTest is Test, TestPlus {
     /// ===================================================
 
     /// ============ DeployDragonRouter ==================
-    DragonRouter public dragonRouterSingleton;
-    DragonRouter public dragonRouterProxy;
+    address public dragonRouterSingleton;
+    address public dragonRouterProxy;
     /// ===================================================
 
     /// ============ DeployModuleProxyFactory ============
@@ -270,8 +269,10 @@ contract SetupIntegrationTest is Test, TestPlus {
             _deployModuleProxyFactory();
         }
 
-        // Deploy DragonRouter implementation
-        dragonRouterSingleton = new DragonRouter();
+        // DragonRouter contract removed; use placeholder addresses for tests
+        dragonRouterSingleton = makeAddr("dragonRouterImplementation");
+        dragonRouterProxy = makeAddr("dragonRouterProxy");
+        dragonRouterProxyAddress = dragonRouterProxy;
 
         // Deploy SplitChecker implementation
         splitCheckerSingleton = new SplitChecker();
@@ -291,35 +292,6 @@ contract SetupIntegrationTest is Test, TestPlus {
         );
 
         splitCheckerProxy = SplitChecker(payable(splitCheckerProxyAddr));
-
-        // Prepare initialization parameters for router
-        address[] memory _strategies = new address[](0); // Empty array for initial setup
-
-        bytes memory routerParams = abi.encode(
-            _strategies, // strategy array
-            deployer, // governance
-            deployer, // regen_governance
-            address(splitCheckerProxy), // splitChecker
-            address(deployedSafe), // opexVault
-            address(deployedSafe) // metapool (using safe address temporarily)
-        );
-
-        // Deploy router proxy
-        bytes memory initRouterData = abi.encodeWithSignature(
-            "setUp(bytes)",
-            abi.encode(address(deployedSafe), routerParams)
-        );
-
-        address routerProxy = moduleProxyFactory.deployModule(
-            address(dragonRouterSingleton),
-            initRouterData,
-            block.timestamp
-        );
-
-        dragonRouterProxy = DragonRouter(payable(routerProxy));
-
-        // Make sure we save the address for the mock strategy deployment
-        dragonRouterProxyAddress = address(dragonRouterProxy);
     }
 
     // Modified implementation that skips broadcasting
@@ -328,7 +300,7 @@ contract SetupIntegrationTest is Test, TestPlus {
         address regenGovernance = msg.sender;
         address splitCheckerImplementation = address(new SplitChecker());
         address metapool = msg.sender;
-        address dragonRouterImplementation = address(new DragonRouter());
+        address dragonRouterImplementation = makeAddr("dragonRouterImplementation");
         moduleProxyFactory = new ModuleProxyFactory(
             governance,
             regenGovernance,

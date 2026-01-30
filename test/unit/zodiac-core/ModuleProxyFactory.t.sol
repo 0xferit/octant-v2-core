@@ -4,13 +4,13 @@ pragma solidity ^0.8.13;
 import { BaseTest } from "./Base.t.sol";
 import { ModuleProxyFactory } from "src/zodiac-core/ModuleProxyFactory.sol";
 import { IModuleProxyFactory } from "src/zodiac-core/interfaces/IModuleProxyFactory.sol";
-import { DragonRouter } from "src/zodiac-core/DragonRouter.sol";
 import { ISplitChecker } from "src/zodiac-core/interfaces/ISplitChecker.sol";
 import { ISafe } from "src/zodiac-core/interfaces/Safe.sol";
 import { MockModule } from "test/mocks/zodiac-core/MockModule.sol";
 import { MockSafe } from "test/mocks/zodiac-core/MockSafe.sol";
 import { MockLinearAllowance } from "test/mocks/zodiac-core/MockLinearAllowance.sol";
 import { MockSafeDragonRouter } from "test/mocks/zodiac-core/MockSafeDragonRouter.sol";
+import { MockDragonRouterSetup } from "test/mocks/zodiac-core/MockDragonRouterSetup.sol";
 import { MultiSendCallOnly } from "src/utils/libs/Safe/MultiSendCallOnly.sol";
 import { SplitChecker } from "src/zodiac-core/SplitChecker.sol";
 
@@ -18,7 +18,7 @@ contract ModuleProxyFactoryTest is BaseTest {
     ModuleProxyFactory public factory;
     address public owner = makeAddr("owner");
     address public splitChecker = address(new SplitChecker());
-    address public dragonRouter = address(new DragonRouter());
+    address public dragonRouter = makeAddr("dragonRouter");
     address public governance = makeAddr("governance");
     address public regenGovernance = makeAddr("regenGovernance");
     address public metapool = makeAddr("metapool");
@@ -68,12 +68,32 @@ contract ModuleProxyFactoryTest is BaseTest {
         new ModuleProxyFactory(governance, regenGovernance, metapool, splitChecker, address(0));
     }
 
-    function testDeployDragonRouterWithFactory() public {
-        DragonRouter router = DragonRouter(factory.deployDragonRouter(owner, strategies, opexVault, 100));
-        assertTrue(router.hasRole(router.DEFAULT_ADMIN_ROLE(), owner));
-        assertTrue(router.hasRole(router.GOVERNANCE_ROLE(), governance));
-        assertTrue(router.hasRole(router.REGEN_GOVERNANCE_ROLE(), regenGovernance));
-        assertEq(router.metapool(), metapool);
+    function testDeployDragonRouterInitializesProxy() public {
+        MockDragonRouterSetup mockImplementation = new MockDragonRouterSetup();
+        ModuleProxyFactory localFactory = new ModuleProxyFactory(
+            governance,
+            regenGovernance,
+            metapool,
+            splitCheckerImpl,
+            address(mockImplementation)
+        );
+
+        address[] memory localStrategies = new address[](2);
+        localStrategies[0] = makeAddr("strategy1");
+        localStrategies[1] = makeAddr("strategy2");
+
+        address payable proxy = localFactory.deployDragonRouter(owner, localStrategies, opexVault, 1234);
+
+        MockDragonRouterSetup deployed = MockDragonRouterSetup(proxy);
+
+        assertEq(deployed.owner(), owner, "Owner not set");
+        assertEq(deployed.governance(), governance, "Governance not set");
+        assertEq(deployed.regenGovernance(), regenGovernance, "Regen governance not set");
+        assertEq(deployed.splitChecker(), localFactory.SPLIT_CHECKER(), "SplitChecker not set");
+        assertEq(deployed.opexVault(), opexVault, "Opex vault not set");
+        assertEq(deployed.metapool(), metapool, "Metapool not set");
+        assertEq(deployed.strategiesLength(), localStrategies.length, "Strategies length not set");
+        assertEq(deployed.strategiesHash(), keccak256(abi.encode(localStrategies)), "Strategies hash mismatch");
     }
 
     function testSplitCheckerDeployedAtExpectedAddress() public view {

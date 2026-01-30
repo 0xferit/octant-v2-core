@@ -4,7 +4,6 @@ pragma solidity ^0.8.25;
 import "forge-std/Script.sol";
 import { ModuleProxyFactory } from "src/zodiac-core/ModuleProxyFactory.sol";
 import { SplitChecker } from "src/zodiac-core/SplitChecker.sol";
-import { DragonRouter } from "src/zodiac-core/DragonRouter.sol";
 
 /**
  * @title DeployModuleProxyFactory
@@ -17,7 +16,7 @@ contract DeployModuleProxyFactory is Script {
     address public regenGovernance;
     address public metapool;
     address public splitCheckerImplementation = address(new SplitChecker());
-    address public dragonRouterImplementation = address(new DragonRouter());
+    address public dragonRouterImplementation;
     /// @notice The deployed ModuleProxyFactory instance
     ModuleProxyFactory public moduleProxyFactory;
 
@@ -30,6 +29,8 @@ contract DeployModuleProxyFactory is Script {
     function deploy() public virtual {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
+
+        dragonRouterImplementation = vm.envAddress("DRAGON_ROUTER_IMPLEMENTATION");
 
         // Deploy the factory
         moduleProxyFactory = new ModuleProxyFactory(

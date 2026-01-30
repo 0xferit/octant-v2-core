@@ -5,7 +5,6 @@ import "forge-std/Test.sol";
 import { TestPlus } from "solady-test/utils/TestPlus.sol";
 import { ModuleProxyFactory } from "src/zodiac-core/ModuleProxyFactory.sol";
 import { SplitChecker } from "src/zodiac-core/SplitChecker.sol";
-import { DragonRouter } from "src/zodiac-core/DragonRouter.sol";
 import { MockERC20 } from "test/mocks/MockERC20.sol";
 import { SafeProxyFactory, SafeProxy } from "@gnosis.pm/safe-contracts/contracts/proxies/SafeProxyFactory.sol";
 import { Safe } from "@gnosis.pm/safe-contracts/contracts/Safe.sol";
@@ -52,7 +51,7 @@ contract BaseTest is Test, TestPlus {
         address regenGovernance = msg.sender;
         address metapool = msg.sender;
         address splitCheckerImplementation = address(new SplitChecker());
-        address dragonRouterImplementation = address(new DragonRouter());
+        address dragonRouterImplementation = makeAddr("dragonRouterImplementation");
         moduleFactory = new ModuleProxyFactory(
             governance,
             regenGovernance,
