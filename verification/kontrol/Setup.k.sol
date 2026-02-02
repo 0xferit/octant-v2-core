@@ -7,7 +7,7 @@ import { TransparentUpgradeableProxy } from "@openzeppelin/contracts/proxy/trans
 import { SplitChecker } from "src/zodiac-core/SplitChecker.sol";
 import { DragonTokenizedStrategy } from "src/zodiac-core/vaults/DragonTokenizedStrategy.sol";
 
-import "lib/safe-smart-account/contracts/Safe.sol";
+import "@gnosis.pm/safe-contracts/contracts/Safe.sol";
 
 import { YearnPolygonUsdcStrategy } from "src/zodiac-core/modules/YearnPolygonUsdcStrategy.sol";
 import { IStrategy } from "src/zodiac-core/interfaces/IStrategy.sol";
