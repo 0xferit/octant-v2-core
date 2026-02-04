@@ -11,6 +11,8 @@ import { IMultistrategyVault } from "src/core/interfaces/IMultistrategyVault.sol
 contract PermitTest is Setup {
     uint256 constant AMOUNT = 10 ** 18;
     uint256 constant PRIVATE_KEY = 0xabcd; // Known private key for tests
+    bytes32 constant EIP712DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
     MultistrategyVault public vault;
     MultistrategyVault public vaultImplementation;
@@ -50,6 +52,16 @@ contract PermitTest is Setup {
         vault.permit(owner, bunny, AMOUNT, deadline, v, r, s);
 
         assertEq(vault.allowance(owner, bunny), AMOUNT);
+    }
+
+    function testDomainSeparatorUsesVaultName() public {
+        bytes32 nameHash = keccak256(bytes(vault.name()));
+        bytes32 versionHash = keccak256(bytes(vault.API_VERSION()));
+        bytes32 expectedDomainSeparator = keccak256(
+            abi.encode(EIP712DOMAIN_TYPEHASH, nameHash, versionHash, block.chainid, address(vault))
+        );
+
+        assertEq(vault.DOMAIN_SEPARATOR(), expectedDomainSeparator);
     }
 
     function testPermitWithUsedPermit() public {
