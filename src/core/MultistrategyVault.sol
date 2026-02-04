@@ -2099,9 +2099,7 @@ contract MultistrategyVault is IMultistrategyVault {
         vars.maxAssets = _convertToAssets(_balanceOf[owner_], Rounding.ROUND_DOWN);
 
         // Normalize withdrawal queue to match execution path
-        vars.withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue
-            ? strategiesParam_
-            : _defaultQueue;
+        vars.withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue ? strategiesParam_ : _defaultQueue;
 
         // If there is a withdraw limit module use that
         address _withdrawLimitModule = withdrawLimitModule;
