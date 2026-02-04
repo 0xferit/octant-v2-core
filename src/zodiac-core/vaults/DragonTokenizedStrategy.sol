@@ -477,8 +477,8 @@ contract DragonTokenizedStrategy is IDragonTokenizedStrategy, TokenizedStrategy 
         assets = type(uint256).max == assets ? S.asset.balanceOf(msg.sender) : assets;
 
         require((shares = _convertToShares(S, assets, Math.Rounding.Floor)) != 0, ZeroShares());
-        require(assets < _maxDeposit(S, receiver), DragonTokenizedStrategy__DepositMoreThanMax());
-        require(shares < _maxMint(S, receiver), DragonTokenizedStrategy__MintMoreThanMax());
+        require(assets <= _maxDeposit(S, receiver), DragonTokenizedStrategy__DepositMoreThanMax());
+        require(shares <= _maxMint(S, receiver), DragonTokenizedStrategy__MintMoreThanMax());
 
         _deposit(S, receiver, assets, shares);
         _setOrExtendLockup(S, receiver, lockupDuration, _balanceOf(S, receiver));
