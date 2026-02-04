@@ -36,6 +36,7 @@ error TokenizedStrategy__PermitDeadlineExpired();
 error TokenizedStrategy__InvalidSigner();
 error TokenizedStrategy__TransferFailed();
 error TokenizedStrategy__NotSelf();
+error TokenizedStrategy__NameImmutable();
 error TokenizedStrategy__WithdrawMoreThanMax();
 error TokenizedStrategy__RedeemMoreThanMax();
 error TokenizedStrategy__NotPendingManagement();

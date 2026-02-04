@@ -4,6 +4,7 @@ pragma solidity >=0.8.18;
 import { Setup } from "./utils/Setup.sol";
 import { TokenizedStrategy } from "src/core/TokenizedStrategy.sol";
 import { BaseStrategy } from "src/core/BaseStrategy.sol";
+import { TokenizedStrategy__NameImmutable } from "src/errors.sol";
 
 contract AccessControlTest is Setup {
     function setUp() public override {
@@ -242,6 +243,7 @@ contract AccessControlTest is Setup {
     function test_setName(address _address) public {
         vm.assume(_address != address(strategy) && _address != management);
 
+        string memory initialName = strategy.name();
         string memory newName = "New Strategy Name";
 
         vm.prank(_address);
@@ -249,9 +251,10 @@ contract AccessControlTest is Setup {
         strategy.setName(newName);
 
         vm.prank(management);
+        vm.expectRevert(TokenizedStrategy__NameImmutable.selector);
         strategy.setName(newName);
 
-        assertEq(strategy.name(), newName);
+        assertEq(strategy.name(), initialName);
     }
 
     // ================== Dragon Router Cooldown Tests ==================

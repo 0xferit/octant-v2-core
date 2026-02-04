@@ -5,7 +5,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import { TokenizedStrategy__InvalidSigner } from "src/errors.sol";
+import { TokenizedStrategy__InvalidSigner, TokenizedStrategy__NameImmutable } from "src/errors.sol";
 
 import { IBaseStrategy } from "src/core/interfaces/IBaseStrategy.sol";
 
@@ -229,6 +229,10 @@ abstract contract TokenizedStrategy {
         /// @notice Symbol of the strategy share token
         /// @dev ERC20 metadata. Set during initialize() and never changes
         string symbol;
+
+        /// @notice Cached name hash used in the EIP-712 domain separator
+        /// @dev Set during initialize() and never changes
+        bytes32 permitNameHash;
         
         /// @notice Total supply of strategy shares currently minted
         /// @dev In share base units. Increases on deposits, decreases on withdrawals
@@ -545,8 +549,8 @@ abstract contract TokenizedStrategy {
      *      POST-INITIALIZATION:
      *      All parameters can be updated via management functions except:
      *      - asset (immutable)
-     *      - name (can be updated via management)
-     *      - symbol (can be updated via management)
+     *      - name (immutable after initialization)
+     *      - symbol (immutable after initialization)
      *      - decimals (immutable, derived from asset)
      *
      * @param _asset Address of the underlying ERC20 asset (cannot be zero)
@@ -582,6 +586,8 @@ abstract contract TokenizedStrategy {
         S.name = _name;
         // Set the Strategy Tokens symbol.
         S.symbol = _symbol;
+        // Cache EIP-712 name hash for stable permit domain.
+        S.permitNameHash = keccak256(bytes(_name));
         // Set decimals based off the `asset`.
         S.decimals = ERC20(_asset).decimals();
 
@@ -1432,11 +1438,10 @@ abstract contract TokenizedStrategy {
 
     /**
      * @notice Updates the name for the strategy.
-     * @dev Changing the name updates the EIP-712 domain and invalidates pre-signed permits.
-     * @param _name New strategy name
+     * @dev Disabled to keep the EIP-712 domain stable after initialization.
      */
-    function setName(string calldata _name) external onlyManagement {
-        _strategyStorage().name = _name;
+    function setName(string calldata) external view onlyManagement {
+        revert TokenizedStrategy__NameImmutable();
     }
 
     /**
@@ -1780,7 +1785,7 @@ abstract contract TokenizedStrategy {
         StrategyData storage S = _strategyStorage();
         return
             keccak256(
-                abi.encode(EIP712DOMAIN_TYPEHASH, keccak256(bytes(S.name)), VERSION_HASH, block.chainid, address(this))
+                abi.encode(EIP712DOMAIN_TYPEHASH, S.permitNameHash, VERSION_HASH, block.chainid, address(this))
             );
     }
 }

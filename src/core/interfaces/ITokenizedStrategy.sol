@@ -294,7 +294,7 @@ interface ITokenizedStrategy is IERC4626, IERC20Permit {
 
     /**
      * @notice Updates the name for the strategy.
-     * @param _newName New strategy name
+     * @dev Disabled to keep the EIP-712 domain stable after initialization.
      */
     function setName(string calldata _newName) external;
 
