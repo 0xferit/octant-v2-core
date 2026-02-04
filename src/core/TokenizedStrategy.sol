@@ -464,10 +464,6 @@ abstract contract TokenizedStrategy {
     bytes32 internal constant EIP712DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    /// @notice Precomputed hash of strategy name for EIP-712 domain
-    /// @dev "Octant Vault" - saves gas by computing once
-    bytes32 internal constant NAME_HASH = keccak256("Octant Vault");
-
     /// @notice Precomputed hash of API version for EIP-712 domain
     /// @dev Saves gas by computing once
     bytes32 internal constant VERSION_HASH = keccak256(bytes(API_VERSION));
@@ -1780,6 +1776,15 @@ abstract contract TokenizedStrategy {
      * @return domainSeparator Domain separator for permit calls
      */
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
-        return keccak256(abi.encode(EIP712DOMAIN_TYPEHASH, NAME_HASH, VERSION_HASH, block.chainid, address(this)));
+        StrategyData storage S = _strategyStorage();
+        return keccak256(
+            abi.encode(
+                EIP712DOMAIN_TYPEHASH,
+                keccak256(bytes(S.name)),
+                VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
     }
 }
