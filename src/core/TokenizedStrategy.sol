@@ -1787,7 +1787,6 @@ abstract contract TokenizedStrategy {
         if (nameHash == bytes32(0)) {
             nameHash = keccak256(bytes(S.name));
         }
-        return
-            keccak256(abi.encode(EIP712DOMAIN_TYPEHASH, nameHash, VERSION_HASH, block.chainid, address(this)));
+        return keccak256(abi.encode(EIP712DOMAIN_TYPEHASH, nameHash, VERSION_HASH, block.chainid, address(this)));
     }
 }
