@@ -8,7 +8,7 @@ import { MockYieldSource } from "test/mocks/core/MockYieldSource.sol";
 import { MockStrategy as MockBaseStrategy } from "test/mocks/core/MockBaseStrategy.sol";
 import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 
-contract VAULT004_PermitDomainMismatch is Test {
+contract TokenizedStrategyPermitTest is Test {
     MockBaseStrategy strategy;
     MockERC20 asset;
     MockYieldSource yieldSource;
@@ -47,7 +47,6 @@ contract VAULT004_PermitDomainMismatch is Test {
     }
 
     function test_permit_AllowsSignatureUsingTokenNameDomain() external {
-        // Arrange
         uint256 value = 1e18;
         uint256 deadline = block.timestamp + 1 days;
 
@@ -55,13 +54,12 @@ contract VAULT004_PermitDomainMismatch is Test {
         bytes32 domainSeparator = keccak256(
             abi.encode(EIP712DOMAIN_TYPEHASH, nameHash, VERSION_HASH, block.chainid, address(strategy))
         );
+
         assertEq(ITokenizedStrategy(address(strategy)).DOMAIN_SEPARATOR(), domainSeparator);
 
-        // Act
         (uint8 v, bytes32 r, bytes32 s) = _signWithDomain(domainSeparator, value, deadline);
         ITokenizedStrategy(address(strategy)).permit(owner, spender, value, deadline, v, r, s);
 
-        // Assert
         assertEq(ITokenizedStrategy(address(strategy)).allowance(owner, spender), value);
     }
 }
