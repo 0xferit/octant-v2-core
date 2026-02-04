@@ -213,9 +213,13 @@ contract MultistrategyVault is IMultistrategyVault {
     /// @dev ERC20 standard. Can be updated by roleManager via setSymbol()
     string public override symbol;
 
-    /// @notice Cached name hash used in the EIP-712 domain separator
-    /// @dev Set during initialize and immutable thereafter
-    bytes32 private _permitNameHash;
+    /// @notice Cached EIP-712 domain separator
+    /// @dev Computed once in initialize, returned directly on chain ID match
+    bytes32 private _cachedDomainSeparator;
+
+    /// @notice Chain ID at initialization time
+    /// @dev Used to detect chain forks and trigger domain separator rebuild
+    uint256 private _cachedChainId;
 
     // ============================================
     // STATE VARIABLES - VAULT STATE
@@ -324,7 +328,8 @@ contract MultistrategyVault is IMultistrategyVault {
         _profitMaxUnlockTime = profitMaxUnlockTime_;
 
         name = name_;
-        _permitNameHash = keccak256(bytes(name_));
+        _cachedChainId = block.chainid;
+        _cachedDomainSeparator = _buildDomainSeparator();
         symbol = symbol_;
         roleManager = roleManager_;
     }
@@ -1818,18 +1823,32 @@ contract MultistrategyVault is IMultistrategyVault {
     }
 
     /**
+     * @dev Builds the EIP-712 domain separator.
+     */
+    function _buildDomainSeparator() private view returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(
+                    DOMAIN_TYPE_HASH,
+                    keccak256(bytes(name)),
+                    keccak256(bytes(API_VERSION)),
+                    block.chainid,
+                    address(this)
+                )
+            );
+    }
+
+    /**
      * @notice Get the domain separator for EIP-712.
+     * @dev Returns cached separator if chain ID unchanged.
+     *      Rebuilds on chain fork to prevent cross-chain replay.
      * @return The domain separator.
      */
     function DOMAIN_SEPARATOR() public view override returns (bytes32) {
-        bytes32 nameHash = _permitNameHash;
-        if (nameHash == bytes32(0)) {
-            nameHash = keccak256(bytes(name));
+        if (block.chainid == _cachedChainId) {
+            return _cachedDomainSeparator;
         }
-        return
-            keccak256(
-                abi.encode(DOMAIN_TYPE_HASH, nameHash, keccak256(bytes(API_VERSION)), block.chainid, address(this))
-            );
+        return _buildDomainSeparator();
     }
 
     /**
