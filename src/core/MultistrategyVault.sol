@@ -1828,13 +1828,7 @@ contract MultistrategyVault is IMultistrategyVault {
         }
         return
             keccak256(
-                abi.encode(
-                    DOMAIN_TYPE_HASH,
-                    nameHash,
-                    keccak256(bytes(API_VERSION)),
-                    block.chainid,
-                    address(this)
-                )
+                abi.encode(DOMAIN_TYPE_HASH, nameHash, keccak256(bytes(API_VERSION)), block.chainid, address(this))
             );
     }
 
