@@ -929,6 +929,7 @@ contract ERC4626Test is Test {
 
         vm.startPrank(gov);
         vault.add_role(gov, IMultistrategyVault.Roles.WITHDRAW_LIMIT_MANAGER);
+        vault.add_role(gov, IMultistrategyVault.Roles.QUEUE_MANAGER);
         vault.set_use_default_queue(true);
         vault.set_withdraw_limit_module(address(new QueueSensitiveWithdrawLimitModule(strategyAddress)));
         vm.stopPrank();
