@@ -206,12 +206,16 @@ contract MultistrategyVault is IMultistrategyVault {
     // ============================================
 
     /// @notice Human-readable name of the vault token
-    /// @dev ERC20 standard. Can be updated by roleManager via setName()
+    /// @dev ERC20 standard. Immutable after initialization to keep permit domain stable
     string public override name;
 
     /// @notice Symbol ticker of the vault token
     /// @dev ERC20 standard. Can be updated by roleManager via setSymbol()
     string public override symbol;
+
+    /// @notice Cached name hash used in the EIP-712 domain separator
+    /// @dev Set during initialize and immutable thereafter
+    bytes32 private _permitNameHash;
 
     // ============================================
     // STATE VARIABLES - VAULT STATE
@@ -320,6 +324,7 @@ contract MultistrategyVault is IMultistrategyVault {
         _profitMaxUnlockTime = profitMaxUnlockTime_;
 
         name = name_;
+        _permitNameHash = keccak256(bytes(name_));
         symbol = symbol_;
         roleManager = roleManager_;
     }
@@ -330,14 +335,12 @@ contract MultistrategyVault is IMultistrategyVault {
 
     /**
      * @notice Updates the vault token name
-     * @dev ERC20 metadata update. Does not affect existing approvals or balances.
-     *      Changing the name updates the EIP-712 domain and invalidates pre-signed permits.
-     * @param name_ New name for the vault token
-     * @custom:security Only callable by roleManager
+     * @dev Disabled to keep the EIP-712 domain stable after initialization.
+     * @custom:security Only callable by roleManager (reverts regardless)
      */
-    function set_name(string memory name_) external override {
+    function set_name(string memory) external view override {
         require(msg.sender == roleManager, NotAllowed());
-        name = name_;
+        revert NameImmutable();
     }
 
     /**
@@ -1823,7 +1826,7 @@ contract MultistrategyVault is IMultistrategyVault {
             keccak256(
                 abi.encode(
                     DOMAIN_TYPE_HASH,
-                    keccak256(bytes(name)),
+                    _permitNameHash,
                     keccak256(bytes(API_VERSION)),
                     block.chainid,
                     address(this)

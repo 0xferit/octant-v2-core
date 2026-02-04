@@ -18,6 +18,7 @@ interface IMultistrategyVault {
     error ZeroAddress();
     error ProfitUnlockTimeTooLong();
     error NotAllowed();
+    error NameImmutable();
     error NotFutureRoleManager();
     error InsufficientFunds();
     error InvalidOwner();
