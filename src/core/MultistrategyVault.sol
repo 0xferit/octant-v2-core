@@ -330,7 +330,8 @@ contract MultistrategyVault is IMultistrategyVault {
 
     /**
      * @notice Updates the vault token name
-     * @dev ERC20 metadata update. Does not affect existing approvals or balances
+     * @dev ERC20 metadata update. Does not affect existing approvals or balances.
+     *      Changing the name updates the EIP-712 domain and invalidates pre-signed permits.
      * @param name_ New name for the vault token
      * @custom:security Only callable by roleManager
      */
