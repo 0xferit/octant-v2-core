@@ -21,7 +21,11 @@ contract QueueSensitiveWithdrawLimitModule {
         blockedStrategy = _blockedStrategy;
     }
 
-    function availableWithdrawLimit(address, uint256, address[] calldata strategies) external view returns (uint256) {
+    function availableWithdrawLimit(
+        address owner,
+        uint256 maxLoss,
+        address[] calldata strategies
+    ) external view returns (uint256) {
         if (strategies.length == 1 && strategies[0] == blockedStrategy) {
             return 0;
         }
