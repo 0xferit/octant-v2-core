@@ -1432,6 +1432,7 @@ abstract contract TokenizedStrategy {
 
     /**
      * @notice Updates the name for the strategy.
+     * @dev Changing the name updates the EIP-712 domain and invalidates pre-signed permits.
      * @param _name New strategy name
      */
     function setName(string calldata _name) external onlyManagement {
