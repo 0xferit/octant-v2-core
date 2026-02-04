@@ -1822,7 +1822,7 @@ contract MultistrategyVault is IMultistrategyVault {
             keccak256(
                 abi.encode(
                     DOMAIN_TYPE_HASH,
-                    keccak256(bytes("Octant Vault")),
+                    keccak256(bytes(name)),
                     keccak256(bytes(API_VERSION)),
                     block.chainid,
                     address(this)
