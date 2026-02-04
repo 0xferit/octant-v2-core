@@ -25,7 +25,7 @@ contract TokenizedStrategyPermitTest is Test {
     bytes32 constant VERSION_HASH = keccak256(bytes("1.0.0"));
 
     function setUp() public {
-        ownerPk = 0xA11CE;
+        ownerPk = uint256(keccak256(abi.encodePacked("TokenizedStrategyPermitTest owner")));
         owner = vm.addr(ownerPk);
         spender = address(0xBEEF);
 
