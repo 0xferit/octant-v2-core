@@ -1777,14 +1777,9 @@ abstract contract TokenizedStrategy {
      */
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
         StrategyData storage S = _strategyStorage();
-        return keccak256(
-            abi.encode(
-                EIP712DOMAIN_TYPEHASH,
-                keccak256(bytes(S.name)),
-                VERSION_HASH,
-                block.chainid,
-                address(this)
-            )
-        );
+        return
+            keccak256(
+                abi.encode(EIP712DOMAIN_TYPEHASH, keccak256(bytes(S.name)), VERSION_HASH, block.chainid, address(this))
+            );
     }
 }
