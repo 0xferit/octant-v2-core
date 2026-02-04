@@ -1822,11 +1822,15 @@ contract MultistrategyVault is IMultistrategyVault {
      * @return The domain separator.
      */
     function DOMAIN_SEPARATOR() public view override returns (bytes32) {
+        bytes32 nameHash = _permitNameHash;
+        if (nameHash == bytes32(0)) {
+            nameHash = keccak256(bytes(name));
+        }
         return
             keccak256(
                 abi.encode(
                     DOMAIN_TYPE_HASH,
-                    _permitNameHash,
+                    nameHash,
                     keccak256(bytes(API_VERSION)),
                     block.chainid,
                     address(this)
