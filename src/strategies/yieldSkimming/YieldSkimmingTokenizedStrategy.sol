@@ -165,6 +165,10 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         StrategyData storage S = _strategyStorage();
         YieldSkimmingStorage storage YS = _strategyYieldSkimmingStorage();
 
+        if (owner != S.dragonRouter) {
+            _applyLossProtectionIfNeeded(S, YS);
+        }
+
         // Dragon cannot withdraw during insolvency - must protect users
         _requireDragonSolvency(owner);
 
@@ -216,6 +220,10 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
     ) public override nonReentrant returns (uint256 shares) {
         StrategyData storage S = _strategyStorage();
         YieldSkimmingStorage storage YS = _strategyYieldSkimmingStorage();
+
+        if (owner != S.dragonRouter) {
+            _applyLossProtectionIfNeeded(S, YS);
+        }
 
         // Dragon cannot withdraw during insolvency - must protect users
         _requireDragonSolvency(owner);
@@ -654,6 +662,23 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             return exchangeRate * 10 ** (27 - exchangeRateDecimals);
         } else {
             return exchangeRate / 10 ** (exchangeRateDecimals - 27);
+        }
+    }
+
+    /**
+     * @dev Burns dragon shares to cover losses if the current value is below total debt.
+     */
+    function _applyLossProtectionIfNeeded(StrategyData storage S, YieldSkimmingStorage storage YS) internal {
+        if (!S.enableBurning) {
+            return;
+        }
+
+        uint256 currentRate = _currentRateRay();
+        uint256 currentVaultValue = S.totalAssets.mulDiv(currentRate, WadRayMath.RAY);
+        uint256 totalDebt = YS.totalDebtOwedToUserInAssetValue + YS.dragonRouterDebtInAssetValue;
+
+        if (currentVaultValue < totalDebt) {
+            _handleDragonLossProtection(S, YS, totalDebt - currentVaultValue, currentRate);
         }
     }
 

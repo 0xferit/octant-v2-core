@@ -1546,6 +1546,51 @@ contract AccountingTest is Setup {
         assertLt(dragonSharesAfterLoss, dragonShares, "Dragon shares should be burned to handle loss");
     }
 
+    function test_redeem_burns_dragon_buffer_before_report() public {
+        address alice = makeAddr("alice");
+        uint256 depositAmount = 100e18;
+
+        _primeDragonProfitThenLoss(alice, depositAmount);
+
+        uint256 aliceShares = strategy.balanceOf(alice);
+        vm.prank(alice);
+        uint256 assetsOut = strategy.redeem(aliceShares, alice, alice);
+
+        assertEq(assetsOut, depositAmount, "user should be made whole by dragon buffer");
+        assertEq(strategy.balanceOf(donationAddress), 0, "dragon shares should be burned on loss");
+    }
+
+    function test_withdraw_burns_dragon_buffer_before_report() public {
+        address alice = makeAddr("alice");
+        uint256 depositAmount = 100e18;
+
+        _primeDragonProfitThenLoss(alice, depositAmount);
+
+        vm.prank(alice);
+        uint256 sharesBurned = strategy.withdraw(depositAmount, alice, alice);
+
+        assertEq(sharesBurned, depositAmount, "shares burned should match requested assets");
+        assertEq(strategy.balanceOf(donationAddress), 0, "dragon shares should be burned on loss");
+        assertEq(strategy.balanceOf(alice), 0, "user shares should be fully redeemed");
+    }
+
+    function _primeDragonProfitThenLoss(address alice, uint256 depositAmount) internal returns (uint256 dragonShares) {
+        vm.startPrank(management);
+        strategy.setEnableBurning(true);
+        vm.stopPrank();
+
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        MockStrategySkimming(address(strategy)).updateExchangeRate(15e17);
+        vm.prank(keeper);
+        strategy.report();
+
+        dragonShares = strategy.balanceOf(donationAddress);
+        assertGt(dragonShares, 0, "dragon should have shares");
+
+        MockStrategySkimming(address(strategy)).updateExchangeRate(1e18);
+    }
+
     struct DragonRouterChangeVars {
         address oldDragonRouter;
         address newDragonRouter;
