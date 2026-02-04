@@ -4,6 +4,8 @@ pragma solidity >=0.8.18;
 import { Setup } from "./utils/Setup.sol";
 import { TokenizedStrategy } from "src/core/TokenizedStrategy.sol";
 import { BaseStrategy } from "src/core/BaseStrategy.sol";
+import { IYieldSkimmingStrategy } from "src/strategies/yieldSkimming/IYieldSkimmingStrategy.sol";
+import { MockStrategySkimming } from "test/mocks/core/tokenized-strategies/MockStrategySkimming.sol";
 
 contract AccessControlTest is Setup {
     function setUp() public override {
@@ -271,6 +273,35 @@ contract AccessControlTest is Setup {
         assertEq(strategy.dragonRouter(), newRouter);
         assertEq(strategy.pendingDragonRouter(), address(0));
         assertEq(strategy.dragonRouterChangeTimestamp(), 0);
+    }
+
+    function test_finalizeDragonRouterChange_revertsWhenInsolventWithOldDragonShares() public {
+        address alice = makeAddr("alice");
+        address newRouter = address(0x123);
+
+        // Arrange: user deposit and profit so dragon holds shares
+        uint256 depositAmount = 100e18;
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        MockStrategySkimming(address(strategy)).updateExchangeRate(15e17);
+        vm.prank(keeper);
+        strategy.report();
+        uint256 dragonShares = strategy.balanceOf(donationAddress);
+        assertGt(dragonShares, 0, "dragon should have shares");
+
+        vm.prank(management);
+        strategy.setDragonRouter(newRouter);
+
+        // Arrange: crash to insolvency
+        MockStrategySkimming(address(strategy)).updateExchangeRate(6e17);
+        vm.prank(keeper);
+        strategy.report();
+        assertTrue(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "vault should be insolvent");
+
+        // Act + Assert: finalize should revert during insolvency
+        skip(14 days);
+        vm.expectRevert("Dragon cannot operate during insolvency");
+        strategy.finalizeDragonRouterChange();
     }
 
     function test_finalizeDragonRouterChange_byAnyone(address _caller) public {
