@@ -11,6 +11,18 @@ import { ITokenizedStrategy } from "src/zodiac-core/interfaces/ITokenizedStrateg
 import { console } from "forge-std/console.sol";
 import { NATIVE_TOKEN } from "src/constants.sol";
 
+contract MockStrategyWithDepositLimit is MockStrategy {
+    uint256 public depositLimit;
+
+    function setDepositLimit(uint256 limit) external {
+        depositLimit = limit;
+    }
+
+    function availableDepositLimit(address) public view override returns (uint256) {
+        return depositLimit;
+    }
+}
+
 /// @dev This test is incomplete.
 /// @dev temps.safe == operator == dragon
 contract DragonTokenizedStrategyTest is BaseTest {
@@ -138,6 +150,81 @@ contract DragonTokenizedStrategyTest is BaseTest {
         assertEq(module.balanceOf(makeAddr(bob)), depositAmount, "Deposit from Alice to Bob failed.");
         assertEq(module.balanceOf(makeAddr(alice)), depositAmount, "A self-deposit failed.");
         assertEq(module.balanceOf(makeAddr(charlie)), depositAmount, "Deposit to self with lockup failed.");
+    }
+
+    function test_deposit_AllowsAtMaxLimit() public {
+        uint256 limit = 1 ether;
+
+        MockStrategyWithDepositLimit localImplementation = new MockStrategyWithDepositLimit();
+        DragonTokenizedStrategy localTokenizedStrategyImplementation = new DragonTokenizedStrategy();
+        MockYieldSource localYieldSource = new MockYieldSource(NATIVE_TOKEN);
+
+        testTemps memory localTemps = _testTemps(
+            address(localImplementation),
+            abi.encode(
+                address(localTokenizedStrategyImplementation),
+                NATIVE_TOKEN,
+                address(localYieldSource),
+                management,
+                keeper,
+                dragonRouter,
+                maxReportDelay,
+                name,
+                regenGovernance
+            )
+        );
+
+        DragonTokenizedStrategy localModule = DragonTokenizedStrategy(payable(localTemps.module));
+        address localOperator = localTemps.safe;
+
+        MockStrategyWithDepositLimit(payable(address(localModule))).setDepositLimit(limit);
+
+        assertEq(localModule.maxDeposit(localOperator), limit);
+
+        vm.deal(localOperator, limit);
+        vm.prank(localOperator);
+        uint256 shares = localModule.deposit(limit, localOperator);
+
+        assertEq(shares, localModule.balanceOf(localOperator));
+        assertGt(shares, 0, "shares should be minted");
+    }
+
+    function test_mint_AllowsAtMaxLimit() public {
+        uint256 limit = 1 ether;
+
+        MockStrategyWithDepositLimit localImplementation = new MockStrategyWithDepositLimit();
+        DragonTokenizedStrategy localTokenizedStrategyImplementation = new DragonTokenizedStrategy();
+        MockYieldSource localYieldSource = new MockYieldSource(NATIVE_TOKEN);
+
+        testTemps memory localTemps = _testTemps(
+            address(localImplementation),
+            abi.encode(
+                address(localTokenizedStrategyImplementation),
+                NATIVE_TOKEN,
+                address(localYieldSource),
+                management,
+                keeper,
+                dragonRouter,
+                maxReportDelay,
+                name,
+                regenGovernance
+            )
+        );
+
+        DragonTokenizedStrategy localModule = DragonTokenizedStrategy(payable(localTemps.module));
+        address localOperator = localTemps.safe;
+
+        MockStrategyWithDepositLimit(payable(address(localModule))).setDepositLimit(limit);
+
+        uint256 maxShares = localModule.maxMint(localOperator);
+        uint256 assets = localModule.previewMint(maxShares);
+        vm.deal(localOperator, assets);
+
+        vm.prank(localOperator);
+        uint256 assetsSpent = localModule.mint(maxShares, localOperator);
+
+        assertEq(assetsSpent, assets);
+        assertEq(localModule.balanceOf(localOperator), maxShares);
     }
 
     /// @dev Demonstrates that the lockup duration is enforced for non-dragons.
