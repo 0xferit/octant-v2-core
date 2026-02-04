@@ -2098,18 +2098,22 @@ contract MultistrategyVault is IMultistrategyVault {
         // Get the max amount for the owner if fully liquid
         vars.maxAssets = _convertToAssets(_balanceOf[owner_], Rounding.ROUND_DOWN);
 
+        // Normalize withdrawal queue to match execution path
+        vars.withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue
+            ? strategiesParam_
+            : _defaultQueue;
+
         // If there is a withdraw limit module use that
         address _withdrawLimitModule = withdrawLimitModule;
         if (_withdrawLimitModule != address(0)) {
-            return
-                Math.min(
-                    IWithdrawLimitModule(_withdrawLimitModule).availableWithdrawLimit(
-                        owner_,
-                        maxLoss_,
-                        strategiesParam_
-                    ),
-                    vars.maxAssets
-                );
+            vars.maxAssets = Math.min(
+                IWithdrawLimitModule(_withdrawLimitModule).availableWithdrawLimit(
+                    owner_,
+                    maxLoss_,
+                    vars.withdrawalStrategies
+                ),
+                vars.maxAssets
+            );
         }
 
         // See if we have enough idle to service the withdraw
@@ -2118,11 +2122,6 @@ contract MultistrategyVault is IMultistrategyVault {
             // Track how much we can pull
             vars.have = vars.currentIdle;
             vars.loss = 0;
-
-            // Determine which strategy queue to use
-            vars.withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue
-                ? strategiesParam_
-                : _defaultQueue;
 
             // Process each strategy in the queue
             for (uint256 i = 0; i < vars.withdrawalStrategies.length; i++) {
@@ -2305,6 +2304,10 @@ contract MultistrategyVault is IMultistrategyVault {
         require(assets_ > 0, NoAssetsToWithdraw());
         require(maxLoss_ <= MAX_BPS, MaxLossExceeded());
 
+        address[] memory withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue
+            ? strategiesParam_
+            : _defaultQueue;
+
         // If there is a withdraw limit module, check the max.
         address _withdrawLimitModule = withdrawLimitModule;
         if (_withdrawLimitModule != address(0)) {
@@ -2313,7 +2316,7 @@ contract MultistrategyVault is IMultistrategyVault {
                     IWithdrawLimitModule(_withdrawLimitModule).availableWithdrawLimit(
                         owner_,
                         maxLoss_,
-                        strategiesParam_
+                        withdrawalStrategies
                     ),
                 ExceedWithdrawLimit()
             );
@@ -2336,12 +2339,7 @@ contract MultistrategyVault is IMultistrategyVault {
         // If there are not enough assets in the Vault contract, we try to free
         // funds from strategies.
         if (state.requestedAssets > state.currentTotalIdle) {
-            // Determine which strategies to use
-            if (strategiesParam_.length != 0 && !useDefaultQueue) {
-                state.withdrawalStrategies = strategiesParam_;
-            } else {
-                state.withdrawalStrategies = _defaultQueue;
-            }
+            state.withdrawalStrategies = withdrawalStrategies;
 
             // Calculate how much we need to withdraw from strategies
             state.assetsNeeded = state.requestedAssets - state.currentTotalIdle;
