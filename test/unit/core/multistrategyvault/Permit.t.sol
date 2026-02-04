@@ -54,7 +54,7 @@ contract PermitTest is Setup {
         assertEq(vault.allowance(owner, bunny), AMOUNT);
     }
 
-    function testDomainSeparatorUsesVaultName() public {
+    function testDomainSeparatorUsesVaultName() public view {
         bytes32 nameHash = keccak256(bytes(vault.name()));
         bytes32 versionHash = keccak256(bytes(vault.API_VERSION()));
         bytes32 expectedDomainSeparator = keccak256(
