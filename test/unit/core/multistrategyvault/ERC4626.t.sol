@@ -14,6 +14,21 @@ import { MockLockedStrategy } from "test/mocks/core/MockLockedStrategy.sol";
 import { MockWithdrawLimitModule } from "test/mocks/core/MockWithdrawLimitModule.sol";
 import { MockDepositLimitModule } from "test/mocks/core/MockDepositLimitModule.sol";
 
+contract QueueSensitiveWithdrawLimitModule {
+    address public blockedStrategy;
+
+    constructor(address _blockedStrategy) {
+        blockedStrategy = _blockedStrategy;
+    }
+
+    function availableWithdrawLimit(address, uint256, address[] calldata strategies) external view returns (uint256) {
+        if (strategies.length == 1 && strategies[0] == blockedStrategy) {
+            return 0;
+        }
+        return type(uint256).max;
+    }
+}
+
 contract ERC4626Test is Test {
     MultistrategyVault vaultImplementation;
     MultistrategyVault vault;
@@ -901,5 +916,32 @@ contract ERC4626Test is Test {
         assertEq(vault.balanceOf(fish), 0, "Fish should have 0 shares after full redemption");
         assertEq(asset.balanceOf(address(vault)), 0, "Vault should have 0 assets after full redemption");
         assertEq(asset.balanceOf(fish), assets, "Fish should have all assets after redemption");
+    }
+
+    function testWithdraw_UsesDefaultQueueForWithdrawLimitModule() public {
+        uint256 assets = fishAmount;
+
+        userDeposit(fish, assets);
+
+        address strategyAddress = createStrategy();
+        addStrategyToVault(strategyAddress);
+        addDebtToStrategy(strategyAddress, assets);
+
+        vm.startPrank(gov);
+        vault.add_role(gov, IMultistrategyVault.Roles.WITHDRAW_LIMIT_MANAGER);
+        vault.set_use_default_queue(true);
+        vault.set_withdraw_limit_module(address(new QueueSensitiveWithdrawLimitModule(strategyAddress)));
+        vm.stopPrank();
+
+        address[] memory defaultQueue = new address[](1);
+        defaultQueue[0] = strategyAddress;
+
+        vm.prank(fish);
+        vm.expectRevert(IMultistrategyVault.ExceedWithdrawLimit.selector);
+        vault.withdraw(assets, fish, fish, 0, defaultQueue);
+
+        vm.prank(fish);
+        vm.expectRevert(IMultistrategyVault.ExceedWithdrawLimit.selector);
+        vault.withdraw(assets, fish, fish, 0, new address[](0));
     }
 }
