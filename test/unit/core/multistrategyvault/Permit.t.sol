@@ -139,6 +139,68 @@ contract PermitTest is Setup {
         );
     }
 
+    function testDomainSeparatorUpdatesOnNameChange() public {
+        bytes32 originalDomainSeparator = vault.DOMAIN_SEPARATOR();
+
+        // Change name
+        string memory newName = "New Vault Name";
+        vm.prank(bunny); // bunny is roleManager
+        vault.set_name(newName);
+
+        // Verify domain separator changed
+        bytes32 newDomainSeparator = vault.DOMAIN_SEPARATOR();
+        assertTrue(newDomainSeparator != originalDomainSeparator, "Domain separator should change with name");
+
+        // Verify new domain separator matches expected value
+        bytes32 expectedDomainSeparator = keccak256(
+            abi.encode(
+                EIP712DOMAIN_TYPEHASH,
+                keccak256(bytes(newName)),
+                keccak256(bytes(vault.API_VERSION())),
+                block.chainid,
+                address(vault)
+            )
+        );
+        assertEq(newDomainSeparator, expectedDomainSeparator, "Domain separator should use new name");
+    }
+
+    function testPermitInvalidatedAfterNameChange() public {
+        address owner = vm.addr(PRIVATE_KEY);
+        uint256 deadline = block.timestamp + 3600;
+
+        // Sign permit with original name
+        bytes32 digest = _getPermitDigest(address(vault), owner, bunny, AMOUNT, vault.nonces(owner), deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PRIVATE_KEY, digest);
+
+        // Change name before using permit
+        vm.prank(bunny);
+        vault.set_name("New Name");
+
+        // Old permit should fail (wrong domain separator)
+        vm.expectRevert(IMultistrategyVault.InvalidSignature.selector);
+        vm.prank(bunny);
+        vault.permit(owner, bunny, AMOUNT, deadline, v, r, s);
+    }
+
+    function testPermitWorksAfterNameChange() public {
+        // Change name first
+        vm.prank(bunny);
+        vault.set_name("New Name");
+
+        address owner = vm.addr(PRIVATE_KEY);
+        uint256 deadline = block.timestamp + 3600;
+
+        // Sign permit with new domain separator
+        bytes32 digest = _getPermitDigest(address(vault), owner, bunny, AMOUNT, vault.nonces(owner), deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PRIVATE_KEY, digest);
+
+        // Permit should work
+        vm.prank(bunny);
+        vault.permit(owner, bunny, AMOUNT, deadline, v, r, s);
+
+        assertEq(vault.allowance(owner, bunny), AMOUNT);
+    }
+
     // Helper function to generate permit digest according to EIP-712
     function _getPermitDigest(
         address token,

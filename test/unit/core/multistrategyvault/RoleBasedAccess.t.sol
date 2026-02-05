@@ -743,13 +743,12 @@ contract RoleBasedAccessTest is Test {
         // Verify name unchanged
         assertEq(vault.name(), initialName, "Name should be unchanged");
 
-        // set_name is disabled even for roleManager
+        // roleManager can set name
         vm.prank(gov);
-        vm.expectRevert(IMultistrategyVault.NameImmutable.selector);
         vault.set_name(newName);
 
-        // Verify name unchanged
-        assertEq(vault.name(), initialName, "Name should be unchanged");
+        // Verify name changed
+        assertEq(vault.name(), newName, "Name should be changed");
     }
 
     function testSetSymbol() public {

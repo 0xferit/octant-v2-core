@@ -340,12 +340,16 @@ contract MultistrategyVault is IMultistrategyVault {
 
     /**
      * @notice Updates the vault token name
-     * @dev Disabled to keep the EIP-712 domain stable after initialization.
-     * @custom:security Only callable by roleManager (reverts regardless)
+     * @dev ERC20 metadata update. Also updates the EIP-712 domain separator,
+     *      which invalidates any previously signed but unused permits.
+     * @param name_ New name for the vault token
+     * @custom:security Only callable by roleManager
      */
-    function set_name(string memory) external view override {
+    function set_name(string memory name_) external override {
         require(msg.sender == roleManager, NotAllowed());
-        revert NameImmutable();
+        name = name_;
+        _cachedDomainSeparator = _buildDomainSeparator();
+        emit UpdateName(name_);
     }
 
     /**

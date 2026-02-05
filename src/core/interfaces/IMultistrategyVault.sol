@@ -18,7 +18,6 @@ interface IMultistrategyVault {
     error ZeroAddress();
     error ProfitUnlockTimeTooLong();
     error NotAllowed();
-    error NameImmutable();
     error NotFutureRoleManager();
     error InsufficientFunds();
     error InvalidOwner();
@@ -340,6 +339,7 @@ interface IMultistrategyVault {
     event UpdateProfitMaxUnlockTime(uint256 profitMaxUnlockTime);
     event DebtPurchased(address indexed strategy, uint256 amount);
     event Shutdown();
+    event UpdateName(string name);
 
     /*//////////////////////////////////////////////////////////////
                              VIEW FUNCTIONS
