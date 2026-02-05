@@ -222,7 +222,6 @@ contract BurningMechanismTest is Test {
         assertTrue(yieldDonatingStrategy.enableBurning());
 
         // Perform other operations that shouldn't affect burning state
-        yieldDonatingStrategy.setName("New Name");
         yieldDonatingStrategy.setKeeper(address(0x999));
 
         // Verify burning state persists

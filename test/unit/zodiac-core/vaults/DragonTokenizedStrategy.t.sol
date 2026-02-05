@@ -115,41 +115,36 @@ contract DragonTokenizedStrategyTest is BaseTest {
     }
 
     /// @dev Demonstrates that a non-dragon user can deposit when dragon mode is off.
-    function testFuzz_nonDragonCanDepositWhenDragonModeOff(
-        uint depositAmount,
-        string memory alice,
-        string memory bob,
-        string memory charlie
-    ) public {
+    function testFuzz_nonDragonCanDepositWhenDragonModeOff(uint depositAmount) public {
         depositAmount = bound(depositAmount, 1 wei, type(uint232).max);
 
-        vm.assume(bytes(alice).length != bytes(bob).length);
-        vm.assume(bytes(alice).length != bytes(charlie).length);
-        vm.assume(bytes(bob).length != bytes(charlie).length);
+        address aliceAddr = makeAddr("alice");
+        address bobAddr = makeAddr("bob");
+        address charlieAddr = makeAddr("charlie");
 
         // Toggle dragon mode off to allow non-dragon deposits
         vm.prank(operator);
         module.toggleDragonMode(false);
 
-        vm.startPrank(makeAddr(alice));
-        vm.deal(makeAddr(alice), 3 * depositAmount);
-        vm.deal(makeAddr(charlie), 1 * depositAmount);
+        vm.startPrank(aliceAddr);
+        vm.deal(aliceAddr, 3 * depositAmount);
+        vm.deal(charlieAddr, 1 * depositAmount);
 
-        module.deposit{ value: depositAmount }(depositAmount, makeAddr(alice)); // Regular deposit to self
-        module.deposit{ value: depositAmount }(depositAmount, makeAddr(bob)); // Regular deposit to others
+        module.deposit{ value: depositAmount }(depositAmount, aliceAddr); // Regular deposit to self
+        module.deposit{ value: depositAmount }(depositAmount, bobAddr); // Regular deposit to others
 
         uint256 lockupDuration = module.minimumLockupDuration();
         vm.expectRevert(abi.encodeWithSelector(DragonTokenizedStrategy__InvalidReceiver.selector));
-        module.depositWithLockup{ value: depositAmount }(depositAmount, makeAddr(charlie), lockupDuration);
+        module.depositWithLockup{ value: depositAmount }(depositAmount, charlieAddr, lockupDuration);
         vm.stopPrank();
 
-        vm.prank(makeAddr(charlie));
-        module.depositWithLockup{ value: depositAmount }(depositAmount, makeAddr(charlie), lockupDuration);
+        vm.prank(charlieAddr);
+        module.depositWithLockup{ value: depositAmount }(depositAmount, charlieAddr, lockupDuration);
 
         // Verify balances
-        assertEq(module.balanceOf(makeAddr(bob)), depositAmount, "Deposit from Alice to Bob failed.");
-        assertEq(module.balanceOf(makeAddr(alice)), depositAmount, "A self-deposit failed.");
-        assertEq(module.balanceOf(makeAddr(charlie)), depositAmount, "Deposit to self with lockup failed.");
+        assertEq(module.balanceOf(bobAddr), depositAmount, "Deposit from Alice to Bob failed.");
+        assertEq(module.balanceOf(aliceAddr), depositAmount, "A self-deposit failed.");
+        assertEq(module.balanceOf(charlieAddr), depositAmount, "Deposit to self with lockup failed.");
     }
 
     function test_deposit_AllowsAtMaxLimit() public {
