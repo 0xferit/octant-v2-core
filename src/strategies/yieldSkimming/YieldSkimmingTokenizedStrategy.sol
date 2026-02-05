@@ -271,6 +271,9 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      */
     function maxDeposit(address receiver) public view virtual override returns (uint256) {
         StrategyData storage S = _strategyStorage();
+        if (_currentRateRay() == 0) {
+            return 0;
+        }
         if (receiver == S.dragonRouter || _isVaultInsolvent()) {
             return 0;
         }
@@ -285,6 +288,9 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      */
     function maxMint(address receiver) public view virtual override returns (uint256) {
         StrategyData storage S = _strategyStorage();
+        if (_currentRateRay() == 0) {
+            return 0;
+        }
         if (receiver == S.dragonRouter || _isVaultInsolvent()) {
             return 0;
         }

@@ -599,6 +599,22 @@ contract AccountingTest is Setup {
         assertEq(strategy.balanceOf(donationAddress), 0, "Donation address should have no shares");
     }
 
+    function test_maxDeposit_maxMint_return_zero_when_rate_zero() public {
+        address alice = makeAddr("alice");
+        MockStrategySkimming(address(strategy)).updateExchangeRate(0);
+
+        assertEq(strategy.maxDeposit(alice), 0, "maxDeposit should be zero at rate 0");
+        assertEq(strategy.maxMint(alice), 0, "maxMint should be zero at rate 0");
+
+        vm.prank(alice);
+        vm.expectRevert();
+        strategy.deposit(1e18, alice);
+
+        vm.prank(alice);
+        vm.expectRevert();
+        strategy.mint(1e18, alice);
+    }
+
     // ===== DEFICIT ADJUSTMENT TESTS =====
     /**
      * @notice Test invariant: Depositors during loss period cannot withdraw more underlying value than deposited
