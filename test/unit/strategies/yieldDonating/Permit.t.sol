@@ -141,6 +141,52 @@ contract PermitTest is Setup {
         strategy.permit(owner, spender, AMOUNT, deadline, v, r, s);
     }
 
+    function testDomainSeparatorRebuildsOnChainFork() public {
+        bytes32 originalSeparator = strategy.DOMAIN_SEPARATOR();
+        uint256 originalChainId = block.chainid;
+
+        // Simulate a chain fork by changing the chain ID
+        uint256 forkedChainId = originalChainId + 1;
+        vm.chainId(forkedChainId);
+
+        // Domain separator must differ from cached value
+        bytes32 forkedSeparator = strategy.DOMAIN_SEPARATOR();
+        assertTrue(forkedSeparator != originalSeparator, "Domain separator should change on chain fork");
+
+        // Verify it matches the expected recomputed value
+        bytes32 expectedSeparator = keccak256(
+            abi.encode(
+                EIP712DOMAIN_TYPEHASH,
+                keccak256(bytes(strategy.name())),
+                keccak256(bytes(strategy.apiVersion())),
+                forkedChainId,
+                address(strategy)
+            )
+        );
+        assertEq(forkedSeparator, expectedSeparator, "Forked separator should match recomputed value");
+
+        // Restore original chain ID -- cached value should be returned again
+        vm.chainId(originalChainId);
+        assertEq(strategy.DOMAIN_SEPARATOR(), originalSeparator, "Should return cached separator on original chain");
+    }
+
+    function testPermitInvalidatedAfterChainFork() public {
+        address owner = vm.addr(PRIVATE_KEY);
+        uint256 deadline = block.timestamp + 3600;
+
+        // Sign permit on the original chain
+        bytes32 digest = _getPermitDigest(address(strategy), owner, spender, AMOUNT, strategy.nonces(owner), deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PRIVATE_KEY, digest);
+
+        // Simulate a chain fork
+        vm.chainId(block.chainid + 1);
+
+        // Permit signed on the original chain must revert
+        vm.expectRevert();
+        vm.prank(spender);
+        strategy.permit(owner, spender, AMOUNT, deadline, v, r, s);
+    }
+
     // Helper function to generate permit digest according to EIP-712
     function _getPermitDigest(
         address token,
