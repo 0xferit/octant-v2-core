@@ -200,6 +200,52 @@ contract PermitTest is Setup {
         assertEq(vault.allowance(owner, bunny), AMOUNT);
     }
 
+    function testDomainSeparatorRebuildsOnChainFork() public {
+        bytes32 originalSeparator = vault.DOMAIN_SEPARATOR();
+        uint256 originalChainId = block.chainid;
+
+        // Simulate a chain fork by changing the chain ID
+        uint256 forkedChainId = originalChainId + 1;
+        vm.chainId(forkedChainId);
+
+        // Domain separator must differ from cached value
+        bytes32 forkedSeparator = vault.DOMAIN_SEPARATOR();
+        assertTrue(forkedSeparator != originalSeparator, "Domain separator should change on chain fork");
+
+        // Verify it matches the expected recomputed value
+        bytes32 expectedSeparator = keccak256(
+            abi.encode(
+                EIP712DOMAIN_TYPEHASH,
+                keccak256(bytes(vault.name())),
+                keccak256(bytes(vault.API_VERSION())),
+                forkedChainId,
+                address(vault)
+            )
+        );
+        assertEq(forkedSeparator, expectedSeparator, "Forked separator should match recomputed value");
+
+        // Restore original chain ID -- cached value should be returned again
+        vm.chainId(originalChainId);
+        assertEq(vault.DOMAIN_SEPARATOR(), originalSeparator, "Should return cached separator on original chain");
+    }
+
+    function testPermitInvalidatedAfterChainFork() public {
+        address owner = vm.addr(PRIVATE_KEY);
+        uint256 deadline = block.timestamp + 3600;
+
+        // Sign permit on the original chain
+        bytes32 digest = _getPermitDigest(address(vault), owner, bunny, AMOUNT, vault.nonces(owner), deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PRIVATE_KEY, digest);
+
+        // Simulate a chain fork
+        vm.chainId(block.chainid + 1);
+
+        // Permit signed on the original chain must revert
+        vm.expectRevert(IMultistrategyVault.InvalidSignature.selector);
+        vm.prank(bunny);
+        vault.permit(owner, bunny, AMOUNT, deadline, v, r, s);
+    }
+
     // Helper function to generate permit digest according to EIP-712
     function _getPermitDigest(
         address token,
