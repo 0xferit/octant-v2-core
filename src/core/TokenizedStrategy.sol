@@ -1450,7 +1450,7 @@ abstract contract TokenizedStrategy {
 
     /**
      * @notice Updates the name for the strategy.
-     * @dev Also updates the EIP-712 domain separator via permitNameHash,
+     * @dev Also updates the EIP-712 domain separator via cachedDomainSeparator,
      *      which invalidates any previously signed but unused permits.
      * @param _name New name for the strategy
      */
