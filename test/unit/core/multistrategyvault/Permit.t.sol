@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import "forge-std/console.sol";
 import { Setup } from "test/unit/zodiac-core/vaults/Setup.sol";
 import { IERC20Permit } from "src/utils/vendor/shamirlabs/IERC20Permit.sol";
 import { MultistrategyVault } from "src/core/MultistrategyVault.sol";

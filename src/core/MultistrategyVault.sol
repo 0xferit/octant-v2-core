@@ -206,7 +206,7 @@ contract MultistrategyVault is IMultistrategyVault {
     // ============================================
 
     /// @notice Human-readable name of the vault token
-    /// @dev ERC20 standard. Immutable after initialization to keep permit domain stable
+    /// @dev ERC20 standard. Can be updated by roleManager via set_name()
     string public override name;
 
     /// @notice Symbol ticker of the vault token
@@ -214,7 +214,7 @@ contract MultistrategyVault is IMultistrategyVault {
     string public override symbol;
 
     /// @notice Cached EIP-712 domain separator
-    /// @dev Computed once in initialize, returned directly on chain ID match
+    /// @dev Computed in initialize and updated when name changes
     bytes32 private _cachedDomainSeparator;
 
     /// @notice Chain ID at initialization time
