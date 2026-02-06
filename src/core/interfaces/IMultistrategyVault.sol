@@ -339,6 +339,7 @@ interface IMultistrategyVault {
     event UpdateProfitMaxUnlockTime(uint256 profitMaxUnlockTime);
     event DebtPurchased(address indexed strategy, uint256 amount);
     event Shutdown();
+    event UpdateName(string name);
 
     /*//////////////////////////////////////////////////////////////
                              VIEW FUNCTIONS

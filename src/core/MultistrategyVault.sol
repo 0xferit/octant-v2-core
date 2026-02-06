@@ -206,12 +206,20 @@ contract MultistrategyVault is IMultistrategyVault {
     // ============================================
 
     /// @notice Human-readable name of the vault token
-    /// @dev ERC20 standard. Can be updated by roleManager via setName()
+    /// @dev ERC20 standard. Can be updated by roleManager via set_name()
     string public override name;
 
     /// @notice Symbol ticker of the vault token
     /// @dev ERC20 standard. Can be updated by roleManager via setSymbol()
     string public override symbol;
+
+    /// @notice Cached EIP-712 domain separator
+    /// @dev Computed in initialize and updated when name changes
+    bytes32 private _cachedDomainSeparator;
+
+    /// @notice Chain ID at initialization time
+    /// @dev Used to detect chain forks and trigger domain separator rebuild
+    uint256 private _cachedChainId;
 
     // ============================================
     // STATE VARIABLES - VAULT STATE
@@ -320,6 +328,8 @@ contract MultistrategyVault is IMultistrategyVault {
         _profitMaxUnlockTime = profitMaxUnlockTime_;
 
         name = name_;
+        _cachedChainId = block.chainid;
+        _cachedDomainSeparator = _buildDomainSeparator();
         symbol = symbol_;
         roleManager = roleManager_;
     }
@@ -330,13 +340,16 @@ contract MultistrategyVault is IMultistrategyVault {
 
     /**
      * @notice Updates the vault token name
-     * @dev ERC20 metadata update. Does not affect existing approvals or balances
+     * @dev ERC20 metadata update. Also updates the EIP-712 domain separator,
+     *      which invalidates any previously signed but unused permits.
      * @param name_ New name for the vault token
      * @custom:security Only callable by roleManager
      */
     function set_name(string memory name_) external override {
         require(msg.sender == roleManager, NotAllowed());
         name = name_;
+        _cachedDomainSeparator = _buildDomainSeparator();
+        emit UpdateName(name_);
     }
 
     /**
@@ -1814,20 +1827,32 @@ contract MultistrategyVault is IMultistrategyVault {
     }
 
     /**
-     * @notice Get the domain separator for EIP-712.
-     * @return The domain separator.
+     * @dev Builds the EIP-712 domain separator.
      */
-    function DOMAIN_SEPARATOR() public view override returns (bytes32) {
+    function _buildDomainSeparator() private view returns (bytes32) {
         return
             keccak256(
                 abi.encode(
                     DOMAIN_TYPE_HASH,
-                    keccak256(bytes("Octant Vault")),
+                    keccak256(bytes(name)),
                     keccak256(bytes(API_VERSION)),
                     block.chainid,
                     address(this)
                 )
             );
+    }
+
+    /**
+     * @notice Get the domain separator for EIP-712.
+     * @dev Returns cached separator if chain ID unchanged.
+     *      Rebuilds on chain fork to prevent cross-chain replay.
+     * @return The domain separator.
+     */
+    function DOMAIN_SEPARATOR() public view override returns (bytes32) {
+        if (block.chainid == _cachedChainId) {
+            return _cachedDomainSeparator;
+        }
+        return _buildDomainSeparator();
     }
 
     /**

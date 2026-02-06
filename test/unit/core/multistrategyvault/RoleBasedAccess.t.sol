@@ -743,13 +743,12 @@ contract RoleBasedAccessTest is Test {
         // Verify name unchanged
         assertEq(vault.name(), initialName, "Name should be unchanged");
 
-        // Set name with gov (roleManager)
+        // roleManager can set name
         vm.prank(gov);
         vault.set_name(newName);
 
         // Verify name changed
         assertEq(vault.name(), newName, "Name should be changed");
-        assertNotEq(vault.name(), initialName, "Name should be different from initial");
     }
 
     function testSetSymbol() public {
