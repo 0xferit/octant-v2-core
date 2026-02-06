@@ -5,7 +5,7 @@ rekompile                  = true
 verbose                    = false
 debug                      = false
 require                    = 'verification/kontrol/octant-lemmas.k'
-module-import              = ['YearnPolygonUsdcStrategyKontrolTest:OCTANT-LEMMAS', 'YDStrategyTest:OCTANT-LEMMAS']
+module-import              = ['YDStrategyTest:OCTANT-LEMMAS', 'YSStrategyTest:OCTANT-LEMMAS', 'YDERC4626Test:OCTANT-LEMMAS', 'YSERC4626Test:OCTANT-LEMMAS']
 auxiliary-lemmas           = true
 
 [prove.default]
@@ -41,32 +41,32 @@ auto_abstract              = true
 run-constructor            = false
 match-test                 = [
         # ============================================
-        # YearnPolygonUsdcStrategy proofs (existing)
+        # YearnPolygonUsdcStrategy proofs (RETIRED -- Dragon-based)
         # ============================================
-        "YearnPolygonUsdcStrategyKontrolTest.testDeposit(uint256,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testDepositWithLockup(uint256,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testMint(uint256,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testMintWithLockup(uint256,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testWithdraw(uint256,address,address,uint256)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testDeposit(uint256,address)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testDepositWithLockup(uint256,address,uint256)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testMint(uint256,address)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testMintWithLockup(uint256,address,uint256)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testWithdraw(uint256,address,address,uint256)",
         #"YearnPolygonUsdcStrategyKontrolTest.testWithdrawWithLossReverts(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testWithdrawRevert(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testRedeem(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testRedeemRevert(uint256,address,address,uint256)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testWithdrawRevert(uint256,address,address,uint256)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testRedeem(uint256,address,address,uint256)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testRedeemRevert(uint256,address,address,uint256)",
         #"YearnPolygonUsdcStrategyKontrolTest.testMaxRedeemAllwaysReverts(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testInitiateRageQuit()",
-        "YearnPolygonUsdcStrategyKontrolTest.testReport()",
-        "YearnPolygonUsdcStrategyKontrolTest.testReportWithLoss()",
-        "YearnPolygonUsdcStrategyKontrolTest.testTend()",
-        "YearnPolygonUsdcStrategyKontrolTest.testSetPendingManagement(address)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testInitiateRageQuit()",
+        #"YearnPolygonUsdcStrategyKontrolTest.testReport()",
+        #"YearnPolygonUsdcStrategyKontrolTest.testReportWithLoss()",
+        #"YearnPolygonUsdcStrategyKontrolTest.testTend()",
+        #"YearnPolygonUsdcStrategyKontrolTest.testSetPendingManagement(address)",
         #"YearnPolygonUsdcStrategyKontrolTest.testSetPendingManagementRevert(address,address)",
         #"YearnPolygonUsdcStrategyKontrolTest.testAcceptManagement(address)",
         #"YearnPolygonUsdcStrategyKontrolTest.testAcceptManagementRevert(address,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testSetKeeper(address)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testSetKeeper(address)",
         #"YearnPolygonUsdcStrategyKontrolTest.testSetKeeperRevert(address,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testSetEmergencyAdmin(address)",
+        #"YearnPolygonUsdcStrategyKontrolTest.testSetEmergencyAdmin(address)",
         #"YearnPolygonUsdcStrategyKontrolTest.testSetEmergencyAdminRevert(address,address)",
         # ============================================
-        # YieldDonating strategy proofs (new)
+        # YieldDonating strategy proofs
         # ============================================
         "YDStrategyTest.testReportProfit()",
         "YDStrategyTest.testReportLossWithBurning()",
@@ -77,6 +77,42 @@ match-test                 = [
         "YDStrategyTest.testReportOnlyKeeper()",
         "YDStrategyTest.testReportByManagement()",
         "YDStrategyTest.testReportNotEmergencyAdmin()",
+        "YDStrategyTest.testDepositYD(uint256,address)",
+        "YDStrategyTest.testMintYD(uint256,address)",
+        "YDStrategyTest.testWithdrawYD(uint256,address,address)",
+        "YDStrategyTest.testRedeemYD(uint256,address,address)",
+        # ============================================
+        # YieldSkimming strategy proofs
+        # ============================================
+        "YSStrategyTest.testReportProfitYS()",
+        "YSStrategyTest.testReportLossWithBurningYS()",
+        "YSStrategyTest.testReportLossInsufficientDragonYS()",
+        "YSStrategyTest.testReportNoChangeYS()",
+        "YSStrategyTest.testReportLossNoBurningYS()",
+        "YSStrategyTest.testDepositBlockedDuringInsolvency()",
+        "YSStrategyTest.testDragonBlockedDuringInsolvency()",
+        "YSStrategyTest.testDepositBlockedForDragon()",
+        "YSStrategyTest.testTendYS()",
+        "YSStrategyTest.testReportOnlyKeeperYS()",
+        "YSStrategyTest.testReportByManagementYS()",
+        "YSStrategyTest.testDepositValueDebtYS(uint256,address)",
+        "YSStrategyTest.testRedeemValueDebtYS(uint256,address,address)",
+        "YSStrategyTest.testTransferDragonToUser(address,uint256)",
+        "YSStrategyTest.testTransferUserToDragon(address,uint256)",
+        # ============================================
+        # ERC4626 property tests (YieldDonating)
+        # ============================================
+        "YDERC4626Test.testSharesRedeemableAfterDepositYD(uint256,address)",
+        "YDERC4626Test.testShutdownBlocksYD(address)",
+        "YDERC4626Test.testBalanceBoundedYD(address)",
+        "YDERC4626Test.testConversionConsistencyYD(uint256)",
+        # ============================================
+        # ERC4626 property tests (YieldSkimming)
+        # ============================================
+        "YSERC4626Test.testShutdownBlocksYS(address)",
+        "YSERC4626Test.testBalanceBoundedYS(address)",
+        "YSERC4626Test.testConversionSolventYS(uint256)",
+        "YSERC4626Test.testConversionFallbackInsolventYS(uint256)",
     ]
 
 [show.default]
