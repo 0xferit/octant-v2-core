@@ -2104,14 +2104,15 @@ contract MultistrategyVault is IMultistrategyVault {
         // If there is a withdraw limit module use that
         address _withdrawLimitModule = withdrawLimitModule;
         if (_withdrawLimitModule != address(0)) {
-            vars.maxAssets = Math.min(
-                IWithdrawLimitModule(_withdrawLimitModule).availableWithdrawLimit(
-                    owner_,
-                    maxLoss_,
-                    vars.withdrawalStrategies
-                ),
-                vars.maxAssets
-            );
+            return
+                Math.min(
+                    IWithdrawLimitModule(_withdrawLimitModule).availableWithdrawLimit(
+                        owner_,
+                        maxLoss_,
+                        vars.withdrawalStrategies
+                    ),
+                    vars.maxAssets
+                );
         }
 
         // See if we have enough idle to service the withdraw
