@@ -13,7 +13,7 @@ import { YieldForwarder } from "src/core/YieldForwarder.sol";
  *
  *      DEPLOYMENT PATTERN:
  *      - Full bytecode deployment via CREATE2 for deterministic addresses
- *      - Salt includes receiver, caller-provided salt, and deployer for uniqueness
+ *      - Salt includes receiver, keeper, caller-provided salt, and deployer for uniqueness
  *      - Each deployment tracked per deployer
  *
  *      FEATURES:
@@ -35,6 +35,8 @@ contract YieldForwarderFactory {
         address forwarderAddress;
         /// @notice Address of the receiver configured in the forwarder
         address receiver;
+        /// @notice Address of the keeper configured in the forwarder
+        address keeper;
     }
 
     // ============================================
@@ -54,11 +56,13 @@ contract YieldForwarderFactory {
     /// @param forwarderAddress Address of the deployed forwarder
     /// @param salt Caller-provided salt used for CREATE2
     /// @param receiver Address configured as the forwarder's receiver
+    /// @param keeper Address configured as the forwarder's keeper
     event YieldForwarderCreated(
         address indexed deployer,
         address indexed forwarderAddress,
         bytes32 indexed salt,
-        address receiver
+        address receiver,
+        address keeper
     );
 
     // ============================================
@@ -74,15 +78,20 @@ contract YieldForwarderFactory {
 
     /**
      * @notice Creates a new YieldForwarder instance with deterministic address
-     * @dev Uses CREATE2 with a salt derived from receiver, caller-provided salt, and msg.sender.
+     * @dev Uses CREATE2 with a salt derived from receiver, keeper, caller-provided salt, and msg.sender.
      *      This allows governance proposals to use a fixed salt, avoiding race conditions.
      * @param _receiver Address that will receive forwarded assets
+     * @param _keeper Address authorized to call reportAndForward on the forwarder
      * @param _salt Caller-provided salt for deterministic address
      * @return forwarder Address of newly created YieldForwarder
      */
-    function createYieldForwarder(address _receiver, bytes32 _salt) external returns (address forwarder) {
-        bytes32 finalSalt = _computeFinalSalt(_receiver, _salt, msg.sender);
-        bytes memory bytecode = _getCreationBytecode(_receiver);
+    function createYieldForwarder(
+        address _receiver,
+        address _keeper,
+        bytes32 _salt
+    ) external returns (address forwarder) {
+        bytes32 finalSalt = _computeFinalSalt(_receiver, _keeper, _salt, msg.sender);
+        bytes memory bytecode = _getCreationBytecode(_receiver, _keeper);
 
         // Check if forwarder already exists at predicted address
         address predicted = Create2.computeAddress(finalSalt, keccak256(bytecode));
@@ -93,26 +102,28 @@ contract YieldForwarderFactory {
         forwarder = Create2.deploy(0, finalSalt, bytecode);
 
         // Track deployment
-        deployerToForwarders[msg.sender].push(ForwarderInfo(forwarder, _receiver));
+        deployerToForwarders[msg.sender].push(ForwarderInfo(forwarder, _receiver, _keeper));
 
-        emit YieldForwarderCreated(msg.sender, forwarder, _salt, _receiver);
+        emit YieldForwarderCreated(msg.sender, forwarder, _salt, _receiver, _keeper);
     }
 
     /**
      * @notice Predicts the deterministic address where a YieldForwarder will be deployed
      * @dev Uses CREATE2 address computation with the same salt derivation as createYieldForwarder
      * @param _receiver Address that will be the forwarder's receiver
+     * @param _keeper Address that will be the forwarder's keeper
      * @param _salt The same salt that will be passed to createYieldForwarder
      * @param _deployer Address that will call createYieldForwarder
      * @return predicted Predicted address of deployment
      */
     function computeYieldForwarderAddress(
         address _receiver,
+        address _keeper,
         bytes32 _salt,
         address _deployer
     ) external view returns (address predicted) {
-        bytes32 finalSalt = _computeFinalSalt(_receiver, _salt, _deployer);
-        bytes memory bytecode = _getCreationBytecode(_receiver);
+        bytes32 finalSalt = _computeFinalSalt(_receiver, _keeper, _salt, _deployer);
+        bytes memory bytecode = _getCreationBytecode(_receiver, _keeper);
         predicted = Create2.computeAddress(finalSalt, keccak256(bytecode));
     }
 
@@ -131,22 +142,29 @@ contract YieldForwarderFactory {
     // ============================================
 
     /**
-     * @dev Computes the final CREATE2 salt from receiver, caller salt, and deployer
+     * @dev Computes the final CREATE2 salt from receiver, keeper, caller salt, and deployer
      * @param _receiver Forwarder receiver address
+     * @param _keeper Forwarder keeper address
      * @param _salt Caller-provided salt
      * @param _deployer Deployer address
      * @return Final salt for CREATE2
      */
-    function _computeFinalSalt(address _receiver, bytes32 _salt, address _deployer) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(keccak256(abi.encode(_receiver, _salt)), _deployer));
+    function _computeFinalSalt(
+        address _receiver,
+        address _keeper,
+        bytes32 _salt,
+        address _deployer
+    ) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(keccak256(abi.encode(_receiver, _keeper, _salt)), _deployer));
     }
 
     /**
-     * @dev Returns the creation bytecode for a YieldForwarder with the given receiver
+     * @dev Returns the creation bytecode for a YieldForwarder with the given params
      * @param _receiver Receiver address to encode in constructor args
+     * @param _keeper Keeper address to encode in constructor args
      * @return Creation bytecode including constructor args
      */
-    function _getCreationBytecode(address _receiver) internal pure returns (bytes memory) {
-        return abi.encodePacked(type(YieldForwarder).creationCode, abi.encode(_receiver));
+    function _getCreationBytecode(address _receiver, address _keeper) internal pure returns (bytes memory) {
+        return abi.encodePacked(type(YieldForwarder).creationCode, abi.encode(_receiver, _keeper));
     }
 }
