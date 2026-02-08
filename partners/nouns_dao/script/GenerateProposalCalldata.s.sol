@@ -71,9 +71,10 @@ contract GenerateProposalCalldata is Script {
     /// @dev Placeholder - update with actual Nouns Payer contract address
     address constant NOUNS_PAYER = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
 
-    /// @notice Keeper bot address for calling report()
+    /// @notice Keeper bot EOA that triggers YieldForwarder.reportAndForward()
     /// @dev For testing: using deployer address. Update for production.
     /// @dev CRITICAL: Do NOT use Treasury - would require governance vote for each harvest
+    /// @dev The strategy's keeper will be the YieldForwarder itself (not this EOA directly)
     address constant KEEPER_BOT = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
 
     /// @notice Emergency admin address
@@ -215,20 +216,23 @@ contract GenerateProposalCalldata is Script {
         // Predict YieldForwarder address with explicit salt (avoids race conditions in governance)
         predictedYF = YieldForwarderFactory(YIELD_FORWARDER_FACTORY).computeYieldForwarderAddress(
             NOUNS_PAYER,
+            KEEPER_BOT,
             YIELD_FORWARDER_SALT,
             NOUNS_TREASURY
         );
 
         // Predict Strategy address using LidoStrategyFactory.computeStrategyAddress()
+        // NOTE: Strategy's _keeper is the YieldForwarder (so it can call report())
+        //       Strategy's _donationAddress is also the YieldForwarder (receives profit shares)
         predictedStrategy = LidoStrategyFactory(LIDO_STRATEGY_FACTORY).computeStrategyAddress(
             WSTETH, // _vault
             WSTETH, // _asset
             STRATEGY_NAME,
             STRATEGY_SYMBOL,
             NOUNS_TREASURY, // _management
-            KEEPER_BOT, // _keeper
+            predictedYF, // _keeper = YieldForwarder (calls report())
             EMERGENCY_ADMIN, // _emergencyAdmin
-            predictedYF, // _donationAddress
+            predictedYF, // _donationAddress = YieldForwarder (receives profit shares)
             false, // _enableBurning
             TOKENIZED_STRATEGY, // _tokenizedStrategyAddress
             NOUNS_TREASURY // _deployer (Treasury will deploy via governance)
@@ -253,8 +257,8 @@ contract GenerateProposalCalldata is Script {
     {
         target = YIELD_FORWARDER_FACTORY;
         value = 0;
-        signature = "createYieldForwarder(address,bytes32)";
-        calldataParams = abi.encode(NOUNS_PAYER, YIELD_FORWARDER_SALT);
+        signature = "createYieldForwarder(address,address,bytes32)";
+        calldataParams = abi.encode(NOUNS_PAYER, KEEPER_BOT, YIELD_FORWARDER_SALT);
     }
 
     /**
@@ -275,9 +279,9 @@ contract GenerateProposalCalldata is Script {
             STRATEGY_NAME,
             STRATEGY_SYMBOL,
             NOUNS_TREASURY,
-            KEEPER_BOT,
+            yieldForwarder, // _keeper = YieldForwarder (calls report())
             EMERGENCY_ADMIN,
-            yieldForwarder,
+            yieldForwarder, // _donationAddress = YieldForwarder (receives profit shares)
             false,
             TOKENIZED_STRATEGY
         );
@@ -345,6 +349,7 @@ contract GenerateProposalCalldata is Script {
         console.log("");
         console.log("PARAMETERS:");
         console.log("  receiver: ", NOUNS_PAYER);
+        console.log("  keeper:   ", KEEPER_BOT);
         console.log("  salt:     ");
         console.logBytes32(YIELD_FORWARDER_SALT);
         console.log("");
@@ -375,7 +380,7 @@ contract GenerateProposalCalldata is Script {
         console.log("  _name:                     %s", STRATEGY_NAME);
         console.log("  _symbol:                   %s", STRATEGY_SYMBOL);
         console.log("  _management:               ", NOUNS_TREASURY);
-        console.log("  _keeper:                   ", KEEPER_BOT);
+        console.log("  _keeper:                   ", yieldForwarder);
         console.log("  _emergencyAdmin:           ", EMERGENCY_ADMIN);
         console.log("  _donationAddress:          ", yieldForwarder);
         console.log("  _enableBurning:            false");
@@ -457,7 +462,7 @@ contract GenerateProposalCalldata is Script {
         console.log("TX 1 - Deploy YieldForwarder");
         console.log("--------------------------------------------------------------------------------");
         console.log("Target:   ", YIELD_FORWARDER_FACTORY);
-        console.log("Function: createYieldForwarder(address,bytes32)");
+        console.log("Function: createYieldForwarder(address,address,bytes32)");
         console.log("");
         console.log("--------------------------------------------------------------------------------");
         console.log("TX 2 - Deploy LidoStrategy");

@@ -275,7 +275,9 @@ contract GenerateProposalCalldataGovernanceTest is Test {
 
         // Event signatures
         bytes32 strategyDeploySelector = keccak256("StrategyDeploy(address,address,address,string)");
-        bytes32 yieldForwarderCreatedSelector = keccak256("YieldForwarderCreated(address,address,bytes32,address)");
+        bytes32 yieldForwarderCreatedSelector = keccak256(
+            "YieldForwarderCreated(address,address,bytes32,address,address)"
+        );
 
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == strategyDeploySelector) {
@@ -299,12 +301,15 @@ contract GenerateProposalCalldataGovernanceTest is Test {
         // VERIFY: YieldForwarder deployed and receiver matches expected Payer
         // ════════════════════════════════════════════════════════════════════════
         assertTrue(deployedYieldForwarder.code.length > 0, "YieldForwarder should have bytecode deployed");
-        address forwarderReceiver = YieldForwarder(deployedYieldForwarder).receiver();
-        // The receiver should be NOUNS_PAYER (0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200)
         assertEq(
-            forwarderReceiver,
+            YieldForwarder(deployedYieldForwarder).receiver(),
             0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200,
             "YieldForwarder receiver should match Nouns Payer"
+        );
+        assertEq(
+            YieldForwarder(deployedYieldForwarder).keeper(),
+            0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200,
+            "YieldForwarder keeper should match Keeper Bot"
         );
 
         // ════════════════════════════════════════════════════════════════════════
