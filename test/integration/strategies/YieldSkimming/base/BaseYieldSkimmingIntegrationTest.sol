@@ -783,7 +783,6 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
         vm.startPrank(keeper);
         (uint256 profit2, uint256 loss2) = vault.report();
         vm.stopPrank();
-        _clearMocks();
 
         assertEq(profit2, 0, "Should have no profit in second loss");
         assertGt(loss2, 0, "Should have loss in second report");
@@ -798,6 +797,7 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
         vm.startPrank(user);
         state.assetsReceived = vault.redeem(vault.balanceOf(user), user, user);
         vm.stopPrank();
+        _clearMocks();
 
         uint256 initialValue = depositAmount * state.initialExchangeRate;
         uint256 receivedValue = state.assetsReceived * state.secondLossRate;

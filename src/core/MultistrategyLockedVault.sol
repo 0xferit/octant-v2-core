@@ -482,10 +482,12 @@ contract MultistrategyLockedVault is MultistrategyVault, IMultistrategyLockedVau
         super._transfer(sender_, receiver_, amount_);
     }
 
+    /// @inheritdoc IMultistrategyLockedVault
     function getPendingRageQuitCooldownPeriod() external view returns (uint256) {
         return pendingRageQuitCooldownPeriod;
     }
 
+    /// @inheritdoc IMultistrategyLockedVault
     function getRageQuitCooldownPeriodChangeTimestamp() external view returns (uint256) {
         return rageQuitCooldownPeriodChangeTimestamp;
     }

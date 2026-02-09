@@ -107,7 +107,10 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
      * @custom:security Only regen governance
      */
     function cancelRageQuitCooldownPeriodChange() external;
+    /// @notice Get the pending rage quit cooldown period awaiting governance timelock
     function getPendingRageQuitCooldownPeriod() external view returns (uint256);
+
+    /// @notice Get the timestamp when the rage quit cooldown period change was initiated
     function getRageQuitCooldownPeriodChangeTimestamp() external view returns (uint256);
 
     /**
