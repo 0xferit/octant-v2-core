@@ -476,6 +476,106 @@ contract SparkDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         assertGt(ERC20(_asset()).balanceOf(user), 0);
     }
 
+    // ========== AVAILABLE WITHDRAW LIMIT OVERFLOW TESTS ==========
+
+    /// @notice Test that availableWithdrawLimit does not overflow when maxWithdraw returns type(uint256).max
+    function testAvailableWithdrawLimitNoOverflowWhenMaxWithdrawIsMax() public {
+        // Give strategy some idle balance
+        uint256 idleAmount = 1000e6;
+        airdrop(ERC20(_asset()), address(strategy), idleAmount);
+
+        // Mock targetVault.maxWithdraw to return type(uint256).max
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(strategy)),
+            abi.encode(type(uint256).max)
+        );
+
+        // Should return type(uint256).max instead of reverting
+        uint256 limit = strategy.availableWithdrawLimit(address(0));
+        assertEq(limit, type(uint256).max, "Should cap at type(uint256).max instead of overflowing");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Test availableWithdrawLimit works normally when no overflow risk
+    function testAvailableWithdrawLimitNormalCase() public {
+        uint256 idleAmount = 1000e6;
+        uint256 vaultMax = 5000e6;
+
+        airdrop(ERC20(_asset()), address(strategy), idleAmount);
+
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(strategy)),
+            abi.encode(vaultMax)
+        );
+
+        uint256 limit = strategy.availableWithdrawLimit(address(0));
+        assertEq(limit, idleAmount + vaultMax, "Should return exact sum when no overflow");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Test availableWithdrawLimit with zero idle balance and max vault withdraw
+    function testAvailableWithdrawLimitZeroIdleMaxVault() public {
+        // No idle balance, maxWithdraw returns type(uint256).max
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(strategy)),
+            abi.encode(type(uint256).max)
+        );
+
+        uint256 limit = strategy.availableWithdrawLimit(address(0));
+        assertEq(limit, type(uint256).max, "Should return type(uint256).max with zero idle");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Test availableWithdrawLimit at the exact overflow boundary
+    function testAvailableWithdrawLimitExactBoundary() public {
+        uint256 idleAmount = 1;
+        airdrop(ERC20(_asset()), address(strategy), idleAmount);
+
+        // maxWithdraw = type(uint256).max means idle + maxWithdraw would overflow by exactly 1
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(strategy)),
+            abi.encode(type(uint256).max)
+        );
+
+        uint256 limit = strategy.availableWithdrawLimit(address(0));
+        assertEq(limit, type(uint256).max, "Should cap at max when overflow by 1");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Fuzz test that availableWithdrawLimit never reverts
+    function testFuzzAvailableWithdrawLimitNeverReverts(uint256 idleAmount, uint256 vaultMax) public {
+        idleAmount = bound(idleAmount, 0, type(uint128).max);
+        airdrop(ERC20(_asset()), address(strategy), idleAmount);
+
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(strategy)),
+            abi.encode(vaultMax)
+        );
+
+        // Must never revert
+        uint256 limit = strategy.availableWithdrawLimit(address(0));
+
+        // Verify correctness
+        if (vaultMax > type(uint256).max - idleAmount) {
+            assertEq(limit, type(uint256).max, "Should cap at max on overflow");
+        } else {
+            assertEq(limit, idleAmount + vaultMax, "Should return exact sum when safe");
+        }
+
+        vm.clearMockedCalls();
+    }
+
+    // ========== CONSTRUCTOR TESTS ==========
+
     /// @notice Test constructor asset validation
     function testConstructorAssetValidation() public {
         vm.expectRevert("Asset mismatch with target vault");
