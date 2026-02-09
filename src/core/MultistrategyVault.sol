@@ -112,8 +112,9 @@ contract MultistrategyVault is IMultistrategyVault {
     mapping(address => StrategyParams) internal _strategies;
 
     /// @notice Array of strategy addresses used as the default withdrawal queue
-    /// @dev Maximum length of MAX_QUEUE (10). Order determines withdrawal priority
-    ///      Strategies are attempted in array order during withdrawals
+    /// @dev Governance-managed via QUEUE_MANAGER role. Strategies in this queue are trusted.
+    ///      Maximum length of MAX_QUEUE (10). Order determines withdrawal priority.
+    ///      Strategies are attempted in array order during withdrawals.
     address[] internal _defaultQueue;
 
     /// @notice Whether to force use of default queue for all withdrawals
@@ -2098,7 +2099,8 @@ contract MultistrategyVault is IMultistrategyVault {
         // Get the max amount for the owner if fully liquid
         vars.maxAssets = _convertToAssets(_balanceOf[owner_], Rounding.ROUND_DOWN);
 
-        // Normalize withdrawal queue to match execution path
+        // Normalize withdrawal queue so the limit module sees the actual execution path.
+        // NOTE: _defaultQueue is governance-trusted, so this is a correctness measure, not a security fix.
         vars.withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue ? strategiesParam_ : _defaultQueue;
 
         // If there is a withdraw limit module use that
@@ -2303,6 +2305,8 @@ contract MultistrategyVault is IMultistrategyVault {
         require(assets_ > 0, NoAssetsToWithdraw());
         require(maxLoss_ <= MAX_BPS, MaxLossExceeded());
 
+        // Normalize withdrawal queue so the limit module sees the actual execution path.
+        // NOTE: _defaultQueue is governance-trusted, so this is a correctness measure, not a security fix.
         address[] memory withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue
             ? strategiesParam_
             : _defaultQueue;
