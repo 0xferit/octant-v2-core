@@ -292,11 +292,15 @@ contract AccessControlTest is Setup {
         vm.prank(management);
         strategy.setDragonRouter(newRouter);
 
-        // Arrange: crash to insolvency
+        // Arrange: crash to insolvency (with burning disabled so dragon keeps shares)
         MockStrategySkimming(address(strategy)).updateExchangeRate(6e17);
         vm.prank(keeper);
         strategy.report();
         assertTrue(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "vault should be insolvent");
+
+        // Enable burning after insolvency so dragon solvency checks are active
+        vm.prank(management);
+        strategy.setEnableBurning(true);
 
         // Act + Assert: finalize should revert during insolvency
         skip(14 days);

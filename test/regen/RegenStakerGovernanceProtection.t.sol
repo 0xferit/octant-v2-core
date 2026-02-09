@@ -73,12 +73,7 @@ contract RegenStakerGovernanceProtectionTest is Test {
     }
 
     function _deployNewCalculator() internal returns (RegenEarningPowerCalculator) {
-        return new RegenEarningPowerCalculator(
-            admin,
-            allowset,
-            IAddressSet(address(0)),
-            AccessMode.ALLOWSET
-        );
+        return new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
     }
 
     function _startRewards() internal {

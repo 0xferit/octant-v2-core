@@ -1107,7 +1107,8 @@ contract AccountingTest is Setup {
         strategy.report();
 
         // Track total debt before transfers
-        uint256 totalDebtBefore = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()) +
+        uint256 totalDebtBefore = strategy.totalSupply() -
+            strategy.balanceOf(strategy.dragonRouter()) +
             strategy.balanceOf(strategy.dragonRouter());
 
         // Perform random transfers
@@ -1137,7 +1138,8 @@ contract AccountingTest is Setup {
         }
 
         // Verify total debt is conserved
-        uint256 totalDebtAfter = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()) +
+        uint256 totalDebtAfter = strategy.totalSupply() -
+            strategy.balanceOf(strategy.dragonRouter()) +
             strategy.balanceOf(strategy.dragonRouter());
 
         assertEq(totalDebtAfter, totalDebtBefore, "Total debt should be conserved across transfers");
@@ -1486,8 +1488,7 @@ contract AccountingTest is Setup {
         console2.log("Current vault value:", (strategy.totalAssets() * 1e18) / 1e18); // Rate is 1.0
         console2.log(
             "Total debt needed:",
-            strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()) +
-                strategy.balanceOf(donationAddress)
+            strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()) + strategy.balanceOf(donationAddress)
         );
 
         // Skip the deposit since vault is insolvent - this shows the protection working
@@ -1533,10 +1534,7 @@ contract AccountingTest is Setup {
         console2.log("Final dragon shares:", strategy.balanceOf(donationAddress));
         console2.log("Final total assets:", strategy.totalAssets());
         console2.log("Final total supply:", strategy.totalSupply());
-        console2.log(
-            "Final total value debt:",
-            strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter())
-        );
+        console2.log("Final total value debt:", strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()));
 
         // Verify that without the rate check, losses are properly handled
         assertEq(profit2, 0, "Should report no profit in second report");

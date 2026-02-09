@@ -746,7 +746,6 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
         vm.startPrank(keeper);
         vault.report();
         vm.stopPrank();
-        _clearMocks();
 
         assertApproxEqRel(
             vault.convertToAssets(vault.balanceOf(user)) * state.profitRate,
@@ -757,6 +756,8 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
 
         state.donationSharesAfterProfit = vault.balanceOf(donationAddress);
         assertGt(state.donationSharesAfterProfit, 0, "Should have donation shares after profit");
+
+        _clearMocks();
 
         state.firstLossRate = (state.profitRate * (100 - firstLossPercentage)) / 100;
         _mockExchangeRate(state.firstLossRate);

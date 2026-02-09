@@ -84,6 +84,7 @@ contract YieldSkimmingDragonRestrictionsTest is Test {
         strategy.initialize(
             address(asset),
             "Test Yield Skimming Strategy",
+            "tYSS",
             management,
             keeper,
             emergencyAdmin,

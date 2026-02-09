@@ -493,7 +493,6 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         return _isVaultInsolvent();
     }
 
-
     /**
      * @dev Converts assets to shares using value debt approach with solvency awareness
      * @param S Strategy storage
@@ -560,7 +559,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
 
         // Vault is only insolvent if it cannot cover user debt
         // Dragon debt is excluded as dragon shares are designed to absorb losses
-        return YS.totalUserDebtInAssetValue > 0 && currentVaultValue < YS.totalUserDebtInAssetValue;
+        return YS.totalDebtOwedToUserInAssetValue > 0 && currentVaultValue < YS.totalDebtOwedToUserInAssetValue;
     }
 
     /**
@@ -579,12 +578,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         }
 
         // If vault value is already below user debt, dragon cannot withdraw
-        if (currentVaultValue <= YS.totalUserDebtInAssetValue) {
+        if (currentVaultValue <= YS.totalDebtOwedToUserInAssetValue) {
             return 0;
         }
 
         // Calculate excess value available for dragon (vault value - user debt)
-        uint256 excessValue = currentVaultValue - YS.totalUserDebtInAssetValue;
+        uint256 excessValue = currentVaultValue - YS.totalDebtOwedToUserInAssetValue;
 
         // Dragon can only redeem up to their debt or the excess value, whichever is lower
         uint256 dragonWithdrawableValue = Math.min(YS.dragonRouterDebtInAssetValue, excessValue);
@@ -637,7 +636,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         uint256 currentVaultValue = S.totalAssets.mulDiv(currentRate, WadRayMath.RAY);
 
         // Dragon is sending shares - user debt will increase by the amount transferred
-        uint256 currentUserDebt = YS.totalUserDebtInAssetValue;
+        uint256 currentUserDebt = YS.totalDebtOwedToUserInAssetValue;
         uint256 userDebtAfterTransfer = currentUserDebt + amount;
         if (currentVaultValue < userDebtAfterTransfer) {
             revert("Transfer would cause vault insolvency");
