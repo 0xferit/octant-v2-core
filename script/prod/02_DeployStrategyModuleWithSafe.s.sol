@@ -7,7 +7,7 @@ import "@gnosis.pm/safe-contracts/contracts/proxies/SafeProxyFactory.sol";
 import "forge-std/Script.sol";
 
 import { MockStrategy } from "../../test/mocks/zodiac-core/MockStrategy2.sol";
-import { DragonTokenizedStrategy } from "src/zodiac-core/vaults/DragonTokenizedStrategy.sol";
+import { TestTokenizedStrategy } from "test/mocks/zodiac-core/TestTokenizedStrategy.sol";
 import { MockERC20 } from "test/mocks/MockERC20.sol";
 import { MockYieldSource } from "../../test/mocks/core/MockYieldSource.sol";
 
@@ -51,7 +51,7 @@ contract DeployStrategyModuleWithSafe is Script {
         vm.startBroadcast();
 
         // Deploy Dragon Tokenized Strategy Implementation
-        tokenizedStrategyImplementation = address(new DragonTokenizedStrategy());
+        tokenizedStrategyImplementation = address(new TestTokenizedStrategy());
 
         // Deploy the mock strategy module
         MockStrategy mockStrategy = new MockStrategy();

@@ -10,7 +10,7 @@ import { ExtendedTest } from "./ExtendedTest.sol";
 import { MockStrategy } from "test/mocks/zodiac-core/MockStrategy2.sol";
 import { MockYieldSource } from "test/mocks/core/MockYieldSource.sol";
 import { MockDragonRouter } from "test/mocks/zodiac-core/MockDragonRouter.sol";
-import { DragonTokenizedStrategy } from "src/zodiac-core/vaults/DragonTokenizedStrategy.sol";
+import { TestTokenizedStrategy } from "test/mocks/zodiac-core/TestTokenizedStrategy.sol";
 import { MockERC20 } from "test/mocks/MockERC20.sol";
 
 import { IEvents } from "src/interfaces/IEvents.sol";
@@ -22,7 +22,7 @@ contract Setup is ExtendedTest, IEvents {
     IMockStrategy public strategy;
     MockStrategy public mockStrategyImplementation;
     MockYieldSource public yieldSource;
-    DragonTokenizedStrategy public tokenizedStrategy;
+    TestTokenizedStrategy public tokenizedStrategy;
     MockDragonRouter public mockDragonRouter;
 
     string public name = "Test Mock Strategy";
@@ -50,7 +50,7 @@ contract Setup is ExtendedTest, IEvents {
     function setUp() public virtual {
         _configure(false, "");
         // Deploy the implementation for deterministic location
-        tokenizedStrategy = new DragonTokenizedStrategy();
+        tokenizedStrategy = new TestTokenizedStrategy();
 
         mockStrategyImplementation = new MockStrategy();
 

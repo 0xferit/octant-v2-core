@@ -15,7 +15,7 @@ import { Hats } from "hats-protocol/Hats.sol";
 import { DragonHatter } from "src/utils/hats/DragonHatter.sol";
 import { SimpleEligibilityAndToggle } from "src/utils/hats/SimpleEligibilityAndToggle.sol";
 import { SplitChecker } from "src/zodiac-core/SplitChecker.sol";
-import { DragonTokenizedStrategy } from "src/zodiac-core/vaults/DragonTokenizedStrategy.sol";
+import { TestTokenizedStrategy } from "test/mocks/zodiac-core/TestTokenizedStrategy.sol";
 import { ModuleProxyFactory } from "src/zodiac-core/ModuleProxyFactory.sol";
 import { LibString } from "solady/utils/LibString.sol";
 
@@ -37,8 +37,8 @@ contract SetupIntegrationTest is Test, TestPlus {
     Safe public deployedSafe;
     /// ===================================================
 
-    /// ========== DeployDragonTokenizedStrategy ==========
-    DragonTokenizedStrategy public dragonTokenizedStrategySingleton;
+    /// ========== DeployTokenizedStrategy ==========
+    TestTokenizedStrategy public dragonTokenizedStrategySingleton;
     /// ===================================================
 
     /// ============ DeploySplitChecker ==================
@@ -80,7 +80,7 @@ contract SetupIntegrationTest is Test, TestPlus {
         vm.label(SAFE_SINGLETON, "Safe Singleton");
         vm.label(SAFE_PROXY_FACTORY, "Safe Proxy Factory");
         vm.label(address(deployedSafe), "Safe Proxy");
-        vm.label(address(dragonTokenizedStrategySingleton), "DragonTokenizedStrategy Implementation");
+        vm.label(address(dragonTokenizedStrategySingleton), "TokenizedStrategy Implementation");
         vm.label(address(splitCheckerSingleton), "SplitChecker Implementation");
         vm.label(address(splitCheckerProxy), "SplitChecker Proxy");
         vm.label(address(dragonRouterSingleton), "DragonRouter Implementation");
@@ -123,7 +123,7 @@ contract SetupIntegrationTest is Test, TestPlus {
         _deployHatsProtocol();
 
         // Deploy remaining components
-        _deployDragonTokenizedStrategy();
+        _deployTokenizedStrategy();
         _deployDragonRouter();
 
         // Deploy mock strategy
@@ -252,11 +252,11 @@ contract SetupIntegrationTest is Test, TestPlus {
     }
 
     // Modified implementation that skips broadcasting
-    function _deployDragonTokenizedStrategy() internal {
+    function _deployTokenizedStrategy() internal {
         // The caller should start prank with the right deployer account
 
-        // Deploy DragonTokenizedStrategy implementation
-        dragonTokenizedStrategySingleton = new DragonTokenizedStrategy();
+        // Deploy TokenizedStrategy implementation
+        dragonTokenizedStrategySingleton = new TestTokenizedStrategy();
 
         // Make sure we save the address for the mock strategy deployment
         dragonTokenizedStrategyAddress = address(dragonTokenizedStrategySingleton);

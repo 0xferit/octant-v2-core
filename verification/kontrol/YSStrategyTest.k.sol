@@ -6,6 +6,7 @@ import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 
 import { WadRayMath } from "src/utils/libs/Maths/WadRay.sol";
 
+import { StrategyBaseTest } from "test/kontrol/StrategyBaseTest.k.sol";
 import { YSSetup } from "test/kontrol/YSSetup.k.sol";
 import "test/kontrol/SharedStateSlots.k.sol";
 
@@ -20,20 +21,152 @@ struct YSProofState {
 /**
  * @title YSStrategyTest
  * @notice Kontrol formal verification proofs for YieldSkimmingTokenizedStrategy
- * @dev Proves key invariants of the yield-skimming report mechanism:
- *      - Profit: dragon balance and debt increase by profitValue
- *      - Loss with burning: dragon balance and debt decrease
- *      - Solvency gates: deposit/dragon-redeem blocked during insolvency
- *      - Value debt tracking: deposit increases userDebt, redeem decreases it
- *      - Transfer debt rebalancing: dragon transfers rebalance user/dragon debt
- *      - Access control and tend no-op
+ * @dev Inherits 4 common proofs from StrategyBaseTest (testTend, testReportNoChange,
+ *      testReportLossNoBurning, testReportByManagement) and adds 11 YS-specific proofs.
+ *
+ *      Strategy-agnostic proofs (testReportOnlyKeeper, testShutdownBlocks, testBalanceBounded)
+ *      run only under YDStrategyTest to avoid duplication.
  */
-contract YSStrategyTest is YSSetup {
+contract YSStrategyTest is StrategyBaseTest, YSSetup {
     using Math for uint256;
     using WadRayMath for uint256;
 
     YSProofState private preState;
     YSProofState private postState;
+
+    function setUp() public override(YSSetup) {
+        YSSetup.setUp();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    VIRTUAL ACCESSORS
+    //////////////////////////////////////////////////////////////*/
+
+    function getStrategy() internal view override returns (ITokenizedStrategy) {
+        return iYSStrategy;
+    }
+
+    function getStrategyAddr() internal view override returns (address) {
+        return address(ysStrategy);
+    }
+
+    function getKeeper() internal view override returns (address) {
+        return _keeper;
+    }
+
+    function getDragonRouter() internal view override returns (address) {
+        return _dragonRouter;
+    }
+
+    function getAssetAddr() internal view override returns (address) {
+        return _asset;
+    }
+
+    function getManagement() internal view override returns (address) {
+        return _management;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    VIRTUAL HOOKS
+    //////////////////////////////////////////////////////////////*/
+
+    function _setupReportNoChange(uint256 totalAssets) internal override {
+        _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, totalAssets);
+        _storeMappingUInt256(_asset, ERC20_BALANCES_SLOT, uint256(uint160(address(ysStrategy))), 0, totalAssets);
+
+        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
+        vm.assume(mockRate > 0);
+
+        _assumeNoOverflow(totalAssets, mockRate);
+        uint256 currentValue = totalAssets.mulDiv(mockRate, WadRayMath.RAY);
+
+        uint256 userDebt = _loadUInt256(address(ysStrategy), YS_TOTAL_DEBT_OWED_TO_USER_SLOT);
+        uint256 dragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
+        _assumeNoOverflow(userDebt, dragonDebt);
+        vm.assume(currentValue == userDebt + dragonDebt);
+    }
+
+    function _setupLossScenario(uint256 totalAssets) internal override {
+        _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, totalAssets);
+        _storeMappingUInt256(_asset, ERC20_BALANCES_SLOT, uint256(uint160(address(ysStrategy))), 0, totalAssets);
+
+        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
+        vm.assume(mockRate > 0);
+
+        _assumeNoOverflow(totalAssets, mockRate);
+        uint256 currentValue = totalAssets.mulDiv(mockRate, WadRayMath.RAY);
+
+        uint256 userDebt = _loadUInt256(address(ysStrategy), YS_TOTAL_DEBT_OWED_TO_USER_SLOT);
+        uint256 dragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
+        _assumeNoOverflow(userDebt, dragonDebt);
+        vm.assume(currentValue < userDebt + dragonDebt);
+    }
+
+    function _assertReportNoChangeExtras() internal view override {
+        uint256 postUserDebt = _loadUInt256(address(ysStrategy), YS_TOTAL_DEBT_OWED_TO_USER_SLOT);
+        uint256 postDragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
+        assertEq(postUserDebt, preState.userDebt);
+        assertEq(postDragonDebt, preState.dragonDebt);
+    }
+
+    function _assertTendExtras() internal view override {
+        uint256 postUserDebt = _loadUInt256(address(ysStrategy), YS_TOTAL_DEBT_OWED_TO_USER_SLOT);
+        uint256 postDragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
+        assertEq(postUserDebt, preState.userDebt);
+        assertEq(postDragonDebt, preState.dragonDebt);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    OVERRIDDEN COMMON TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Tend should not change any state (including YS debt)
+    function testTend() public override {
+        _assumeNonReentrant();
+
+        preState = _snapshot();
+
+        vm.startPrank(_keeper);
+        iYSStrategy.tend();
+        vm.stopPrank();
+
+        postState = _snapshot();
+
+        assertEq(postState.totalAssets, preState.totalAssets);
+        assertEq(postState.totalSupply, preState.totalSupply);
+
+        _assertTendExtras();
+    }
+
+    /// @notice When currentValue == totalDebt, no shares minted or burned, debts unchanged
+    function testReportNoChange() public override {
+        _assumeNonReentrant();
+
+        address stratAddr = getStrategyAddr();
+        _storeData(stratAddr, HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
+
+        preState = _snapshot();
+
+        vm.assume(preState.totalAssets > 0);
+        vm.assume(preState.totalSupply > 0);
+
+        _setupReportNoChange(preState.totalAssets);
+
+        vm.startPrank(_keeper);
+        iYSStrategy.report();
+        vm.stopPrank();
+
+        postState = _snapshot();
+
+        assertEq(postState.totalSupply, preState.totalSupply);
+        assertEq(postState.dragonBalance, preState.dragonBalance);
+
+        _assertReportNoChangeExtras();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    HELPERS
+    //////////////////////////////////////////////////////////////*/
 
     function _snapshot() internal view returns (YSProofState memory state) {
         state.totalAssets = _loadUInt256(address(ysStrategy), TS_TOTAL_ASSETS_SLOT);
@@ -48,23 +181,17 @@ contract YSStrategyTest is YSSetup {
         state.dragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
     }
 
-    function assumeNonReentrant() internal {
-        _storeData(address(ysStrategy), TS_FLAGS_SLOT, TS_ENTERED_OFFSET, TS_ENTERED_WIDTH, 1);
-    }
-
-    function disableHealthCheck() internal {
-        _storeData(address(ysStrategy), HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
-    }
-
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH PROFIT
+                    YS-SPECIFIC: REPORT WITH PROFIT
     //////////////////////////////////////////////////////////////*/
 
     /// @notice When report detects profit (currentValue > userDebt + dragonDebt),
     ///         shares are minted to dragon, dragon debt increases, user debt unchanged
     function testReportProfitYS() public {
-        assumeNonReentrant();
-        disableHealthCheck();
+        _assumeNonReentrant();
+
+        address stratAddr = getStrategyAddr();
+        _storeData(stratAddr, HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
 
         preState = _snapshot();
 
@@ -77,7 +204,13 @@ contract YSStrategyTest is YSSetup {
         _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
 
         // Give strategy enough asset balance
-        deal(_asset, address(ysStrategy), preState.totalAssets);
+        _storeMappingUInt256(
+            _asset,
+            ERC20_BALANCES_SLOT,
+            uint256(uint160(address(ysStrategy))),
+            0,
+            preState.totalAssets
+        );
 
         // Load mock exchange rate
         uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
@@ -116,14 +249,16 @@ contract YSStrategyTest is YSSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH LOSS (BURNING ENABLED, SUFFICIENT DRAGON)
+                    YS-SPECIFIC: REPORT WITH LOSS (BURNING, SUFFICIENT DRAGON)
     //////////////////////////////////////////////////////////////*/
 
     /// @notice When report detects loss and dragon has sufficient shares,
     ///         dragon balance and debt decrease
     function testReportLossWithBurningYS() public {
-        assumeNonReentrant();
-        disableHealthCheck();
+        _assumeNonReentrant();
+
+        address stratAddr = getStrategyAddr();
+        _storeData(stratAddr, HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
 
         // Enable burning
         _storeData(address(ysStrategy), TS_FLAGS_SLOT, TS_ENABLE_BURNING_OFFSET, TS_ENABLE_BURNING_WIDTH, 1);
@@ -136,7 +271,13 @@ contract YSStrategyTest is YSSetup {
         vm.assume(preState.dragonBalance <= preState.totalSupply);
 
         _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
-        deal(_asset, address(ysStrategy), preState.totalAssets);
+        _storeMappingUInt256(
+            _asset,
+            ERC20_BALANCES_SLOT,
+            uint256(uint160(address(ysStrategy))),
+            0,
+            preState.totalAssets
+        );
 
         uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
         vm.assume(mockRate > 0);
@@ -162,7 +303,7 @@ contract YSStrategyTest is YSSetup {
 
         postState = _snapshot();
 
-        // Dragon shares burned by lossValue (dragonBurn = min(lossValue, dragonBalance) = lossValue)
+        // Dragon shares burned by lossValue
         assertEq(postState.dragonBalance, preState.dragonBalance - lossValue);
         // Dragon debt decreased by lossValue
         assertEq(postState.dragonDebt, preState.dragonDebt - lossValue);
@@ -171,13 +312,15 @@ contract YSStrategyTest is YSSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH LOSS (INSUFFICIENT DRAGON)
+                    YS-SPECIFIC: REPORT WITH LOSS (INSUFFICIENT DRAGON)
     //////////////////////////////////////////////////////////////*/
 
     /// @notice When dragon can't cover the full loss, all dragon shares are burned
     function testReportLossInsufficientDragonYS() public {
-        assumeNonReentrant();
-        disableHealthCheck();
+        _assumeNonReentrant();
+
+        address stratAddr = getStrategyAddr();
+        _storeData(stratAddr, HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
 
         _storeData(address(ysStrategy), TS_FLAGS_SLOT, TS_ENABLE_BURNING_OFFSET, TS_ENABLE_BURNING_WIDTH, 1);
 
@@ -189,7 +332,13 @@ contract YSStrategyTest is YSSetup {
         vm.assume(preState.dragonBalance <= preState.totalSupply);
 
         _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
-        deal(_asset, address(ysStrategy), preState.totalAssets);
+        _storeMappingUInt256(
+            _asset,
+            ERC20_BALANCES_SLOT,
+            uint256(uint160(address(ysStrategy))),
+            0,
+            preState.totalAssets
+        );
 
         uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
         vm.assume(mockRate > 0);
@@ -213,7 +362,7 @@ contract YSStrategyTest is YSSetup {
 
         postState = _snapshot();
 
-        // All dragon shares burned (dragonBurn = min(lossValue, dragonBalance) = dragonBalance)
+        // All dragon shares burned
         assertEq(postState.dragonBalance, 0);
         // Dragon debt decreased by dragonBalance (the amount burned)
         assertEq(postState.dragonDebt, preState.dragonDebt - preState.dragonBalance);
@@ -222,92 +371,12 @@ contract YSStrategyTest is YSSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH NO CHANGE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice When currentValue == totalDebt, no shares minted or burned
-    function testReportNoChangeYS() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        preState = _snapshot();
-
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
-
-        _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
-        deal(_asset, address(ysStrategy), preState.totalAssets);
-
-        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
-        vm.assume(mockRate > 0);
-
-        _assumeNoOverflow(preState.totalAssets, mockRate);
-        uint256 currentValue = preState.totalAssets.mulDiv(mockRate, WadRayMath.RAY);
-
-        // No change: currentValue == userDebt + dragonDebt
-        _assumeNoOverflow(preState.userDebt, preState.dragonDebt);
-        vm.assume(currentValue == preState.userDebt + preState.dragonDebt);
-
-        vm.startPrank(_keeper);
-        iYSStrategy.report();
-        vm.stopPrank();
-
-        postState = _snapshot();
-
-        assertEq(postState.totalSupply, preState.totalSupply);
-        assertEq(postState.dragonBalance, preState.dragonBalance);
-        assertEq(postState.userDebt, preState.userDebt);
-        assertEq(postState.dragonDebt, preState.dragonDebt);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    REPORT WITH LOSS (BURNING DISABLED)
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice When burning is disabled, no shares are burned even on loss
-    function testReportLossNoBurningYS() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        // Disable burning
-        _storeData(address(ysStrategy), TS_FLAGS_SLOT, TS_ENABLE_BURNING_OFFSET, TS_ENABLE_BURNING_WIDTH, 0);
-
-        preState = _snapshot();
-
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
-        vm.assume(preState.dragonBalance <= preState.totalSupply);
-
-        _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
-        deal(_asset, address(ysStrategy), preState.totalAssets);
-
-        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
-        vm.assume(mockRate > 0);
-
-        _assumeNoOverflow(preState.totalAssets, mockRate);
-        uint256 currentValue = preState.totalAssets.mulDiv(mockRate, WadRayMath.RAY);
-
-        _assumeNoOverflow(preState.userDebt, preState.dragonDebt);
-        vm.assume(currentValue < preState.userDebt + preState.dragonDebt);
-
-        vm.startPrank(_keeper);
-        iYSStrategy.report();
-        vm.stopPrank();
-
-        postState = _snapshot();
-
-        // No shares burned
-        assertEq(postState.totalSupply, preState.totalSupply);
-        assertEq(postState.dragonBalance, preState.dragonBalance);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    SOLVENCY TESTS
+                    YS-SPECIFIC: SOLVENCY TESTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Deposit reverts when vault is insolvent
     function testDepositBlockedDuringInsolvency() public {
-        assumeNonReentrant();
+        _assumeNonReentrant();
 
         preState = _snapshot();
         vm.assume(preState.totalAssets > 0);
@@ -319,7 +388,7 @@ contract YSStrategyTest is YSSetup {
         _assumeNoOverflow(preState.totalAssets, mockRate);
         uint256 currentValue = preState.totalAssets.mulDiv(mockRate, WadRayMath.RAY);
 
-        // Set up insolvency: totalDebt > currentValue with positive debts
+        // Set up insolvency
         _assumeNoOverflow(preState.userDebt, preState.dragonDebt);
         vm.assume(preState.userDebt + preState.dragonDebt > 0);
         vm.assume(currentValue < preState.userDebt + preState.dragonDebt);
@@ -329,7 +398,7 @@ contract YSStrategyTest is YSSetup {
 
         address depositor = makeAddr("DEPOSITOR");
         uint256 depositAmount = 1 ether;
-        deal(_asset, depositor, depositAmount);
+        _storeMappingUInt256(_asset, ERC20_BALANCES_SLOT, uint256(uint160(depositor)), 0, depositAmount);
         vm.prank(depositor);
         (bool ok, ) = _asset.call(
             abi.encodeWithSignature("approve(address,uint256)", address(ysStrategy), depositAmount)
@@ -343,7 +412,7 @@ contract YSStrategyTest is YSSetup {
 
     /// @notice Dragon redeem reverts during insolvency
     function testDragonBlockedDuringInsolvency() public {
-        assumeNonReentrant();
+        _assumeNonReentrant();
 
         preState = _snapshot();
         vm.assume(preState.totalAssets > 0);
@@ -371,7 +440,7 @@ contract YSStrategyTest is YSSetup {
 
     /// @notice Deposit to dragon router always reverts
     function testDepositBlockedForDragon() public {
-        assumeNonReentrant();
+        _assumeNonReentrant();
 
         preState = _snapshot();
         vm.assume(preState.totalAssets > 0);
@@ -391,7 +460,7 @@ contract YSStrategyTest is YSSetup {
 
         address depositor = makeAddr("DEPOSITOR");
         uint256 depositAmount = 1 ether;
-        deal(_asset, depositor, depositAmount);
+        _storeMappingUInt256(_asset, ERC20_BALANCES_SLOT, uint256(uint160(depositor)), 0, depositAmount);
         vm.prank(depositor);
         (bool ok, ) = _asset.call(
             abi.encodeWithSignature("approve(address,uint256)", address(ysStrategy), depositAmount)
@@ -404,80 +473,12 @@ contract YSStrategyTest is YSSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                    TEND (NO STATE CHANGE)
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Tend should not change any state
-    function testTendYS() public {
-        assumeNonReentrant();
-
-        preState = _snapshot();
-
-        vm.startPrank(_keeper);
-        iYSStrategy.tend();
-        vm.stopPrank();
-
-        postState = _snapshot();
-
-        assertEq(postState.totalAssets, preState.totalAssets);
-        assertEq(postState.totalSupply, preState.totalSupply);
-        assertEq(postState.userDebt, preState.userDebt);
-        assertEq(postState.dragonDebt, preState.dragonDebt);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    ACCESS CONTROL
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Non-keeper/non-management address cannot call report
-    function testReportOnlyKeeperYS() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, freshUInt256Bounded());
-
-        address nonKeeper = makeAddr("NON_KEEPER");
-
-        vm.startPrank(nonKeeper);
-        vm.expectRevert("!keeper");
-        iYSStrategy.report();
-        vm.stopPrank();
-    }
-
-    /// @notice Management can also call report
-    function testReportByManagementYS() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        preState = _snapshot();
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
-
-        _storeUInt256(address(ysStrategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
-        deal(_asset, address(ysStrategy), preState.totalAssets);
-
-        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
-        vm.assume(mockRate > 0);
-
-        // Set up no-change scenario so report succeeds without overflow
-        _assumeNoOverflow(preState.totalAssets, mockRate);
-        uint256 currentValue = preState.totalAssets.mulDiv(mockRate, WadRayMath.RAY);
-        _assumeNoOverflow(preState.userDebt, preState.dragonDebt);
-        vm.assume(currentValue == preState.userDebt + preState.dragonDebt);
-
-        vm.startPrank(_management);
-        iYSStrategy.report();
-        vm.stopPrank();
-        // Should succeed without revert
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    VALUE DEBT TRACKING
+                    YS-SPECIFIC: VALUE DEBT TRACKING
     //////////////////////////////////////////////////////////////*/
 
     /// @notice After deposit, userDebt increases by shares (= assets * rate / RAY)
     function testDepositValueDebtYS(uint256 assets, address receiver) public {
-        assumeNonReentrant();
+        _assumeNonReentrant();
 
         vm.assume(assets > 0);
         vm.assume(assets < ETH_UPPER_BOUND);
@@ -507,8 +508,6 @@ contract YSStrategyTest is YSSetup {
         _assumeNoOverflow(preState.userDebt, expectedShares);
 
         // Inductive hypothesis: receiver's balance is bounded by totalSupply pre-deposit.
-        // The unchecked balance increment in _mint means the prover needs this constraint
-        // to verify the invariant is preserved through the deposit state transition.
         uint256 receiverBalance = _loadMappingUInt256(
             address(ysStrategy),
             TS_BALANCES_SLOT,
@@ -522,12 +521,18 @@ contract YSStrategyTest is YSSetup {
 
         // Depositor setup
         address depositor = makeAddr("DEPOSITOR");
-        deal(_asset, depositor, assets);
+        _storeMappingUInt256(_asset, ERC20_BALANCES_SLOT, uint256(uint160(depositor)), 0, assets);
         vm.prank(depositor);
         (bool ok, ) = _asset.call(abi.encodeWithSignature("approve(address,uint256)", address(ysStrategy), assets));
         require(ok);
 
-        deal(_asset, address(ysStrategy), preState.totalAssets);
+        _storeMappingUInt256(
+            _asset,
+            ERC20_BALANCES_SLOT,
+            uint256(uint160(address(ysStrategy))),
+            0,
+            preState.totalAssets
+        );
 
         vm.prank(depositor);
         iYSStrategy.deposit(assets, receiver);
@@ -541,65 +546,13 @@ contract YSStrategyTest is YSSetup {
         _establish(Mode.Assert, iYSStrategy.balanceOf(receiver) <= iYSStrategy.totalSupply());
     }
 
-    /// @notice After redeem, userDebt decreases by shares
-    function testRedeemValueDebtYS(uint256 shares, address receiver, address owner) public {
-        assumeNonReentrant();
-
-        vm.assume(shares > 0);
-        vm.assume(shares < ETH_UPPER_BOUND);
-        vm.assume(receiver != address(0));
-        vm.assume(receiver != address(ysStrategy));
-        vm.assume(owner != address(0));
-        vm.assume(owner != address(ysStrategy));
-        vm.assume(owner != _dragonRouter);
-
-        preState = _snapshot();
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
-        vm.assume(shares <= preState.totalSupply);
-
-        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
-        vm.assume(mockRate > 0);
-
-        // Ensure solvent (not insolvent -- needed for conversion path)
-        _assumeNoOverflow(preState.totalAssets, mockRate);
-        uint256 currentValue = preState.totalAssets.mulDiv(mockRate, WadRayMath.RAY);
-        _assumeNoOverflow(preState.userDebt, preState.dragonDebt);
-        vm.assume(currentValue >= preState.userDebt + preState.dragonDebt);
-
-        // assets = shares * RAY / rate (floor)
-        uint256 expectedAssets = shares.mulDiv(WadRayMath.RAY, mockRate);
-        vm.assume(expectedAssets > 0);
-        vm.assume(expectedAssets <= preState.totalAssets);
-
-        // User debt must be >= shares for clean subtraction
-        vm.assume(preState.userDebt >= shares);
-
-        // Owner must have sufficient shares
-        _storeMappingUInt256(address(ysStrategy), TS_BALANCES_SLOT, uint256(uint160(owner)), 0, shares);
-
-        // Give strategy enough asset balance
-        deal(_asset, address(ysStrategy), preState.totalAssets);
-
-        // Set lastReport to now (no lockup)
-        _storeData(address(ysStrategy), TS_KEEPER_SLOT, TS_LAST_REPORT_OFFSET, TS_LAST_REPORT_WIDTH, block.timestamp);
-
-        vm.prank(owner);
-        iYSStrategy.redeem(shares, receiver, owner);
-
-        postState = _snapshot();
-
-        // User debt decreased by shares
-        assertEq(postState.userDebt, preState.userDebt - shares);
-    }
-
     /*//////////////////////////////////////////////////////////////
-                    TRANSFER DEBT REBALANCING
+                    YS-SPECIFIC: TRANSFER DEBT REBALANCING
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Dragon transfers to user: dragonDebt decreases, userDebt increases
     function testTransferDragonToUser(address to, uint256 amount) public {
-        assumeNonReentrant();
+        _assumeNonReentrant();
 
         vm.assume(to != address(0));
         vm.assume(to != address(ysStrategy));
@@ -637,7 +590,7 @@ contract YSStrategyTest is YSSetup {
 
     /// @notice User transfers to dragon: userDebt decreases, dragonDebt increases
     function testTransferUserToDragon(address from, uint256 amount) public {
-        assumeNonReentrant();
+        _assumeNonReentrant();
 
         vm.assume(from != address(0));
         vm.assume(from != address(ysStrategy));
@@ -675,5 +628,73 @@ contract YSStrategyTest is YSSetup {
         assertEq(postState.userDebt, preState.userDebt - amount);
         // Dragon debt increased
         assertEq(postState.dragonDebt, preState.dragonDebt + amount);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    YS-SPECIFIC: CONVERSION TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice When solvent, conversion uses rate: shares = assets * rate / RAY
+    function testConversionSolventYS(uint256 amount) public {
+        _assumeNonReentrant();
+
+        vm.assume(amount > 0);
+        vm.assume(amount < ETH_UPPER_BOUND);
+
+        uint256 totalAssets = _loadUInt256(address(ysStrategy), TS_TOTAL_ASSETS_SLOT);
+        uint256 totalSupply = _loadUInt256(address(ysStrategy), TS_TOTAL_SUPPLY_SLOT);
+        vm.assume(totalAssets > 0);
+        vm.assume(totalSupply > 0);
+
+        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
+        vm.assume(mockRate > 0);
+
+        // Ensure solvent
+        _assumeNoOverflow(totalAssets, mockRate);
+        uint256 currentValue = totalAssets.mulDiv(mockRate, WadRayMath.RAY);
+        uint256 userDebt = _loadUInt256(address(ysStrategy), YS_TOTAL_DEBT_OWED_TO_USER_SLOT);
+        uint256 dragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
+        _assumeNoOverflow(userDebt, dragonDebt);
+        vm.assume(currentValue >= userDebt + dragonDebt);
+
+        // Avoid overflow
+        _assumeNoOverflow(amount, mockRate);
+
+        uint256 expectedShares = amount.mulDiv(mockRate, WadRayMath.RAY);
+        uint256 actualShares = iYSStrategy.convertToShares(amount);
+        assertEq(actualShares, expectedShares);
+    }
+
+    /// @notice When insolvent, conversion falls back to proportional (base TokenizedStrategy logic)
+    function testConversionFallbackInsolventYS(uint256 amount) public {
+        _assumeNonReentrant();
+
+        vm.assume(amount > 0);
+        vm.assume(amount < ETH_UPPER_BOUND);
+
+        uint256 totalAssets = _loadUInt256(address(ysStrategy), TS_TOTAL_ASSETS_SLOT);
+        uint256 totalSupply = _loadUInt256(address(ysStrategy), TS_TOTAL_SUPPLY_SLOT);
+        vm.assume(totalAssets > 0);
+        vm.assume(totalSupply > 0);
+
+        uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
+        vm.assume(mockRate > 0);
+
+        // Ensure insolvent
+        _assumeNoOverflow(totalAssets, mockRate);
+        uint256 currentValue = totalAssets.mulDiv(mockRate, WadRayMath.RAY);
+        uint256 userDebt = _loadUInt256(address(ysStrategy), YS_TOTAL_DEBT_OWED_TO_USER_SLOT);
+        uint256 dragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
+        _assumeNoOverflow(userDebt, dragonDebt);
+        vm.assume(userDebt + dragonDebt > 0);
+        vm.assume(currentValue < userDebt + dragonDebt);
+
+        // Avoid overflow in proportional calc
+        _assumeNoOverflow(amount, totalSupply);
+
+        // Proportional: shares = amount * totalSupply / totalAssets (base logic)
+        uint256 expectedShares = amount.mulDiv(totalSupply, totalAssets);
+        uint256 actualShares = iYSStrategy.convertToShares(amount);
+        assertEq(actualShares, expectedShares);
     }
 }

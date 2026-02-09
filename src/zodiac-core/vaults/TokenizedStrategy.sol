@@ -32,7 +32,6 @@ import { NATIVE_TOKEN } from "src/constants.sol";
  *      - Supports native ETH alongside ERC20 assets
  *      - Integrates regen governance for lockup/rage quit mechanics
  *
- *      See DragonTokenizedStrategy.sol for complete vault implementation
  *
  * @custom:security Zodiac module with Hats Protocol role management
  * @custom:origin https://github.com/yearn/tokenized-strategy

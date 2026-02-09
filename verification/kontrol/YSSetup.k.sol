@@ -31,8 +31,6 @@ contract YSSetup is KontrolTest {
     uint256 currentTimestamp;
 
     function setUp() public virtual {
-        vm.assume(msg.sender == address(this));
-
         // Concrete role addresses (avoid symbolic branching on prank)
         _management = makeAddr("MANAGEMENT");
         _keeper = makeAddr("KEEPER");

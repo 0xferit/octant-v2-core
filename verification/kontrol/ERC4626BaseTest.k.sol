@@ -34,6 +34,8 @@ abstract contract ERC4626BaseTest is KontrolTest {
 
     function getAssetAddr() internal view virtual returns (address);
 
+    function getManagement() internal view virtual returns (address);
+
     /*//////////////////////////////////////////////////////////////
                     HELPERS
     //////////////////////////////////////////////////////////////*/

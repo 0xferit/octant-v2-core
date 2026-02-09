@@ -105,3 +105,8 @@ uint256 constant MOCK_NEXT_TOTAL_ASSETS_SLOT = 1;
 // MockSimpleYieldSkimmingStrategy additional slots
 uint256 constant MOCK_YS_EXCHANGE_RATE_SLOT = 2;
 uint256 constant MOCK_YS_EXCHANGE_RATE_DECIMALS_SLOT = 3;
+
+// ============================================
+// TestERC20 (OZ ERC20 v5) constants
+// ============================================
+uint256 constant ERC20_BALANCES_SLOT = 0;

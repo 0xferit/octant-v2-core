@@ -5,7 +5,6 @@ import "forge-std/Script.sol";
 import { console2 } from "forge-std/console2.sol";
 
 import { DeploySplitChecker } from "script/deploy/DeploySplitChecker.sol";
-import { DeployDragonTokenizedStrategy } from "script/deploy/DeployDragonTokenizedStrategy.sol";
 import { DeployHatsProtocol } from "script/deploy/DeployHatsProtocol.sol";
 import { DeployLinearAllowanceSingletonForGnosisSafe } from "script/deploy/DeployLinearAllowanceSingletonForGnosisSafe.sol";
 import { DeployMockStrategy } from "script/deploy/DeployMockStrategy.sol";
@@ -27,7 +26,6 @@ contract DeployProtocol is Script {
     // Deployers
     DeployModuleProxyFactory public deployModuleProxyFactory;
     DeployLinearAllowanceSingletonForGnosisSafe public deployLinearAllowanceSingletonForGnosisSafe;
-    DeployDragonTokenizedStrategy public deployDragonTokenizedStrategy;
     DeploySplitChecker public deploySplitChecker;
     DeployMockStrategy public deployMockStrategy;
     DeployHatsProtocol public deployHatsProtocol;
@@ -75,7 +73,6 @@ contract DeployProtocol is Script {
         // Initialize deployment scripts
         deployModuleProxyFactory = new DeployModuleProxyFactory(msg.sender, msg.sender, msg.sender);
         deployLinearAllowanceSingletonForGnosisSafe = new DeployLinearAllowanceSingletonForGnosisSafe();
-        deployDragonTokenizedStrategy = new DeployDragonTokenizedStrategy();
         deploySplitChecker = new DeploySplitChecker();
         deployMockStrategy = new DeployMockStrategy(msg.sender, msg.sender, msg.sender);
         deployHatsProtocol = new DeployHatsProtocol();
@@ -138,13 +135,6 @@ contract DeployProtocol is Script {
                 deployLinearAllowanceSingletonForGnosisSafe.linearAllowanceSingletonForGnosisSafe()
             );
             if (linearAllowanceSingletonForGnosisSafeAddress == address(0)) revert DeploymentFailed();
-        }
-
-        // Deploy Dragon Tokenized Strategy Implementation
-        if (dragonTokenizedStrategyAddress == address(0)) {
-            deployDragonTokenizedStrategy.deploy();
-            dragonTokenizedStrategyAddress = address(deployDragonTokenizedStrategy.dragonTokenizedStrategySingleton());
-            if (dragonTokenizedStrategyAddress == address(0)) revert DeploymentFailed();
         }
 
         // Deploy SplitChecker
