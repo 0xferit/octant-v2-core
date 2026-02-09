@@ -2098,7 +2098,7 @@ contract MultistrategyVault is IMultistrategyVault {
         // Get the max amount for the owner if fully liquid
         vars.maxAssets = _convertToAssets(_balanceOf[owner_], Rounding.ROUND_DOWN);
 
-        // Normalize withdrawal queue to match execution path
+        // Normalize withdrawal queue to match execution path (_defaultQueue is governance-trusted)
         vars.withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue ? strategiesParam_ : _defaultQueue;
 
         // If there is a withdraw limit module use that
@@ -2303,6 +2303,7 @@ contract MultistrategyVault is IMultistrategyVault {
         require(assets_ > 0, NoAssetsToWithdraw());
         require(maxLoss_ <= MAX_BPS, MaxLossExceeded());
 
+        // Normalize withdrawal queue to match execution path (_defaultQueue is governance-trusted)
         address[] memory withdrawalStrategies = strategiesParam_.length != 0 && !useDefaultQueue
             ? strategiesParam_
             : _defaultQueue;
