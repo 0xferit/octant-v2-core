@@ -65,6 +65,9 @@ contract YSERC4626Test is ERC4626BaseTest, YSSetup {
     }
 
     /// @notice User balance is bounded by totalSupply
+    /// @dev Storage-accessor sanity check: with fully symbolic storage, balance and
+    ///      totalSupply are independent -- the assumption is necessary. The invariant
+    ///      is proven inductively through state transitions in testDepositValueDebtYS.
     function testBalanceBoundedYS(address user) public {
         _assumeNonReentrant();
 

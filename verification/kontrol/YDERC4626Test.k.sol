@@ -67,6 +67,17 @@ contract YDERC4626Test is ERC4626BaseTest, YDSetup {
         _assumeNoOverflow(totalSupply, expectedShares);
         _assumeNoOverflow(totalAssets, assets);
 
+        // Inductive hypothesis: receiver's balance is bounded by totalSupply pre-deposit.
+        // The unchecked balance increment in _mint means the prover needs this constraint
+        // to verify the invariant is preserved through the deposit state transition.
+        uint256 receiverBalance = _loadMappingUInt256(
+            address(strategy),
+            TS_BALANCES_SLOT,
+            uint256(uint160(receiver)),
+            0
+        );
+        vm.assume(receiverBalance <= totalSupply);
+
         // Not shutdown
         _storeData(address(strategy), TS_FLAGS_SLOT, TS_SHUTDOWN_OFFSET, TS_SHUTDOWN_WIDTH, 0);
 
@@ -82,6 +93,7 @@ contract YDERC4626Test is ERC4626BaseTest, YDSetup {
         iStrategy.deposit(assets, receiver);
 
         _assertSharesRedeemable(receiver);
+        _assertBalanceBounded(receiver);
     }
 
     /// @notice Shutdown blocks deposits and mints
@@ -98,6 +110,9 @@ contract YDERC4626Test is ERC4626BaseTest, YDSetup {
     }
 
     /// @notice User balance is bounded by totalSupply
+    /// @dev Storage-accessor sanity check: with fully symbolic storage, balance and
+    ///      totalSupply are independent -- the assumption is necessary. The invariant
+    ///      is proven inductively through state transitions in testSharesRedeemableAfterDepositYD.
     function testBalanceBoundedYD(address user) public {
         _assumeNonReentrant();
 

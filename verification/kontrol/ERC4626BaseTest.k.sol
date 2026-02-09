@@ -79,7 +79,7 @@ abstract contract ERC4626BaseTest is KontrolTest {
                     INVARIANT: CONVERSION CONSISTENCY
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Round-trip conversion loses at most the input amount:
+    /// @notice Round-trip conversion must not create value:
     ///         convertToAssets(convertToShares(x)) <= x
     ///         convertToShares(convertToAssets(x)) <= x
     function _assertConversionConsistency(uint256 amount) internal view {

@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
-import { IYieldSkimmingStrategy } from "src/strategies/yieldSkimming/IYieldSkimmingStrategy.sol";
+
 import { WadRayMath } from "src/utils/libs/Maths/WadRay.sol";
 
 import { YSSetup } from "test/kontrol/YSSetup.k.sol";
@@ -506,6 +506,17 @@ contract YSStrategyTest is YSSetup {
         _assumeNoOverflow(preState.totalAssets, assets);
         _assumeNoOverflow(preState.userDebt, expectedShares);
 
+        // Inductive hypothesis: receiver's balance is bounded by totalSupply pre-deposit.
+        // The unchecked balance increment in _mint means the prover needs this constraint
+        // to verify the invariant is preserved through the deposit state transition.
+        uint256 receiverBalance = _loadMappingUInt256(
+            address(ysStrategy),
+            TS_BALANCES_SLOT,
+            uint256(uint160(receiver)),
+            0
+        );
+        vm.assume(receiverBalance <= preState.totalSupply);
+
         // Not shutdown
         _storeData(address(ysStrategy), TS_FLAGS_SLOT, TS_SHUTDOWN_OFFSET, TS_SHUTDOWN_WIDTH, 0);
 
@@ -525,6 +536,9 @@ contract YSStrategyTest is YSSetup {
 
         // User debt increased by shares
         assertEq(postState.userDebt, preState.userDebt + expectedShares);
+
+        // Balance bounded by totalSupply after deposit (inductive step)
+        _establish(Mode.Assert, iYSStrategy.balanceOf(receiver) <= iYSStrategy.totalSupply());
     }
 
     /// @notice After redeem, userDebt decreases by shares
