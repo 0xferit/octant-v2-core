@@ -17,7 +17,7 @@ import "test/kontrol/SharedStateSlots.k.sol";
  *      1. After deposit, shares are redeemable (if balance > 0 and totalAssets > 0)
  *      2. Shutdown blocks maxDeposit and maxMint
  *      3. User balance bounded by totalSupply
- *      4. Conversion consistency (no rounding trap): round-trip loses at most 1 unit
+ *      4. Conversion consistency: round-trip conversion must not create value (no amplification)
  */
 abstract contract ERC4626BaseTest is KontrolTest {
     /*//////////////////////////////////////////////////////////////
@@ -84,16 +84,18 @@ abstract contract ERC4626BaseTest is KontrolTest {
     /// @notice Round-trip conversion must not create value:
     ///         convertToAssets(convertToShares(x)) <= x
     ///         convertToShares(convertToAssets(x)) <= x
-    function _assertConversionConsistency(uint256 amount) internal view {
+    /// @param x Dimensionless test value used as both an asset amount and a share amount
+    ///        to verify neither conversion direction amplifies value.
+    function _assertConversionConsistency(uint256 x) internal view {
         ITokenizedStrategy s = getStrategy();
         // shares -> assets -> shares should not create value
-        uint256 shares = s.convertToShares(amount);
+        uint256 shares = s.convertToShares(x);
         uint256 backToAssets = s.convertToAssets(shares);
-        _establish(Mode.Assert, backToAssets <= amount);
+        _establish(Mode.Assert, backToAssets <= x);
 
         // assets -> shares -> assets should not create value
-        uint256 assets = s.convertToAssets(amount);
+        uint256 assets = s.convertToAssets(x);
         uint256 backToShares = s.convertToShares(assets);
-        _establish(Mode.Assert, backToShares <= amount);
+        _establish(Mode.Assert, backToShares <= x);
     }
 }
