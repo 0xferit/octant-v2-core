@@ -211,6 +211,8 @@ jobs:
     container:
       image: runtimeverificationinc/kontrol:ubuntu-jammy-1.0.231
       options: --user root
+    env:
+      PYTHONPATH: /home/user/.local/lib/python3.10/site-packages
     steps:
       - name: Checkout
         uses: actions/checkout@v4
