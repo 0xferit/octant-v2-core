@@ -217,6 +217,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fix Python environment
+        run: rm -f /home/user/.local/lib/python3.10/site-packages/typing.py
+
       - name: Install Forge dependencies
         run: forge soldeer install
 
