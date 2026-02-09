@@ -213,6 +213,7 @@ jobs:
       options: --user root
     env:
       PYTHONPATH: /home/user/.local/lib/python3.10/site-packages
+      XDG_DATA_HOME: /home/user/.local/share
     steps:
       - name: Checkout
         uses: actions/checkout@v4
