@@ -72,21 +72,21 @@ jobs:
         run: yarn test:ci
 
       - name: Upload test artifact
-        uses: actions/upload-artifact@v4  # upload test results
-        if: success() || failure()        # run this step even if previous step failed
+        uses: actions/upload-artifact@v4 # upload test results
+        if: success() || failure() # run this step even if previous step failed
         with:
           name: test-results
           path: reports/junit.xml
 
       - name: Prepare test report
         uses: dorny/test-reporter@v2
-        if: success() || failure()        # run this step even if previous step failed
+        if: success() || failure() # run this step even if previous step failed
         continue-on-error: true
         with:
-          artifact: test-results            # artifact name
-          name: Tests results                # Name of the check run which will be created
-          path: '*.xml'                     # Path to test results (inside artifact .zip)
-          reporter: java-junit              # Format of test results
+          artifact: test-results # artifact name
+          name: Tests results # Name of the check run which will be created
+          path: "*.xml" # Path to test results (inside artifact .zip)
+          reporter: java-junit # Format of test results
 
   coverage:
     name: Code Coverage
@@ -101,7 +101,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Init env
-        run: | 
+        run: |
           yarn install
           forge soldeer install
 
@@ -209,7 +209,7 @@ jobs:
     runs-on: general
     continue-on-error: true
     container:
-      image: ghcr.io/runtimeverification/kontrol:latest
+      image: runtimeverificationinc/kontrol:ubuntu-jammy-1.0.231
     steps:
       - name: Checkout
         uses: actions/checkout@v4
