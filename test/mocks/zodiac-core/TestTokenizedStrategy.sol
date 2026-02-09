@@ -99,7 +99,7 @@ contract TestTokenizedStrategy is TokenizedStrategy {
             if (loss != 0) {
                 // Absorb loss by burning dragonRouter shares (capped at its balance)
                 uint256 sharesBurned = Math.min(
-                    _convertToShares(S, loss, Math.Rounding.Floor),
+                    _convertToShares(S, loss, Math.Rounding.Ceil),
                     S.balances[_dragonRouter]
                 );
                 if (sharesBurned > 0) {
