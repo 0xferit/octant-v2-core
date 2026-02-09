@@ -203,3 +203,23 @@ jobs:
         with:
           header: coverage-report
           path: src_coverage.md
+
+  kontrol-proofs:
+    name: Kontrol Formal Verification
+    runs-on: general
+    continue-on-error: true
+    container:
+      image: ghcr.io/runtimeverification/kontrol:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Forge dependencies
+        run: forge soldeer install
+
+      - name: Kontrol Build
+        run: kontrol build
+
+      - name: Kontrol Prove
+        run: kontrol prove
+        timeout-minutes: 120
