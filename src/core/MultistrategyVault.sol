@@ -112,8 +112,9 @@ contract MultistrategyVault is IMultistrategyVault {
     mapping(address => StrategyParams) internal _strategies;
 
     /// @notice Array of strategy addresses used as the default withdrawal queue
-    /// @dev Maximum length of MAX_QUEUE (10). Order determines withdrawal priority
-    ///      Strategies are attempted in array order during withdrawals
+    /// @dev Governance-managed via QUEUE_MANAGER role; strategies in this queue are trusted.
+    ///      Maximum length of MAX_QUEUE (10). Order determines withdrawal priority.
+    ///      Strategies are attempted in array order during withdrawals.
     address[] internal _defaultQueue;
 
     /// @notice Whether to force use of default queue for all withdrawals
