@@ -626,6 +626,75 @@ contract AccountingTest is Setup {
     }
 
     /**
+     * @notice Regression: Floor rounding must be used when PPS != 1
+     * @dev At PPS=1, Ceil and Floor produce the same result, masking the bug.
+     *      This test creates PPS < 1 via an unbacked loss with burning disabled,
+     *      then verifies a subsequent loss with burning enabled uses Floor rounding.
+     */
+    function test_burnConversion_floorRoundingAtNonUnityPPS() public {
+        // Step 1: Deposit and create profit so dragon gets shares via report
+        mintAndDepositIntoStrategy(strategy, user, 100e18);
+        asset.mint(address(yieldSource), 50e18); // 50 profit in yield source
+        vm.prank(keeper);
+        strategy.report(); // dragon gets ~50 shares from profit donation
+
+        // totalAssets = 150, totalSupply = 150 (100 user + 50 dragon), PPS = 1
+        uint256 dragonShares = strategy.balanceOf(donationAddress);
+        assertGt(dragonShares, 0, "Dragon should have shares from profit donation");
+
+        // Step 2: Create unbacked loss with burning DISABLED to push PPS < 1
+        vm.prank(management);
+        YieldDonatingTokenizedStrategy(address(strategy)).setEnableBurning(false);
+
+        yieldSource.simulateLoss(30e18); // lose 30 assets
+        vm.prank(keeper);
+        strategy.report(); // PPS drops, no shares burned
+
+        // totalAssets = 120, totalSupply = 150, PPS = 120/150 = 0.8
+        uint256 totalAssets = strategy.totalAssets();
+        uint256 totalSupply = strategy.totalSupply();
+        assertEq(totalAssets, 120e18, "Should have 120 assets after 30 loss");
+        assertEq(totalSupply, 150e18, "Supply unchanged when burning disabled");
+
+        // Step 3: Enable burning and trigger a small loss with non-zero remainder
+        vm.prank(management);
+        YieldDonatingTokenizedStrategy(address(strategy)).setEnableBurning(true);
+
+        // With totalSupply = 150e18 and totalAssets = 120e18, a loss of 7e18 gives:
+        //   loss * totalSupply / totalAssets = 7 * 150 / 120 = 1050 / 120 = 8.75
+        // At 1e18 precision this is exactly 8.75e18, so (7e18 * 150e18) % 120e18 == 0 (no remainder).
+        // For this test we specifically need a non-zero remainder:
+        //   (loss * totalSupply) % totalAssets != 0
+        // to exercise the floor-vs-ceil behavior when converting loss to shares.
+        //
+        // Taking loss = 7e18 + 1 breaks exact divisibility:
+        //   (7e18 + 1) * 150e18 % 120e18 != 0
+        // so the integer division loss * totalSupply / totalAssets has a truncated fractional part.
+        uint256 loss = 7e18 + 1;
+        yieldSource.simulateLoss(loss);
+
+        uint256 dragonSharesBefore = strategy.balanceOf(donationAddress);
+
+        // Compute expected floor shares: loss * totalSupply / totalAssets (integer division = floor)
+        uint256 floorShares = (loss * totalSupply) / totalAssets;
+        uint256 ceilShares = floorShares + 1; // ceil adds 1 when remainder != 0
+
+        // Verify our test parameters actually produce a remainder
+        assertGt((loss * totalSupply) % totalAssets, 0, "Test setup: must have non-zero remainder");
+        assertGt(ceilShares, floorShares, "Test setup: ceil must differ from floor");
+
+        vm.prank(keeper);
+        strategy.report();
+
+        uint256 dragonSharesAfter = strategy.balanceOf(donationAddress);
+        uint256 actualBurned = dragonSharesBefore - dragonSharesAfter;
+
+        // The fix: Floor rounding means we burn floorShares, not ceilShares
+        assertEq(actualBurned, floorShares, "Should burn floor(shares), not ceil");
+        assertTrue(actualBurned < ceilShares, "Must not over-burn by rounding up");
+    }
+
+    /**
      * @notice Test conversion rate consistency during burn operations
      */
     function test_burnConversion_rateConsistency() public {
