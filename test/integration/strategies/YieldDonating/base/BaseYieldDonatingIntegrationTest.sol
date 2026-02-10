@@ -318,6 +318,109 @@ abstract contract BaseYieldDonatingIntegrationTest is BaseIntegrationTest {
         assertApproxEqRel(assetsReceived, depositAmount, 0.01e18, "User should receive approximately original deposit");
     }
 
+    // ========== AVAILABLE WITHDRAW LIMIT OVERFLOW TESTS ==========
+
+    /// @notice Helper to call availableWithdrawLimit on the strategy via low-level call
+    /// @dev availableWithdrawLimit is not on ITokenizedStrategy, so we use staticcall
+    function _callAvailableWithdrawLimit() internal view returns (uint256) {
+        (bool success, bytes memory data) = address(vault).staticcall(
+            abi.encodeWithSignature("availableWithdrawLimit(address)", address(0))
+        );
+        require(success, "availableWithdrawLimit call failed");
+        return abi.decode(data, (uint256));
+    }
+
+    /// @notice Test that availableWithdrawLimit does not overflow when maxWithdraw returns uint256.max
+    function _testAvailableWithdrawLimitOverflow() internal {
+        uint256 idleAmount = 1000 * 10 ** uint256(_decimals());
+        airdrop(ERC20(_asset()), address(vault), idleAmount);
+
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(vault)),
+            abi.encode(type(uint256).max)
+        );
+
+        uint256 limit = _callAvailableWithdrawLimit();
+        assertEq(limit, type(uint256).max, "Should cap at type(uint256).max instead of overflowing");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Test availableWithdrawLimit works normally when no overflow risk
+    function _testAvailableWithdrawLimitNormal() internal {
+        uint256 idleAmount = 1000 * 10 ** uint256(_decimals());
+        uint256 vaultMax = 5000 * 10 ** uint256(_decimals());
+
+        airdrop(ERC20(_asset()), address(vault), idleAmount);
+
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(vault)),
+            abi.encode(vaultMax)
+        );
+
+        uint256 limit = _callAvailableWithdrawLimit();
+        assertEq(limit, idleAmount + vaultMax, "Should return exact sum when no overflow");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Test availableWithdrawLimit with zero idle and max vault withdraw
+    function _testAvailableWithdrawLimitZeroIdleMaxVault() internal {
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(vault)),
+            abi.encode(type(uint256).max)
+        );
+
+        uint256 limit = _callAvailableWithdrawLimit();
+        assertEq(limit, type(uint256).max, "Should return type(uint256).max with zero idle");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Test availableWithdrawLimit at the exact overflow boundary
+    function _testAvailableWithdrawLimitExactBoundary() internal {
+        uint256 idleAmount = 1;
+        airdrop(ERC20(_asset()), address(vault), idleAmount);
+
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(vault)),
+            abi.encode(type(uint256).max)
+        );
+
+        uint256 limit = _callAvailableWithdrawLimit();
+        assertEq(limit, type(uint256).max, "Should cap at max when overflow by 1");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Fuzz test that availableWithdrawLimit never reverts
+    function _testFuzzAvailableWithdrawLimitNeverReverts(uint256 idleAmount, uint256 vaultMax) internal {
+        idleAmount = bound(idleAmount, 0, type(uint128).max);
+        airdrop(ERC20(_asset()), address(vault), idleAmount);
+
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.maxWithdraw.selector, address(vault)),
+            abi.encode(vaultMax)
+        );
+
+        uint256 limit = _callAvailableWithdrawLimit();
+
+        if (vaultMax > type(uint256).max - idleAmount) {
+            assertEq(limit, type(uint256).max, "Should cap at max on overflow");
+        } else {
+            assertEq(limit, idleAmount + vaultMax, "Should return exact sum when safe");
+        }
+
+        vm.clearMockedCalls();
+    }
+
+    // ========== EMERGENCY WITHDRAW TESTS ==========
+
     /// @notice Fuzz test emergency withdraw functionality
     /// @param depositAmount Amount to deposit
     /// @param withdrawFraction Percentage to withdraw (1-100)
