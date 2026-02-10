@@ -49,7 +49,8 @@ import { BatchScript } from "../helpers/BatchScript.sol";
  *
  * forge script script/deploy/DeployQuadraticVotingMechanism.s.sol \
  *   --rpc-url $ETH_RPC_URL \
- *   --broadcast
+ *   --broadcast \
+ *   --private-key $PRIVATE_KEY
  * ```
  *
  * Usage (Safe mode):
