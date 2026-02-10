@@ -135,6 +135,7 @@ contract ERC4626Strategy is BaseHealthCheck {
 
         uint256 idleAssets = IERC20(asset).balanceOf(address(this));
 
+        if (vaultAssets > type(uint256).max - idleAssets) return type(uint256).max;
         _totalAssets = vaultAssets + idleAssets;
 
         return _totalAssets;

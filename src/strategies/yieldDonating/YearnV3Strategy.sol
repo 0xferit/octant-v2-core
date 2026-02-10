@@ -107,7 +107,10 @@ contract YearnV3Strategy is BaseHealthCheck {
      * @return limit Maximum withdrawal amount in asset base units
      */
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
-        return IERC20(asset).balanceOf(address(this)) + ITokenizedStrategy(yearnVault).maxWithdraw(address(this));
+        uint256 idle = IERC20(asset).balanceOf(address(this));
+        uint256 vaultMax = ITokenizedStrategy(yearnVault).maxWithdraw(address(this));
+        if (vaultMax > type(uint256).max - idle) return type(uint256).max;
+        return idle + vaultMax;
     }
 
     /**
@@ -153,6 +156,7 @@ contract YearnV3Strategy is BaseHealthCheck {
 
         uint256 idleAssets = IERC20(asset).balanceOf(address(this));
 
+        if (vaultAssets > type(uint256).max - idleAssets) return type(uint256).max;
         _totalAssets = vaultAssets + idleAssets;
 
         return _totalAssets;
