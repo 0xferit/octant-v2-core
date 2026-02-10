@@ -529,6 +529,28 @@ contract YearnV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         );
     }
 
+    // ========== AVAILABLE WITHDRAW LIMIT OVERFLOW TESTS ==========
+
+    function testAvailableWithdrawLimitNoOverflowYearn() public {
+        _testAvailableWithdrawLimitOverflow();
+    }
+
+    function testAvailableWithdrawLimitNormalCaseYearn() public {
+        _testAvailableWithdrawLimitNormal();
+    }
+
+    function testAvailableWithdrawLimitZeroIdleMaxVaultYearn() public {
+        _testAvailableWithdrawLimitZeroIdleMaxVault();
+    }
+
+    function testAvailableWithdrawLimitExactBoundaryYearn() public {
+        _testAvailableWithdrawLimitExactBoundary();
+    }
+
+    function testFuzzAvailableWithdrawLimitNeverRevertsYearn(uint256 a, uint256 b) public {
+        _testFuzzAvailableWithdrawLimitNeverReverts(a, b);
+    }
+
     // ===== LOSS SCENARIO TESTS =====
 
     /// @notice Test basic loss reporting when Yearn vault loses value

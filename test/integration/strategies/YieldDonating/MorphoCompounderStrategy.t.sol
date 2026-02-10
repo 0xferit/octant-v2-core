@@ -249,6 +249,28 @@ contract MorphoCompounderDonatingStrategyTest is BaseYieldDonatingIntegrationTes
         }
     }
 
+    // ========== AVAILABLE WITHDRAW LIMIT OVERFLOW TESTS ==========
+
+    function testAvailableWithdrawLimitNoOverflowMorpho() public {
+        _testAvailableWithdrawLimitOverflow();
+    }
+
+    function testAvailableWithdrawLimitNormalCaseMorpho() public {
+        _testAvailableWithdrawLimitNormal();
+    }
+
+    function testAvailableWithdrawLimitZeroIdleMaxVaultMorpho() public {
+        _testAvailableWithdrawLimitZeroIdleMaxVault();
+    }
+
+    function testAvailableWithdrawLimitExactBoundaryMorpho() public {
+        _testAvailableWithdrawLimitExactBoundary();
+    }
+
+    function testFuzzAvailableWithdrawLimitNeverRevertsMorpho(uint256 a, uint256 b) public {
+        _testFuzzAvailableWithdrawLimitNeverReverts(a, b);
+    }
+
     /// @notice Test emergency withdraw works even when maxWithdraw returns less than requested
     function testEmergencyWithdrawBypassesMaxWithdraw() public {
         uint256 depositAmount = 100000e6;

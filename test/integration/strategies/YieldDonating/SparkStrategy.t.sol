@@ -476,6 +476,30 @@ contract SparkDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         assertGt(ERC20(_asset()).balanceOf(user), 0);
     }
 
+    // ========== AVAILABLE WITHDRAW LIMIT OVERFLOW TESTS ==========
+
+    function testAvailableWithdrawLimitNoOverflowSpark() public {
+        _testAvailableWithdrawLimitOverflow();
+    }
+
+    function testAvailableWithdrawLimitNormalCaseSpark() public {
+        _testAvailableWithdrawLimitNormal();
+    }
+
+    function testAvailableWithdrawLimitZeroIdleMaxVaultSpark() public {
+        _testAvailableWithdrawLimitZeroIdleMaxVault();
+    }
+
+    function testAvailableWithdrawLimitExactBoundarySpark() public {
+        _testAvailableWithdrawLimitExactBoundary();
+    }
+
+    function testFuzzAvailableWithdrawLimitNeverRevertsSpark(uint256 a, uint256 b) public {
+        _testFuzzAvailableWithdrawLimitNeverReverts(a, b);
+    }
+
+    // ========== CONSTRUCTOR TESTS ==========
+
     /// @notice Test constructor asset validation
     function testConstructorAssetValidation() public {
         vm.expectRevert("Asset mismatch with target vault");
