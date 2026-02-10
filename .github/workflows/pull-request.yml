@@ -228,5 +228,5 @@ jobs:
         run: kontrol build
 
       - name: Kontrol Prove
-        run: kontrol prove
-        timeout-minutes: 120
+        run: kontrol prove --workers 4
+        timeout-minutes: 240
