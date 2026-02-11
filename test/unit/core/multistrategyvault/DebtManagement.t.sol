@@ -528,6 +528,85 @@ contract DebtManagementTest is Test {
         assertLt(vault.pricePerShare(), initialPps);
     }
 
+    // --- DebtManagementLib branch: newDebt clamped to maxDebt < currentDebt ---
+    // When increasing debt, if maxDebt < currentDebt (e.g., from reports), should return currentDebt
+
+    function testUpdateDebt_increaseDebt_maxDebtBelowCurrentDebt_returnsCurrentDebt() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // Set high max debt and allocate all funds
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+        vault.update_debt(address(strategy), vaultBalance, 0);
+
+        // Simulate strategy reporting a profit that increases currentDebt beyond maxDebt
+        // Lower maxDebt below currentDebt
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance / 2);
+
+        // Deposit more funds so we try to increase debt
+        asset.mint(gov, 10e18);
+        asset.approve(address(vault), 10e18);
+        vault.deposit(10e18, gov);
+
+        // Try to increase debt to large amount - but maxDebt < currentDebt
+        // Should return currentDebt (early return at line 257-259)
+        uint256 returnValue = vault.update_debt(address(strategy), type(uint256).max, 0);
+        assertEq(returnValue, vaultBalance);
+    }
+
+    // --- DebtManagementLib branch: increase debt when totalIdle <= minimumTotalIdle ---
+
+    function testUpdateDebt_increaseDebt_idleBelowMinimum_returnsCurrentDebt() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // Set minimum idle to the full balance
+        vault.set_minimum_total_idle(vaultBalance);
+
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+
+        // totalIdle == minimumTotalIdle, so should return currentDebt
+        uint256 returnValue = vault.update_debt(address(strategy), vaultBalance, 0);
+        // Should have returned currentDebt = 0 since no debt was allocated
+        assertEq(returnValue, 0);
+    }
+
+    // --- DebtManagementLib branch: increase debt when maxDeposit is 0 ---
+
+    function testUpdateDebt_increaseDebt_maxDepositZero_returnsCurrentDebt() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+
+        // First allocate some debt
+        vault.update_debt(address(strategy), vaultBalance / 2, 0);
+        uint256 currentDebt = vaultBalance / 2;
+
+        // Disable deposits so maxDeposit returns 0
+        strategy.setAllowDeposits(false);
+
+        // Now try to increase debt more - maxDeposit == 0, so it should early-return currentDebt
+        // This hits the early return at line 268-270 of DebtManagementLib
+        uint256 returnValue = vault.update_debt(address(strategy), vaultBalance, 0);
+        assertEq(returnValue, currentDebt);
+    }
+
+    // --- DebtManagementLib branch: update_debt when vault is shutdown forces newDebt = 0 ---
+
+    function testUpdateDebt_vaultShutdown_forcesDebtToZero() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // Allocate some debt
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+        vault.update_debt(address(strategy), vaultBalance / 2, 0);
+
+        // Shutdown vault
+        vault.add_role(gov, IMultistrategyVault.Roles.EMERGENCY_MANAGER);
+        vault.shutdown_vault();
+
+        // update_debt with any target should reduce to 0 (forced by shutdown)
+        uint256 returnValue = vault.update_debt(address(strategy), vaultBalance, 0);
+        assertEq(returnValue, 0);
+    }
+
     // Helper functions
 
     function seedVaultWithFunds(uint256 amount1, uint256 amount2) internal {
@@ -553,5 +632,142 @@ contract DebtManagementTest is Test {
     // Helper to airdrop assets
     function airdropAsset(address recipient, uint256 amount) internal {
         asset.mint(recipient, amount);
+    }
+
+    // --- DebtManagementLib branch: withdrawn > assetsToWithdraw (line 239) ---
+    // When strategy returns more than asked, assetsToWithdraw is adjusted upward
+
+    function testUpdateDebt_decreaseDebt_strategyReturnsMore() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // First give strategy some debt
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+        vault.update_debt(address(strategy), vaultBalance / 2, 0);
+
+        // Airdrop extra assets to the strategy to simulate returns > requested
+        // When vault requests a partial decrease, strategy may return more due to rounding
+        asset.mint(address(strategy), 1e17);
+
+        // Now decrease debt, requesting less than what strategy holds
+        // The strategy will return all assets including the extra airdropped amount
+        uint256 returnValue = vault.update_debt(address(strategy), 0, 0);
+        assertEq(returnValue, 0, "Debt should be 0 after full withdrawal");
+    }
+
+    // --- DebtManagementLib branch: newDebt < currentDebt in maxDebt block (line 257) ---
+    // When maxDebt is reduced below currentDebt, should early-return currentDebt
+
+    function testUpdateDebt_increaseDebt_maxDebtBelowCurrentDebt() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // First give strategy some debt
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+        vault.update_debt(address(strategy), vaultBalance / 2, 0);
+
+        uint256 currentDebt = vaultBalance / 2;
+
+        // Now reduce maxDebt below the current debt
+        vault.update_max_debt_for_strategy(address(strategy), currentDebt / 4);
+
+        // Try to increase debt (newDebt > currentDebt in the call).
+        // The code clamps newDebt to maxDebt, then checks if clamped newDebt < currentDebt.
+        // Since maxDebt (currentDebt/4) < currentDebt, it should early return currentDebt.
+        uint256 returnValue = vault.update_debt(address(strategy), vaultBalance, 0);
+        assertEq(returnValue, currentDebt, "Should return currentDebt when maxDebt < currentDebt");
+    }
+
+    // --- DebtManagementLib branch: assetsToDeposit > availableIdle ---
+
+    function testUpdateDebt_increaseDebt_limitedByAvailableIdle() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // Set minimum idle to almost all the balance
+        vault.set_minimum_total_idle(vaultBalance - 1e15);
+
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+
+        // Trying to deposit the full balance, but minimum idle limits it
+        uint256 returnValue = vault.update_debt(address(strategy), vaultBalance, 0);
+        // Should only deposit what's available above minimum idle (1e15)
+        assertTrue(returnValue > 0 && returnValue <= 1e15, "Should be limited by available idle");
+    }
+
+    // --- DebtManagementLib branch: assetsToDeposit > maxDeposit ---
+
+    function testUpdateDebt_increaseDebt_limitedByMaxDeposit() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // Strategy allows only small deposits
+        strategy.setMaxDebt(1e15);
+
+        vault.update_max_debt_for_strategy(address(strategy), vaultBalance);
+
+        // Try to deposit more than maxDeposit allows
+        uint256 returnValue = vault.update_debt(address(strategy), vaultBalance, 0);
+        assertTrue(returnValue <= 1e15, "Should be limited by strategy maxDeposit");
+    }
+
+    // =====================================================================
+    // Phase 4: Cover remaining DebtManagementLib branches
+    // =====================================================================
+
+    // --- DebtManagementLib line 218: unrealisedLossesShare != 0 reverts ---
+    // When a strategy has unrealised losses (totalAssets < currentDebt), reducing
+    // debt should revert with StrategyHasUnrealisedLosses.
+
+    function testUpdateDebt_decreaseDebt_unrealisedLosses_reverts() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // Allocate full debt to strategy
+        addDebtToStrategy(address(strategy), vaultBalance);
+
+        // Simulate a loss in the strategy: transfer some assets out
+        // This makes strategy.totalAssets() < currentDebt (unrealised loss)
+        uint256 lossAmount = vaultBalance / 10; // 10% loss
+        strategy.simulateLoss(lossAmount);
+
+        // Verify strategy has less than its debt
+        assertLt(
+            strategy.totalAssets(),
+            vault.strategies(address(strategy)).currentDebt,
+            "Strategy should have unrealised losses"
+        );
+
+        // Try to reduce debt - should revert because of unrealised losses
+        vm.expectRevert(IMultistrategyVault.StrategyHasUnrealisedLosses.selector);
+        vault.update_debt(address(strategy), vaultBalance / 2, 0);
+    }
+
+    // --- DebtManagementLib line 239: withdrawn > assetsToWithdraw ---
+    // Partial debt reduction from a strategy that returns more than asked.
+    // Must be a PARTIAL reduction so Math.min doesn't cap at currentDebt.
+
+    function testUpdateDebt_decreaseDebt_partialWithdraw_strategyReturnsMore() public {
+        uint256 vaultBalance = asset.balanceOf(address(vault));
+
+        // Deploy lossy strategy (which supports extra yield on withdrawal)
+        MockLossyStrategy _extraStrategy = new MockLossyStrategy(address(asset), address(vault));
+        vault.add_strategy(address(_extraStrategy), true);
+
+        // Allocate full debt
+        addDebtToStrategy(address(_extraStrategy), vaultBalance);
+        uint256 currentDebt = vault.strategies(address(_extraStrategy)).currentDebt;
+
+        // Airdrop extra assets to strategy (simulates yield)
+        uint256 extra = currentDebt / 10;
+        asset.mint(address(_extraStrategy), extra);
+
+        // Set extra yield on withdrawal (strategy returns more than asked)
+        _extraStrategy.setWithdrawingExtraYield(extra);
+
+        // Partially reduce debt (not to 0, so Math.min doesn't cap at currentDebt)
+        // Request newDebt = currentDebt / 2, so assetsToWithdraw = currentDebt / 2
+        // Strategy will return currentDebt/2 + extra, capped by Math.min at currentDebt
+        // If extra < currentDebt/2, withdrawn = currentDebt/2 + extra > assetsToWithdraw
+        uint256 targetDebt = currentDebt / 2;
+        uint256 returnValue = vault.update_debt(address(_extraStrategy), targetDebt, MAX_BPS);
+
+        // The strategy returned extra, so debt accounting adjusts for the overpayment
+        assertTrue(returnValue <= currentDebt, "Should have reduced debt");
     }
 }

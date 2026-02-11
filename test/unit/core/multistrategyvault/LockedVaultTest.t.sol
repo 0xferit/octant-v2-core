@@ -198,6 +198,190 @@ contract LockedVaultTest is Test {
         vm.stopPrank();
     }
 
+    // --- Additional branch coverage tests ---
+
+    function test_CancelRageQuit_NoActiveRageQuit_Reverts() public {
+        vm.prank(fish);
+        vm.expectRevert(IMultistrategyLockedVault.NoActiveRageQuit.selector);
+        vault.cancelRageQuit();
+    }
+
+    function test_CancelRageQuit_Succeeds() public {
+        uint256 depositAmount = 10e18;
+        asset.mint(fish, depositAmount);
+        userDeposit(fish, depositAmount);
+
+        vm.startPrank(fish);
+        vault.initiateRageQuit(vault.balanceOf(fish));
+
+        // Now cancel
+        vault.cancelRageQuit();
+        vm.stopPrank();
+
+        // Verify custody is cleared
+        (uint256 lockedShares, ) = vault.custodyInfo(fish);
+        assertEq(lockedShares, 0, "Custody should be cleared after cancel");
+    }
+
+    function test_ProposeRageQuitCooldownPeriod_SameAsCurrent_Reverts() public {
+        vm.prank(gov);
+        vm.expectRevert(IMultistrategyLockedVault.InvalidRageQuitCooldownPeriod.selector);
+        vault.proposeRageQuitCooldownPeriodChange(7 days); // same as default
+    }
+
+    function test_ProposeRageQuitCooldownPeriodChange_NotGovernance_Reverts() public {
+        vm.prank(fish);
+        vm.expectRevert(IMultistrategyLockedVault.NotRegenGovernance.selector);
+        vault.proposeRageQuitCooldownPeriodChange(10 days);
+    }
+
+    function test_FinalizeRageQuitCooldownPeriodChange_NoPending_Reverts() public {
+        vm.expectRevert(IMultistrategyLockedVault.NoPendingRageQuitCooldownPeriodChange.selector);
+        vault.finalizeRageQuitCooldownPeriodChange();
+    }
+
+    function test_FinalizeRageQuitCooldownPeriodChange_DelayNotElapsed_Reverts() public {
+        vm.prank(gov);
+        vault.proposeRageQuitCooldownPeriodChange(10 days);
+
+        // Try to finalize immediately (delay not elapsed)
+        vm.expectRevert(IMultistrategyLockedVault.RageQuitCooldownPeriodChangeDelayNotElapsed.selector);
+        vault.finalizeRageQuitCooldownPeriodChange();
+    }
+
+    function test_CancelRageQuitCooldownPeriodChange_NoPending_Reverts() public {
+        vm.prank(gov);
+        vm.expectRevert(IMultistrategyLockedVault.NoPendingRageQuitCooldownPeriodChange.selector);
+        vault.cancelRageQuitCooldownPeriodChange();
+    }
+
+    function test_CancelRageQuitCooldownPeriodChange_DelayElapsed_Reverts() public {
+        vm.startPrank(gov);
+        vault.proposeRageQuitCooldownPeriodChange(10 days);
+
+        // Warp past the delay
+        vm.warp(block.timestamp + vault.RAGE_QUIT_COOLDOWN_CHANGE_DELAY() + 1);
+
+        vm.expectRevert(IMultistrategyLockedVault.RageQuitCooldownPeriodChangeDelayElapsed.selector);
+        vault.cancelRageQuitCooldownPeriodChange();
+        vm.stopPrank();
+    }
+
+    function test_CancelRageQuitCooldownPeriodChange_Succeeds() public {
+        vm.startPrank(gov);
+        vault.proposeRageQuitCooldownPeriodChange(10 days);
+
+        // Cancel while still in delay
+        vault.cancelRageQuitCooldownPeriodChange();
+        vm.stopPrank();
+
+        assertEq(vault.pendingRageQuitCooldownPeriod(), 0, "Pending should be cleared");
+        assertEq(vault.rageQuitCooldownPeriodChangeTimestamp(), 0, "Timestamp should be cleared");
+    }
+
+    function test_CancelRageQuitCooldownPeriodChange_NotGovernance_Reverts() public {
+        vm.prank(gov);
+        vault.proposeRageQuitCooldownPeriodChange(10 days);
+
+        vm.prank(fish);
+        vm.expectRevert(IMultistrategyLockedVault.NotRegenGovernance.selector);
+        vault.cancelRageQuitCooldownPeriodChange();
+    }
+
+    function test_Transfer_WithLockedShares_Reverts() public {
+        uint256 depositAmount = 10e18;
+        asset.mint(fish, depositAmount);
+        userDeposit(fish, depositAmount);
+
+        vm.startPrank(fish);
+        vault.initiateRageQuit(vault.balanceOf(fish));
+
+        // Try to transfer while shares are locked
+        vm.expectRevert(IMultistrategyLockedVault.TransferExceedsAvailableShares.selector);
+        vault.transfer(gov, 1);
+        vm.stopPrank();
+    }
+
+    function test_Transfer_WithPartialLockedShares_Succeeds() public {
+        uint256 depositAmount = 10e18;
+        asset.mint(fish, depositAmount);
+        userDeposit(fish, depositAmount);
+
+        uint256 balance = vault.balanceOf(fish);
+        uint256 lockAmount = balance / 2;
+
+        vm.startPrank(fish);
+        vault.initiateRageQuit(lockAmount);
+
+        // Transfer only the unlocked portion should succeed
+        uint256 transferable = balance - lockAmount;
+        vault.transfer(gov, transferable);
+        vm.stopPrank();
+
+        assertEq(vault.balanceOf(gov), transferable, "Gov should receive transferable shares");
+    }
+
+    function test_GetTransferableShares() public {
+        uint256 depositAmount = 10e18;
+        asset.mint(fish, depositAmount);
+        userDeposit(fish, depositAmount);
+
+        uint256 balance = vault.balanceOf(fish);
+
+        // No custody - all shares transferable
+        assertEq(vault.getTransferableShares(fish), balance, "All shares should be transferable");
+
+        // Lock half
+        vm.prank(fish);
+        vault.initiateRageQuit(balance / 2);
+
+        assertEq(vault.getTransferableShares(fish), balance - balance / 2, "Half should be transferable");
+    }
+
+    function test_GetRageQuitableShares() public {
+        uint256 depositAmount = 10e18;
+        asset.mint(fish, depositAmount);
+        userDeposit(fish, depositAmount);
+
+        uint256 balance = vault.balanceOf(fish);
+
+        // No custody - all shares rage quitable
+        assertEq(vault.getRageQuitableShares(fish), balance, "All shares should be rage quitable");
+
+        // Lock some
+        vm.prank(fish);
+        vault.initiateRageQuit(balance / 2);
+
+        // Already has active custody - returns 0
+        assertEq(vault.getRageQuitableShares(fish), 0, "Should return 0 with active custody");
+    }
+
+    function test_SetRegenGovernance_NotGovernance_Reverts() public {
+        vm.prank(fish);
+        vm.expectRevert(IMultistrategyLockedVault.NotRegenGovernance.selector);
+        vault.setRegenGovernance(address(0xABC));
+    }
+
+    function test_WithdrawExceedsCustodiedAmount_Reverts() public {
+        uint256 depositAmount = 10e18;
+        asset.mint(fish, depositAmount);
+        userDeposit(fish, depositAmount);
+
+        uint256 balance = vault.balanceOf(fish);
+        uint256 lockAmount = balance / 2;
+
+        vm.startPrank(fish);
+        vault.initiateRageQuit(lockAmount);
+
+        // Warp past cooldown
+        vm.warp(block.timestamp + vault.rageQuitCooldownPeriod() + 1);
+
+        // Try to withdraw more than custodied
+        vm.expectRevert(IMultistrategyLockedVault.ExceedsCustodiedAmount.selector);
+        vault.withdraw(depositAmount, fish, fish, 0, new address[](0));
+        vm.stopPrank();
+    }
+
     function testFuzz_CannotInitiateRageQuitWhenAlreadyUnlockedAndCooldownPeriodHasNotPassed(
         uint256 depositAmount,
         uint256 timeElapsed
