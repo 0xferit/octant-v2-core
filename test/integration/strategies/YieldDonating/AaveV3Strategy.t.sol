@@ -231,6 +231,35 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         }
     }
 
+    /// @notice Test available deposit limit returns 0 when idle balance >= available capacity
+    function testAvailableDepositLimitIdleExceedsCapacityAave() public {
+        IPoolDataProvider dataProvider = IPoolDataProvider(AaveV3TestConfig.AAVE_DATA_PROVIDER);
+        (, uint256 supplyCap) = dataProvider.getReserveCaps(_asset());
+
+        // Only test when there is a supply cap
+        if (supplyCap == 0) return;
+
+        uint256 totalSupply = dataProvider.getATokenTotalSupply(_asset());
+        uint256 supplyCapScaled = supplyCap * 10 ** _decimals();
+
+        // Only test when there is available capacity
+        if (supplyCapScaled <= totalSupply) return;
+
+        uint256 availableCapacity = supplyCapScaled - totalSupply;
+
+        // Airdrop idle assets equal to available capacity to trigger the <= branch
+        airdrop(ERC20(_asset()), address(strategy), availableCapacity);
+
+        uint256 limit = strategy.availableDepositLimit(user);
+        assertEq(limit, 0, "Available deposit limit should be 0 when idle balance equals available capacity");
+
+        // Also test with idle exceeding capacity
+        airdrop(ERC20(_asset()), address(strategy), 1000e6);
+
+        limit = strategy.availableDepositLimit(user);
+        assertEq(limit, 0, "Available deposit limit should be 0 when idle balance exceeds available capacity");
+    }
+
     /// @notice Fuzz test emergency withdraw functionality
     function testFuzzEmergencyWithdrawAave(uint256 depositAmount, uint256 withdrawFraction) public {
         depositAmount = bound(depositAmount, _minDeposit(), _maxDeposit());
@@ -460,6 +489,77 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         vm.stopPrank();
 
         assertGe(assetsWithdrawn, (depositAmount * 99) / 100, "User should receive at least 99% of deposit");
+    }
+
+    /// @notice Test availableDepositLimit returns 0 when supplyCapScaled <= totalSupply
+    function testAvailableDepositLimitCapReachedAave() public {
+        address dataProviderAddr = address(strategy.dataProvider());
+
+        // Mock getReserveCaps to return a non-zero supply cap
+        uint256 fakeBorrowCap = 100;
+        uint256 fakeSupplyCap = 1000; // In whole tokens (will be scaled by decimals)
+
+        vm.mockCall(
+            dataProviderAddr,
+            abi.encodeWithSelector(IPoolDataProvider.getReserveCaps.selector, _asset()),
+            abi.encode(fakeBorrowCap, fakeSupplyCap)
+        );
+
+        // supplyCapScaled = 1000 * 10^6 = 1_000_000_000
+        uint256 supplyCapScaled = fakeSupplyCap * 10 ** _decimals();
+
+        // Mock getATokenTotalSupply to return >= supplyCapScaled so the else branch returns 0
+        vm.mockCall(
+            dataProviderAddr,
+            abi.encodeWithSelector(IPoolDataProvider.getATokenTotalSupply.selector, _asset()),
+            abi.encode(supplyCapScaled) // totalSupply == supplyCapScaled, so supplyCapScaled > totalSupply is false
+        );
+
+        uint256 limit = strategy.availableDepositLimit(user);
+        assertEq(limit, 0, "Should return 0 when supply cap is reached (supplyCapScaled == totalSupply)");
+
+        // Also test when totalSupply > supplyCapScaled
+        vm.mockCall(
+            dataProviderAddr,
+            abi.encodeWithSelector(IPoolDataProvider.getATokenTotalSupply.selector, _asset()),
+            abi.encode(supplyCapScaled + 1)
+        );
+
+        limit = strategy.availableDepositLimit(user);
+        assertEq(limit, 0, "Should return 0 when supply cap is exceeded (totalSupply > supplyCapScaled)");
+
+        vm.clearMockedCalls();
+    }
+
+    /// @notice Test availableWithdrawLimit when aTokenBalance >= poolLiquidity (uses poolLiquidity)
+    function testAvailableWithdrawLimitPoolLiquidityConstrainedAave() public {
+        uint256 depositAmount = 50000e6;
+
+        airdrop(ERC20(_asset()), user, depositAmount);
+        vm.startPrank(user);
+        ERC20(_asset()).approve(address(strategy), depositAmount);
+        IERC4626(address(strategy)).deposit(depositAmount, user);
+        vm.stopPrank();
+
+        uint256 aTokenBalance = ERC20(AaveV3TestConfig.AUSDC_V3).balanceOf(address(strategy));
+        assertGt(aTokenBalance, 0, "Strategy should have aTokens");
+
+        // Mock the pool liquidity (USDC balance of the aToken contract) to be less than aTokenBalance
+        uint256 lowPoolLiquidity = aTokenBalance / 2;
+        vm.mockCall(
+            _asset(),
+            abi.encodeWithSelector(ERC20.balanceOf.selector, AaveV3TestConfig.AUSDC_V3),
+            abi.encode(lowPoolLiquidity)
+        );
+
+        uint256 limit = strategy.availableWithdrawLimit(user);
+        uint256 idleBalance = ERC20(_asset()).balanceOf(address(strategy));
+
+        // When aTokenBalance >= poolLiquidity, withdrawableFromPool = poolLiquidity
+        assertEq(limit, lowPoolLiquidity + idleBalance, "Withdraw limit should use poolLiquidity when it's the constraint");
+        assertLt(limit, aTokenBalance + idleBalance, "Should be less than full aToken balance + idle");
+
+        vm.clearMockedCalls();
     }
 
     /// @notice Test that available withdraw limit returns correct value

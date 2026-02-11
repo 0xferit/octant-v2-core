@@ -419,6 +419,50 @@ abstract contract BaseYieldDonatingIntegrationTest is BaseIntegrationTest {
         vm.clearMockedCalls();
     }
 
+    // ========== HARVEST AND REPORT OVERFLOW TESTS ==========
+
+    /// @notice Test that _harvestAndReport returns type(uint256).max when vault convertToAssets overflows with idle
+    /// @dev Mocks convertToAssets on the compounder vault to return type(uint256).max, ensuring the
+    ///      overflow guard `if (vaultAssets > type(uint256).max - idleAssets) return type(uint256).max` is hit
+    function _testHarvestOverflowFromVault() internal {
+        uint256 depositAmount = 1000 * 10 ** uint256(_decimals());
+        uint256 idleAmount = 1 * 10 ** uint256(_decimals());
+
+        // Deposit so the strategy has shares in the vault
+        if (ERC20(_asset()).balanceOf(user) < depositAmount) {
+            airdrop(ERC20(_asset()), user, depositAmount);
+        }
+
+        vm.startPrank(user);
+        ERC20(_asset()).approve(address(vault), depositAmount);
+        IERC4626(address(vault)).deposit(depositAmount, user);
+        vm.stopPrank();
+
+        // Airdrop idle assets to strategy so idleAssets > 0
+        airdrop(ERC20(_asset()), address(vault), idleAmount);
+
+        // Mock convertToAssets on compounder vault to return type(uint256).max for any input
+        // This triggers the overflow guard: vaultAssets > type(uint256).max - idleAssets
+        vm.mockCall(
+            _compounderVault(),
+            abi.encodeWithSelector(IERC4626.convertToAssets.selector),
+            abi.encode(type(uint256).max)
+        );
+
+        // Disable health check since this extreme profit would fail it
+        vm.prank(management);
+        IBaseHealthCheck(address(vault)).setDoHealthCheck(false);
+
+        // Report should succeed without reverting and return type(uint256).max as total assets
+        vm.prank(keeper);
+        (uint256 profit, ) = vault.report();
+
+        // The reported profit should be extremely large (type(uint256).max - previous totalAssets)
+        assertGt(profit, 0, "Should have reported some profit from overflow mock");
+
+        vm.clearMockedCalls();
+    }
+
     // ========== EMERGENCY WITHDRAW TESTS ==========
 
     /// @notice Fuzz test emergency withdraw functionality

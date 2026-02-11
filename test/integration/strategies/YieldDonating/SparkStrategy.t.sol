@@ -498,6 +498,13 @@ contract SparkDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         _testFuzzAvailableWithdrawLimitNeverReverts(a, b);
     }
 
+    // ========== HARVEST OVERFLOW TESTS ==========
+
+    /// @notice Test that _harvestAndReport caps at type(uint256).max when convertToAssets overflows with idle
+    function testHarvestOverflowFromVaultSpark() public {
+        _testHarvestOverflowFromVault();
+    }
+
     // ========== CONSTRUCTOR TESTS ==========
 
     /// @notice Test constructor asset validation

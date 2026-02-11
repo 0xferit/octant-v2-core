@@ -271,6 +271,13 @@ contract MorphoCompounderDonatingStrategyTest is BaseYieldDonatingIntegrationTes
         _testFuzzAvailableWithdrawLimitNeverReverts(a, b);
     }
 
+    // ========== HARVEST OVERFLOW TESTS ==========
+
+    /// @notice Test that _harvestAndReport caps at type(uint256).max when convertToAssets overflows with idle
+    function testHarvestOverflowFromVaultMorpho() public {
+        _testHarvestOverflowFromVault();
+    }
+
     /// @notice Test emergency withdraw works even when maxWithdraw returns less than requested
     function testEmergencyWithdrawBypassesMaxWithdraw() public {
         uint256 depositAmount = 100000e6;
