@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "./Base.t.sol";
 import { MockStrategy } from "test/mocks/zodiac-core/MockStrategy.sol";
 import { MockYieldSource } from "test/mocks/core/MockYieldSource.sol";
-import { DragonTokenizedStrategy } from "src/zodiac-core/vaults/DragonTokenizedStrategy.sol";
+import { TestTokenizedStrategy } from "test/mocks/zodiac-core/TestTokenizedStrategy.sol";
 
 import { Unauthorized, TokenizedStrategy__NotKeeperOrManagement, TokenizedStrategy__NotManagement, TokenizedStrategy__NotOperator } from "src/errors.sol";
 import { ITokenizedStrategy } from "src/zodiac-core/interfaces/ITokenizedStrategy.sol";
@@ -21,7 +21,7 @@ contract BaseStrategyTest is BaseTest {
     MockStrategy moduleImplementation;
     MockStrategy module;
     MockYieldSource yieldSource;
-    DragonTokenizedStrategy tokenizedStrategyImplementation;
+    TestTokenizedStrategy tokenizedStrategyImplementation;
 
     string public name = "Test Mock Strategy";
     uint256 public maxReportDelay = 9;
@@ -31,7 +31,7 @@ contract BaseStrategyTest is BaseTest {
 
         moduleImplementation = new MockStrategy();
         yieldSource = new MockYieldSource(NATIVE_TOKEN);
-        tokenizedStrategyImplementation = new DragonTokenizedStrategy();
+        tokenizedStrategyImplementation = new TestTokenizedStrategy();
         temps = _testTemps(
             address(moduleImplementation),
             abi.encode(

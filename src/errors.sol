@@ -43,27 +43,5 @@ error TokenizedStrategy__StrategyNotInShutdown();
 error TokenizedStrategy__TooMuchLoss();
 error TokenizedStrategy__HatsAlreadyInitialized();
 error TokenizedStrategy__InvalidHatsAddress();
-error DragonTokenizedStrategy__ReceiverHasExistingShares();
-
-error DragonTokenizedStrategy__VaultSharesNotTransferable();
-error DragonTokenizedStrategy__PerformanceFeeIsAlwaysZero();
-error DragonTokenizedStrategy__PerformanceFeeDisabled();
-error DragonTokenizedStrategy__ZeroLockupDuration();
-error DragonTokenizedStrategy__InsufficientLockupDuration();
-error DragonTokenizedStrategy__DepositMoreThanMax();
-error DragonTokenizedStrategy__MintMoreThanMax();
-error DragonTokenizedStrategy__WithdrawMoreThanMax();
-error DragonTokenizedStrategy__RedeemMoreThanMax();
-error DragonTokenizedStrategy__SharesStillLocked();
-error DragonTokenizedStrategy__InvalidLockupDuration();
-error DragonTokenizedStrategy__InvalidRageQuitCooldownPeriod();
-error DragonTokenizedStrategy__RageQuitInProgress();
-error DragonTokenizedStrategy__StrategyInShutdown();
-error DragonTokenizedStrategy__NoSharesToRageQuit();
-error DragonTokenizedStrategy__SharesAlreadyUnlocked();
-error DragonTokenizedStrategy__LockupDurationTooShort();
-error DragonTokenizedStrategy__MaxUnlockIsAlwaysZero();
-error DragonTokenizedStrategy__NoOperation();
-error DragonTokenizedStrategy__InvalidReceiver();
 
 error BaseStrategy__NotSelf();

@@ -7,7 +7,7 @@ import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 import { KontrolTest } from "test/kontrol/KontrolTest.k.sol";
 import { TestERC20 } from "test/kontrol/TestERC20.k.sol";
 import { MockSimpleStrategy } from "test/kontrol/MockSimpleStrategy.k.sol";
-import "test/kontrol/YDStateSlots.k.sol";
+import "test/kontrol/SharedStateSlots.k.sol";
 
 /**
  * @title YDSetup
@@ -30,9 +30,7 @@ contract YDSetup is KontrolTest {
     uint256 deploymentTimestamp;
     uint256 currentTimestamp;
 
-    function setUp() public {
-        vm.assume(msg.sender == address(this));
-
+    function setUp() public virtual {
         // Concrete role addresses (avoid symbolic branching on prank)
         _management = makeAddr("MANAGEMENT");
         _keeper = makeAddr("KEEPER");
@@ -74,30 +72,30 @@ contract YDSetup is KontrolTest {
         // ============================================
         // Addresses must be concrete to avoid excessive branching on
         // prank cheatcode and access control checks.
-        _storeAddress(address(strategy), YD_ASSET_SLOT, _asset);
-        _storeAddress(address(strategy), YD_MANAGEMENT_SLOT, _management);
-        _storeAddress(address(strategy), YD_KEEPER_SLOT, _keeper);
-        _storeAddress(address(strategy), YD_EMERGENCY_ADMIN_SLOT, _emergencyAdmin);
-        _storeAddress(address(strategy), YD_DRAGON_ROUTER_SLOT, _dragonRouter);
+        _storeAddress(address(strategy), TS_ASSET_SLOT, _asset);
+        _storeAddress(address(strategy), TS_MANAGEMENT_SLOT, _management);
+        _storeAddress(address(strategy), TS_KEEPER_SLOT, _keeper);
+        _storeAddress(address(strategy), TS_EMERGENCY_ADMIN_SLOT, _emergencyAdmin);
+        _storeAddress(address(strategy), TS_DRAGON_ROUTER_SLOT, _dragonRouter);
 
         // Symbolic totalSupply and totalAssets
         uint256 totalSupply = freshUInt256Bounded();
-        _storeUInt256(address(strategy), YD_TOTAL_SUPPLY_SLOT, totalSupply);
+        _storeUInt256(address(strategy), TS_TOTAL_SUPPLY_SLOT, totalSupply);
         uint256 totalAssets = freshUInt256Bounded();
-        _storeUInt256(address(strategy), YD_TOTAL_ASSETS_SLOT, totalAssets);
+        _storeUInt256(address(strategy), TS_TOTAL_ASSETS_SLOT, totalAssets);
 
         // Flags: decimals=18, entered=NOT_ENTERED(1), shutdown=false(0), enableBurning=true(1)
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_DECIMALS_OFFSET, YD_DECIMALS_WIDTH, 18);
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_ENTERED_OFFSET, YD_ENTERED_WIDTH, 1);
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_SHUTDOWN_OFFSET, YD_SHUTDOWN_WIDTH, 0);
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_ENABLE_BURNING_OFFSET, YD_ENABLE_BURNING_WIDTH, 1);
+        _storeData(address(strategy), TS_FLAGS_SLOT, TS_DECIMALS_OFFSET, TS_DECIMALS_WIDTH, 18);
+        _storeData(address(strategy), TS_FLAGS_SLOT, TS_ENTERED_OFFSET, TS_ENTERED_WIDTH, 1);
+        _storeData(address(strategy), TS_FLAGS_SLOT, TS_SHUTDOWN_OFFSET, TS_SHUTDOWN_WIDTH, 0);
+        _storeData(address(strategy), TS_FLAGS_SLOT, TS_ENABLE_BURNING_OFFSET, TS_ENABLE_BURNING_WIDTH, 1);
 
         // Disable health check for core invariant proofs (focus on report logic)
-        _storeData(address(strategy), YD_HC_SLOT, YD_HC_DO_HEALTH_CHECK_OFFSET, YD_HC_DO_HEALTH_CHECK_WIDTH, 0);
+        _storeData(address(strategy), HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
 
         // Symbolic dragon router balance
         uint256 dragonBalance = freshUInt256Bounded();
-        _storeMappingUInt256(address(strategy), YD_BALANCES_SLOT, uint256(uint160(_dragonRouter)), 0, dragonBalance);
+        _storeMappingUInt256(address(strategy), TS_BALANCES_SLOT, uint256(uint160(_dragonRouter)), 0, dragonBalance);
 
         // Warp to a later timestamp
         currentTimestamp = freshUInt256Bounded();

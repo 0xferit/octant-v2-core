@@ -5,7 +5,7 @@ rekompile                  = true
 verbose                    = false
 debug                      = false
 require                    = 'verification/kontrol/octant-lemmas.k'
-module-import              = ['YearnPolygonUsdcStrategyKontrolTest:OCTANT-LEMMAS', 'YDStrategyTest:OCTANT-LEMMAS']
+module-import              = ['YDStrategyTest:OCTANT-LEMMAS', 'YSStrategyTest:OCTANT-LEMMAS']
 auxiliary-lemmas           = true
 
 [prove.default]
@@ -41,42 +41,41 @@ auto_abstract              = true
 run-constructor            = false
 match-test                 = [
         # ============================================
-        # YearnPolygonUsdcStrategy proofs (existing)
+        # YieldDonating strategy proofs (7 inherited + 4 unique = 11)
         # ============================================
-        "YearnPolygonUsdcStrategyKontrolTest.testDeposit(uint256,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testDepositWithLockup(uint256,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testMint(uint256,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testMintWithLockup(uint256,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testWithdraw(uint256,address,address,uint256)",
-        #"YearnPolygonUsdcStrategyKontrolTest.testWithdrawWithLossReverts(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testWithdrawRevert(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testRedeem(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testRedeemRevert(uint256,address,address,uint256)",
-        #"YearnPolygonUsdcStrategyKontrolTest.testMaxRedeemAllwaysReverts(uint256,address,address,uint256)",
-        "YearnPolygonUsdcStrategyKontrolTest.testInitiateRageQuit()",
-        "YearnPolygonUsdcStrategyKontrolTest.testReport()",
-        "YearnPolygonUsdcStrategyKontrolTest.testReportWithLoss()",
-        "YearnPolygonUsdcStrategyKontrolTest.testTend()",
-        "YearnPolygonUsdcStrategyKontrolTest.testSetPendingManagement(address)",
-        #"YearnPolygonUsdcStrategyKontrolTest.testSetPendingManagementRevert(address,address)",
-        #"YearnPolygonUsdcStrategyKontrolTest.testAcceptManagement(address)",
-        #"YearnPolygonUsdcStrategyKontrolTest.testAcceptManagementRevert(address,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testSetKeeper(address)",
-        #"YearnPolygonUsdcStrategyKontrolTest.testSetKeeperRevert(address,address)",
-        "YearnPolygonUsdcStrategyKontrolTest.testSetEmergencyAdmin(address)",
-        #"YearnPolygonUsdcStrategyKontrolTest.testSetEmergencyAdminRevert(address,address)",
-        # ============================================
-        # YieldDonating strategy proofs (new)
-        # ============================================
-        "YDStrategyTest.testReportProfit()",
-        "YDStrategyTest.testReportLossWithBurning()",
-        "YDStrategyTest.testReportLossInsufficientDragon()",
-        "YDStrategyTest.testReportNoChange()",
-        "YDStrategyTest.testReportLossNoBurning()",
+        # Inherited from StrategyBaseTest
         "YDStrategyTest.testTend()",
         "YDStrategyTest.testReportOnlyKeeper()",
         "YDStrategyTest.testReportByManagement()",
-        "YDStrategyTest.testReportNotEmergencyAdmin()",
+        "YDStrategyTest.testShutdownBlocks(address)",
+        "YDStrategyTest.testBalanceBounded(address)",
+        "YDStrategyTest.testReportNoChange()",
+        "YDStrategyTest.testReportLossNoBurning()",
+        # YD-unique
+        "YDStrategyTest.testReportProfit()",
+        "YDStrategyTest.testReportLossInsufficientDragon()",
+        "YDStrategyTest.testSharesRedeemableAfterDepositYD(uint256,address)",
+        "YDStrategyTest.testConversionConsistencyYD(uint256)",
+        # ============================================
+        # YieldSkimming strategy proofs (4 inherited + 11 unique = 15)
+        # ============================================
+        # Inherited from StrategyBaseTest (overridden for debt assertions)
+        "YSStrategyTest.testTend()",
+        "YSStrategyTest.testReportNoChange()",
+        "YSStrategyTest.testReportLossNoBurning()",
+        "YSStrategyTest.testReportByManagement()",
+        # YS-unique
+        "YSStrategyTest.testReportProfitYS()",
+        "YSStrategyTest.testReportLossWithBurningYS()",
+        "YSStrategyTest.testReportLossInsufficientDragonYS()",
+        "YSStrategyTest.testDepositBlockedDuringInsolvency()",
+        "YSStrategyTest.testDragonBlockedDuringInsolvency()",
+        "YSStrategyTest.testDepositBlockedForDragon()",
+        "YSStrategyTest.testDepositValueDebtYS(uint256,address)",
+        "YSStrategyTest.testTransferDragonToUser(address,uint256)",
+        "YSStrategyTest.testTransferUserToDragon(address,uint256)",
+        "YSStrategyTest.testConversionSolventYS(uint256)",
+        "YSStrategyTest.testConversionFallbackInsolventYS(uint256)",
     ]
 
 [show.default]

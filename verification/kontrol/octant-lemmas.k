@@ -124,4 +124,30 @@ module OCTANT-LEMMAS
     rule (A *Int B) -Int (B *Int A) => 0
      [simplification, preserves-definedness]
 
+    //
+    // ceilDiv property for PPS non-decreasing in loss-with-burning
+    //
+    // Property: D * ceilDiv(N, D) >= N
+    // OZ Math.mulDiv with Ceil computes: floor(N/D) + bool2Word(N mod D > 0)
+    //
+    // Proof sketch:
+    //   Let N = D*q + r where 0 <= r < D.
+    //   Case r = 0: ceilDiv = q,     D*q     = N.           (>= N holds)
+    //   Case r > 0: ceilDiv = q + 1, D*(q+1) = N - r + D.  (>= N since D > r)
+    //
+    // If these lemmas don't match the exact K term, use:
+    //   kontrol show 'YDStrategyTest.testReportLossWithBurning()' --pending
+    // to inspect the stuck term and adjust the pattern.
+    //
+
+    rule [ceilDiv-ge]:
+      D *Int ( ( N /Int D ) +Int bool2Word ( 0 <Int ( N modInt D ) ) ) >=Int N => true
+      requires 0 <Int D andBool 0 <=Int N
+      [simplification, preserves-definedness]
+
+    rule [ceilDiv-le]:
+      N <=Int D *Int ( ( N /Int D ) +Int bool2Word ( 0 <Int ( N modInt D ) ) ) => true
+      requires 0 <Int D andBool 0 <=Int N
+      [simplification, preserves-definedness]
+
 endmodule

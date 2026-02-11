@@ -3,7 +3,7 @@ pragma solidity >=0.8.18;
 
 import "forge-std/console.sol";
 import { Setup } from "./Setup.sol";
-import { DragonTokenizedStrategy__PerformanceFeeDisabled, DragonTokenizedStrategy__MaxUnlockIsAlwaysZero, Unauthorized, DragonTokenizedStrategy__InvalidLockupDuration, DragonTokenizedStrategy__InvalidRageQuitCooldownPeriod, TokenizedStrategy__NotKeeperOrManagement, TokenizedStrategy__NotManagement, TokenizedStrategy__NotPendingManagement, TokenizedStrategy__NotEmergencyAuthorized, TokenizedStrategy__NotRegenGovernance, TokenizedStrategy__AlreadyInitialized, BaseStrategy__NotSelf } from "src/errors.sol";
+import { Unauthorized, TokenizedStrategy__NotKeeperOrManagement, TokenizedStrategy__NotManagement, TokenizedStrategy__NotPendingManagement, TokenizedStrategy__NotEmergencyAuthorized, TokenizedStrategy__NotRegenGovernance, TokenizedStrategy__AlreadyInitialized, BaseStrategy__NotSelf } from "src/errors.sol";
 
 contract AccessControlTest is Setup {
     function setUp() public override {
@@ -266,70 +266,5 @@ contract AccessControlTest is Setup {
         strategy.setName(newName);
 
         assertEq(strategy.name(), newName);
-    }
-
-    function test_setLockupDuration() public {
-        uint256 newDuration = 180 days;
-
-        vm.prank(regenGovernance);
-        strategy.setLockupDuration(newDuration);
-
-        // Test successful change
-        assertEq(strategy.minimumLockupDuration(), newDuration);
-    }
-
-    function test_setLockupDuration_reverts(address _address) public {
-        vm.assume(_address != regenGovernance);
-        uint256 newDuration = 180 days;
-
-        // Test unauthorized access
-        vm.startPrank(_address);
-        vm.expectRevert(TokenizedStrategy__NotRegenGovernance.selector);
-        strategy.setLockupDuration(newDuration);
-        vm.stopPrank();
-
-        // Test invalid duration below minimum
-        vm.startPrank(regenGovernance);
-        vm.expectRevert(DragonTokenizedStrategy__InvalidLockupDuration.selector);
-        strategy.setLockupDuration(29 days);
-        vm.stopPrank();
-        // Test invalid duration above maximum
-        vm.startPrank(regenGovernance);
-        vm.expectRevert(DragonTokenizedStrategy__InvalidLockupDuration.selector);
-        strategy.setLockupDuration(3651 days);
-        vm.stopPrank();
-    }
-
-    function test_setRageQuitCooldownPeriod() public {
-        uint256 newPeriod = 180 days;
-
-        vm.prank(regenGovernance);
-        strategy.setRageQuitCooldownPeriod(newPeriod);
-
-        // Test successful change
-        assertEq(strategy.rageQuitCooldownPeriod(), newPeriod);
-    }
-
-    function test_setRageQuitCooldownPeriod_reverts(address _address) public {
-        vm.assume(_address != regenGovernance);
-        uint256 newPeriod = 180 days;
-
-        // Test unauthorized access
-        vm.startPrank(_address);
-        vm.expectRevert(TokenizedStrategy__NotRegenGovernance.selector);
-        strategy.setRageQuitCooldownPeriod(newPeriod);
-        vm.stopPrank();
-
-        // Test invalid period below minimum
-        vm.startPrank(regenGovernance);
-        vm.expectRevert(DragonTokenizedStrategy__InvalidRageQuitCooldownPeriod.selector);
-        strategy.setRageQuitCooldownPeriod(29 days);
-        vm.stopPrank();
-
-        // Test invalid period above maximum
-        vm.startPrank(regenGovernance);
-        vm.expectRevert(DragonTokenizedStrategy__InvalidRageQuitCooldownPeriod.selector);
-        strategy.setRageQuitCooldownPeriod(3651 days);
-        vm.stopPrank();
     }
 }

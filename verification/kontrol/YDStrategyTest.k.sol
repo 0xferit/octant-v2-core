@@ -4,8 +4,9 @@ pragma solidity ^0.8.0;
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { ITokenizedStrategy } from "src/core/interfaces/ITokenizedStrategy.sol";
 
+import { StrategyBaseTest } from "test/kontrol/StrategyBaseTest.k.sol";
 import { YDSetup } from "test/kontrol/YDSetup.k.sol";
-import "test/kontrol/YDStateSlots.k.sol";
+import "test/kontrol/SharedStateSlots.k.sol";
 
 struct YDProofState {
     uint256 totalAssets;
@@ -16,39 +17,87 @@ struct YDProofState {
 /**
  * @title YDStrategyTest
  * @notice Kontrol formal verification proofs for YieldDonatingTokenizedStrategy
- * @dev Proves key invariants of the yield-donating report mechanism:
- *      - PPS (price-per-share) is non-decreasing for regular holders after report with profit
- *      - PPS is non-decreasing after report with loss when dragon has sufficient balance
- *      - totalAssets is always updated to newTotalAssets after report
- *      - Dragon shares are minted on profit and burned on loss (when burning enabled)
- *      - Access control: only keepers/management can call report
- *      - Tend does not change PPS or totalAssets
+ * @dev Inherits 7 common proofs from StrategyBaseTest and adds 4 YD-specific proofs:
+ *      - testReportProfit: shares minted to dragon, PPS non-decreasing
+ *      - testReportLossInsufficientDragon: partial burn, PPS impact bounded
+ *      - testSharesRedeemableAfterDepositYD: deposit produces redeemable shares
+ *      - testConversionConsistencyYD: round-trip does not create value
  */
-contract YDStrategyTest is YDSetup {
+contract YDStrategyTest is StrategyBaseTest, YDSetup {
     YDProofState private preState;
     YDProofState private postState;
 
+    function setUp() public override(YDSetup) {
+        YDSetup.setUp();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    VIRTUAL ACCESSORS
+    //////////////////////////////////////////////////////////////*/
+
+    function getStrategy() internal view override returns (ITokenizedStrategy) {
+        return iStrategy;
+    }
+
+    function getStrategyAddr() internal view override returns (address) {
+        return address(strategy);
+    }
+
+    function getKeeper() internal view override returns (address) {
+        return _keeper;
+    }
+
+    function getDragonRouter() internal view override returns (address) {
+        return _dragonRouter;
+    }
+
+    function getAssetAddr() internal view override returns (address) {
+        return _asset;
+    }
+
+    function getManagement() internal view override returns (address) {
+        return _management;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    VIRTUAL HOOKS
+    //////////////////////////////////////////////////////////////*/
+
+    function _setupReportNoChange(uint256 totalAssets) internal override {
+        _storeUInt256(address(strategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, totalAssets);
+    }
+
+    function _setupLossScenario(uint256 totalAssets) internal override {
+        uint256 newTotalAssets = freshUInt256Bounded();
+        vm.assume(newTotalAssets < totalAssets);
+        _storeUInt256(address(strategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, newTotalAssets);
+    }
+
+    function _assertReportNoChangeExtras() internal view override {
+        // YD has no extra state to check
+    }
+
+    function _assertTendExtras() internal view override {
+        // YD has no extra state to check
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    HELPERS
+    //////////////////////////////////////////////////////////////*/
+
     function _snapshot() internal view returns (YDProofState memory state) {
-        state.totalAssets = _loadUInt256(address(strategy), YD_TOTAL_ASSETS_SLOT);
-        state.totalSupply = _loadUInt256(address(strategy), YD_TOTAL_SUPPLY_SLOT);
+        state.totalAssets = _loadUInt256(address(strategy), TS_TOTAL_ASSETS_SLOT);
+        state.totalSupply = _loadUInt256(address(strategy), TS_TOTAL_SUPPLY_SLOT);
         state.dragonBalance = _loadMappingUInt256(
             address(strategy),
-            YD_BALANCES_SLOT,
+            TS_BALANCES_SLOT,
             uint256(uint160(_dragonRouter)),
             0
         );
     }
 
-    function assumeNonReentrant() internal {
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_ENTERED_OFFSET, YD_ENTERED_WIDTH, 1);
-    }
-
-    function disableHealthCheck() internal {
-        _storeData(address(strategy), YD_HC_SLOT, YD_HC_DO_HEALTH_CHECK_OFFSET, YD_HC_DO_HEALTH_CHECK_WIDTH, 0);
-    }
-
     /*//////////////////////////////////////////////////////////////
-                            INVARIANTS
+                    INVARIANTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice PPS does not decrease: totalAssets_new * totalSupply_old >= totalAssets_old * totalSupply_new
@@ -67,14 +116,16 @@ contract YDStrategyTest is YDSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH PROFIT
+                    YD-SPECIFIC: REPORT WITH PROFIT
     //////////////////////////////////////////////////////////////*/
 
     /// @notice When report harvests a profit, shares are minted to dragon router
     ///         and PPS is preserved (non-decreasing) for regular holders
     function testReportProfit() public {
-        assumeNonReentrant();
-        disableHealthCheck();
+        _assumeNonReentrant();
+
+        address stratAddr = getStrategyAddr();
+        _storeData(stratAddr, HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
 
         preState = _snapshot();
 
@@ -86,7 +137,7 @@ contract YDStrategyTest is YDSetup {
         // Profit scenario: newTotalAssets > oldTotalAssets
         uint256 newTotalAssets = freshUInt256Bounded();
         vm.assume(newTotalAssets > preState.totalAssets);
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, newTotalAssets);
+        _storeUInt256(address(strategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, newTotalAssets);
 
         // Avoid overflow in sharesToMint = profit * totalSupply / totalAssets
         uint256 profit = newTotalAssets - preState.totalAssets;
@@ -117,65 +168,19 @@ contract YDStrategyTest is YDSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH LOSS (BURNING ENABLED, SUFFICIENT DRAGON)
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice When report harvests a loss with burning enabled and the dragon
-    ///         has enough shares, shares are burned and PPS is preserved
-    function testReportLossWithBurning() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        // Enable burning
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_ENABLE_BURNING_OFFSET, YD_ENABLE_BURNING_WIDTH, 1);
-
-        preState = _snapshot();
-
-        // Valid pre-state
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
-        vm.assume(preState.dragonBalance <= preState.totalSupply);
-
-        // Loss scenario: newTotalAssets < oldTotalAssets
-        uint256 newTotalAssets = freshUInt256Bounded();
-        vm.assume(newTotalAssets < preState.totalAssets);
-        vm.assume(newTotalAssets > 0);
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, newTotalAssets);
-
-        // Dragon has enough shares to cover the loss burn
-        uint256 loss = preState.totalAssets - newTotalAssets;
-        _assumeNoOverflow(loss, preState.totalSupply);
-        uint256 sharesToBurn = Math.ceilDiv(loss * preState.totalSupply, preState.totalAssets);
-        vm.assume(preState.dragonBalance >= sharesToBurn);
-
-        vm.startPrank(_keeper);
-        iStrategy.report();
-        vm.stopPrank();
-
-        postState = _snapshot();
-
-        // Assertions
-        ppsNonDecreasingInvariant(Mode.Assert);
-        totalAssetsUpdatedCorrectly(Mode.Assert, newTotalAssets);
-
-        // Dragon shares were burned
-        _establish(Mode.Assert, postState.dragonBalance <= preState.dragonBalance);
-        // totalSupply decreased
-        _establish(Mode.Assert, postState.totalSupply <= preState.totalSupply);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    REPORT WITH LOSS (INSUFFICIENT DRAGON)
+                    YD-SPECIFIC: REPORT WITH LOSS (INSUFFICIENT DRAGON)
     //////////////////////////////////////////////////////////////*/
 
     /// @notice When dragon can't cover the full loss, all its shares are burned
     ///         and the remaining loss reduces PPS
     function testReportLossInsufficientDragon() public {
-        assumeNonReentrant();
-        disableHealthCheck();
+        _assumeNonReentrant();
+
+        address stratAddr = getStrategyAddr();
+        _storeData(stratAddr, HC_SLOT, HC_DO_HEALTH_CHECK_OFFSET, HC_DO_HEALTH_CHECK_WIDTH, 0);
 
         // Enable burning
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_ENABLE_BURNING_OFFSET, YD_ENABLE_BURNING_WIDTH, 1);
+        _storeData(address(strategy), TS_FLAGS_SLOT, TS_ENABLE_BURNING_OFFSET, TS_ENABLE_BURNING_WIDTH, 1);
 
         preState = _snapshot();
 
@@ -189,7 +194,7 @@ contract YDStrategyTest is YDSetup {
         uint256 newTotalAssets = freshUInt256Bounded();
         vm.assume(newTotalAssets < preState.totalAssets);
         vm.assume(newTotalAssets > 0);
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, newTotalAssets);
+        _storeUInt256(address(strategy), MOCK_NEXT_TOTAL_ASSETS_SLOT, newTotalAssets);
 
         uint256 loss = preState.totalAssets - newTotalAssets;
         _assumeNoOverflow(loss, preState.totalSupply);
@@ -211,137 +216,77 @@ contract YDStrategyTest is YDSetup {
     }
 
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH NO CHANGE
+                    YD-SPECIFIC: DEPOSIT PRODUCES REDEEMABLE SHARES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice When harvest returns same totalAssets, no shares minted or burned
-    function testReportNoChange() public {
-        assumeNonReentrant();
-        disableHealthCheck();
+    /// @notice After deposit, shares are redeemable (inductive balance bounded proof)
+    function testSharesRedeemableAfterDepositYD(uint256 assets, address receiver) public {
+        _assumeNonReentrant();
 
-        preState = _snapshot();
+        vm.assume(assets > 0);
+        vm.assume(assets < ETH_UPPER_BOUND);
+        vm.assume(receiver != address(0));
+        vm.assume(receiver != address(strategy));
+        vm.assume(receiver != _dragonRouter);
 
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
+        uint256 totalAssets = _loadUInt256(address(strategy), TS_TOTAL_ASSETS_SLOT);
+        uint256 totalSupply = _loadUInt256(address(strategy), TS_TOTAL_SUPPLY_SLOT);
+        vm.assume(totalAssets > 0);
+        vm.assume(totalSupply > 0);
 
-        // Set mock to return current totalAssets (no profit, no loss)
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
+        _assumeNoOverflow(assets, totalSupply);
+        uint256 expectedShares = (assets * totalSupply) / totalAssets;
+        vm.assume(expectedShares > 0);
+        _assumeNoOverflow(totalSupply, expectedShares);
+        _assumeNoOverflow(totalAssets, assets);
 
-        vm.startPrank(_keeper);
-        iStrategy.report();
-        vm.stopPrank();
+        // Inductive hypothesis: receiver's balance is bounded by totalSupply pre-deposit.
+        uint256 receiverBalance = _loadMappingUInt256(
+            address(strategy),
+            TS_BALANCES_SLOT,
+            uint256(uint160(receiver)),
+            0
+        );
+        vm.assume(receiverBalance <= totalSupply);
 
-        postState = _snapshot();
+        // Not shutdown
+        _storeData(address(strategy), TS_FLAGS_SLOT, TS_SHUTDOWN_OFFSET, TS_SHUTDOWN_WIDTH, 0);
 
-        // No change
-        assertEq(postState.totalAssets, preState.totalAssets);
-        assertEq(postState.totalSupply, preState.totalSupply);
-        assertEq(postState.dragonBalance, preState.dragonBalance);
+        address depositor = makeAddr("DEPOSITOR");
+        _storeMappingUInt256(_asset, ERC20_BALANCES_SLOT, uint256(uint160(depositor)), 0, assets);
+        vm.prank(depositor);
+        (bool ok, ) = _asset.call(abi.encodeWithSignature("approve(address,uint256)", address(strategy), assets));
+        require(ok);
+
+        _storeMappingUInt256(_asset, ERC20_BALANCES_SLOT, uint256(uint160(address(strategy))), 0, totalAssets);
+
+        vm.prank(depositor);
+        iStrategy.deposit(assets, receiver);
+
+        _assertSharesRedeemable(receiver);
+        _assertBalanceBounded(receiver);
     }
 
     /*//////////////////////////////////////////////////////////////
-                    REPORT WITH LOSS (BURNING DISABLED)
+                    YD-SPECIFIC: CONVERSION CONSISTENCY
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice When burning is disabled, loss reduces totalAssets but totalSupply
-    ///         and dragon balance stay unchanged
-    function testReportLossNoBurning() public {
-        assumeNonReentrant();
-        disableHealthCheck();
+    /// @notice Conversion round-trip does not create value
+    function testConversionConsistencyYD(uint256 amount) public {
+        _assumeNonReentrant();
 
-        // Disable burning
-        _storeData(address(strategy), YD_FLAGS_SLOT, YD_ENABLE_BURNING_OFFSET, YD_ENABLE_BURNING_WIDTH, 0);
+        vm.assume(amount > 0);
+        vm.assume(amount < ETH_UPPER_BOUND);
 
-        preState = _snapshot();
+        uint256 totalAssets = _loadUInt256(address(strategy), TS_TOTAL_ASSETS_SLOT);
+        uint256 totalSupply = _loadUInt256(address(strategy), TS_TOTAL_SUPPLY_SLOT);
+        vm.assume(totalAssets > 0);
+        vm.assume(totalSupply > 0);
 
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
-        vm.assume(preState.dragonBalance <= preState.totalSupply);
+        // Avoid overflow in mulDiv
+        _assumeNoOverflow(amount, totalSupply);
+        _assumeNoOverflow(amount, totalAssets);
 
-        // Loss scenario
-        uint256 newTotalAssets = freshUInt256Bounded();
-        vm.assume(newTotalAssets < preState.totalAssets);
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, newTotalAssets);
-
-        vm.startPrank(_keeper);
-        iStrategy.report();
-        vm.stopPrank();
-
-        postState = _snapshot();
-
-        // totalAssets decreased
-        totalAssetsUpdatedCorrectly(Mode.Assert, newTotalAssets);
-        // No shares burned — totalSupply and dragon balance unchanged
-        assertEq(postState.totalSupply, preState.totalSupply);
-        assertEq(postState.dragonBalance, preState.dragonBalance);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    TEND (NO STATE CHANGE)
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Tend should not change totalAssets or totalSupply
-    function testTend() public {
-        assumeNonReentrant();
-
-        preState = _snapshot();
-
-        vm.startPrank(_keeper);
-        iStrategy.tend();
-        vm.stopPrank();
-
-        postState = _snapshot();
-
-        assertEq(postState.totalAssets, preState.totalAssets);
-        assertEq(postState.totalSupply, preState.totalSupply);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                    ACCESS CONTROL
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Non-keeper/non-management address cannot call report
-    function testReportOnlyKeeper() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, freshUInt256Bounded());
-
-        address nonKeeper = makeAddr("NON_KEEPER");
-
-        vm.startPrank(nonKeeper);
-        vm.expectRevert("!keeper");
-        iStrategy.report();
-        vm.stopPrank();
-    }
-
-    /// @notice Management can also call report (management has keeper privileges)
-    function testReportByManagement() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        preState = _snapshot();
-        vm.assume(preState.totalAssets > 0);
-        vm.assume(preState.totalSupply > 0);
-
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, preState.totalAssets);
-
-        vm.startPrank(_management);
-        iStrategy.report();
-        vm.stopPrank();
-        // Should succeed without revert
-    }
-
-    /// @notice Emergency admin can shutdown but not call report
-    function testReportNotEmergencyAdmin() public {
-        assumeNonReentrant();
-        disableHealthCheck();
-
-        _storeUInt256(address(strategy), YD_MOCK_NEXT_TOTAL_ASSETS_SLOT, freshUInt256Bounded());
-
-        vm.startPrank(_emergencyAdmin);
-        vm.expectRevert("!keeper");
-        iStrategy.report();
-        vm.stopPrank();
+        _assertConversionConsistency(amount);
     }
 }

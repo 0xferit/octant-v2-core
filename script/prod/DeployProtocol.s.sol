@@ -6,14 +6,13 @@ import { console2 } from "forge-std/console2.sol";
 import "@gnosis.pm/safe-contracts/contracts/Safe.sol";
 import "@gnosis.pm/safe-contracts/contracts/proxies/SafeProxy.sol";
 import "@gnosis.pm/safe-contracts/contracts/proxies/SafeProxyFactory.sol";
-import { DragonTokenizedStrategy } from "src/zodiac-core/vaults/DragonTokenizedStrategy.sol";
+import { TestTokenizedStrategy } from "test/mocks/zodiac-core/TestTokenizedStrategy.sol";
 import { ModuleProxyFactory } from "src/zodiac-core/ModuleProxyFactory.sol";
 import { SplitChecker } from "src/zodiac-core/SplitChecker.sol";
 
 import { DeploySafe } from "script/deploy/DeploySafe.sol";
 import { DeploySplitChecker } from "script/deploy/DeploySplitChecker.sol";
 import { DeployModuleProxyFactory } from "script/deploy/DeployModuleProxyFactory.sol";
-import { DeployDragonTokenizedStrategy } from "script/deploy/DeployDragonTokenizedStrategy.sol";
 import { DeployMockStrategy } from "script/deploy/DeployMockStrategy.sol";
 import { DeployHatsProtocol } from "script/deploy/DeployHatsProtocol.sol";
 
@@ -33,12 +32,11 @@ contract DeployProtocol is Script {
     // Deployment scripts
     DeploySafe public deploySafe;
     DeployModuleProxyFactory public deployModuleProxyFactory;
-    DeployDragonTokenizedStrategy public deployDragonTokenizedStrategy;
     DeploySplitChecker public deploySplitChecker;
     DeployHatsProtocol public deployHatsProtocol;
     DeployMockStrategy public deployMockStrategy;
     ModuleProxyFactory public moduleProxyFactory;
-    DragonTokenizedStrategy public dragonTokenizedStrategySingleton;
+    TestTokenizedStrategy public tokenizedStrategySingleton;
     SplitChecker public splitCheckerSingleton;
 
     // Deployed contract addresses
@@ -55,7 +53,6 @@ contract DeployProtocol is Script {
         // Initialize deployment scripts
         deploySafe = new DeploySafe();
         deployModuleProxyFactory = new DeployModuleProxyFactory(msg.sender, msg.sender, msg.sender);
-        deployDragonTokenizedStrategy = new DeployDragonTokenizedStrategy();
         deploySplitChecker = new DeploySplitChecker();
         deployHatsProtocol = new DeployHatsProtocol();
         deployMockStrategy = new DeployMockStrategy(msg.sender, msg.sender, msg.sender);
@@ -102,7 +99,7 @@ contract DeployProtocol is Script {
 
         // 4. Deploy Dragon Tokenized Strategy Implementation
 
-        dragonTokenizedStrategySingleton = new DragonTokenizedStrategy();
+        tokenizedStrategySingleton = new TestTokenizedStrategy();
         salt += 1;
         SafeProxy governance = factory.createProxyWithNonce(SAFE_SINGLETON, initializer, salt);
         salt += 1;
@@ -118,7 +115,7 @@ contract DeployProtocol is Script {
             address(regenGovernance),
             address(metapool),
             address(splitCheckerSingleton),
-            address(dragonTokenizedStrategySingleton)
+            address(tokenizedStrategySingleton)
         );
         moduleProxyFactoryAddress = address(moduleProxyFactory);
         if (moduleProxyFactoryAddress == address(0)) revert DeploymentFailed();
