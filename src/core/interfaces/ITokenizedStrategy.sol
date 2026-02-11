@@ -299,6 +299,18 @@ interface ITokenizedStrategy is IERC4626, IERC20Permit {
     function setName(string calldata _newName) external;
 
     /**
+     * @notice Get whether burning of dragon shares is enabled for loss protection.
+     * @return Whether burning is enabled
+     */
+    function enableBurning() external view returns (bool);
+
+    /**
+     * @notice Enable or disable burning of dragon router shares during loss protection.
+     * @param _enableBurning True to enable, false to disable
+     */
+    function setEnableBurning(bool _enableBurning) external;
+
+    /**
      * @notice Used to shutdown the strategy preventing any further deposits.
      */
     function shutdownStrategy() external;
