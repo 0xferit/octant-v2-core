@@ -335,4 +335,40 @@ contract BaseYieldSkimmingHealthCheckTest is Test {
         logic.setCurrentExchangeRate(5e50, 50);
         assertEq(logic.getCurrentRateRay(), 5e27, "50 decimals should convert correctly");
     }
+
+    /// @notice Test harvestAndReport is not callable externally (onlySelf)
+    function testHarvestAndReport_externalCall_reverts() public {
+        vm.expectRevert();
+        logic.harvestAndReport();
+    }
+
+    /// @notice Test getCurrentRateRay specifically with exactly 27 decimals (else branch)
+    function testGetCurrentRateRay_exactly27Decimals() public {
+        logic.setCurrentExchangeRate(1.5e27, 27);
+        assertEq(logic.getCurrentRateRay(), 1.5e27, "27 decimals should return value unchanged");
+    }
+
+    /// @notice Test _executeHealthCheck rate equality path (no profit, no loss)
+    function testExecuteHealthCheck_ExactEquality() public {
+        // Rates are exactly equal - should pass without any profit/loss check
+        logic.setLastRateRay(2e27);
+        logic.setCurrentExchangeRate(2e27, 27);
+
+        // Should not revert
+        logic.testExecuteHealthCheck(1000e18);
+    }
+
+    /// @notice Test _setProfitLimitRatio boundary - exactly at max uint16
+    function testSetProfitLimitRatio_atMaxUint16() public {
+        vm.prank(management);
+        logic.setProfitLimitRatio(uint256(type(uint16).max));
+        assertEq(logic.profitLimitRatio(), type(uint16).max, "Should accept max uint16");
+    }
+
+    /// @notice Test _setLossLimitRatio just under MAX_BPS
+    function testSetLossLimitRatio_justUnderMaxBps() public {
+        vm.prank(management);
+        logic.setLossLimitRatio(9999);
+        assertEq(logic.lossLimitRatio(), 9999, "Should accept 9999 (just under MAX_BPS)");
+    }
 }
