@@ -50,4 +50,38 @@ contract HarnessProperQF is ProperQF {
         uint256 newDenominator = 100;
         ProperQF._setAlpha(newNumerator, newDenominator);
     }
+
+    /// @notice Exposes the internal _calculateOptimalAlpha function for testing
+    function exposed_calculateOptimalAlpha(
+        uint256 matchingPoolAmount,
+        uint256 quadraticSum,
+        uint256 linearSum,
+        uint256 totalUserDeposits
+    ) public pure returns (uint256, uint256) {
+        return ProperQF._calculateOptimalAlpha(matchingPoolAmount, quadraticSum, linearSum, totalUserDeposits);
+    }
+
+    /// @notice Exposes _processVoteUnchecked for testing underflow guards
+    function exposed_processVoteUnchecked(uint256 projectId, uint256 contribution, uint256 voteWeight) public {
+        ProperQF._processVoteUnchecked(projectId, contribution, voteWeight);
+    }
+
+    /// @notice Directly set totalQuadraticSum for testing underflow scenarios
+    function setTotalQuadraticSum(uint256 value) public {
+        ProperQFStorage storage s = _getProperQFStorage();
+        s.totalQuadraticSum = value;
+    }
+
+    /// @notice Directly set totalLinearSum for testing underflow scenarios
+    function setTotalLinearSum(uint256 value) public {
+        ProperQFStorage storage s = _getProperQFStorage();
+        s.totalLinearSum = value;
+    }
+
+    /// @notice Directly set project data for testing
+    function setProject(uint256 projectId, uint256 sumContributions, uint256 sumSquareRoots) public {
+        ProperQFStorage storage s = _getProperQFStorage();
+        s.projects[projectId].sumContributions = sumContributions;
+        s.projects[projectId].sumSquareRoots = sumSquareRoots;
+    }
 }
