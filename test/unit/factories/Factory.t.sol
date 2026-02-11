@@ -132,6 +132,183 @@ contract VaultFactoryTest is Test {
         vaultFactory.shutdownFactory();
     }
 
+    // --- Protocol fee configuration ---
+
+    function testProtocolFeeConfig_defaultFee() public {
+        // Set protocol fee recipient first
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeRecipient(fish);
+
+        // Set default protocol fee
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeBps(1000); // 10%
+
+        // Query protocol fee for any vault
+        (uint16 feeBps, address recipient) = vaultFactory.protocolFeeConfig(bunny);
+        assertEq(feeBps, 1000);
+        assertEq(recipient, fish);
+    }
+
+    function testProtocolFeeConfig_customFee() public {
+        // Set protocol fee recipient first
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeRecipient(fish);
+
+        // Set default fee
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeBps(1000);
+
+        // Set custom fee for bunny vault
+        vm.prank(gov);
+        vaultFactory.setCustomProtocolFeeBps(bunny, 500);
+
+        // Query protocol fee - should return custom fee
+        (uint16 feeBps, address recipient) = vaultFactory.protocolFeeConfig(bunny);
+        assertEq(feeBps, 500);
+        assertEq(recipient, fish); // recipient always from default
+
+        assertTrue(vaultFactory.useCustomProtocolFee(bunny));
+    }
+
+    function testProtocolFeeConfig_zeroVaultUseMsgSender() public {
+        // Set protocol fee recipient
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeRecipient(fish);
+
+        // Set default fee
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeBps(1000);
+
+        // Query with address(0) should use msg.sender
+        vm.prank(bunny);
+        (uint16 feeBps,) = vaultFactory.protocolFeeConfig(address(0));
+        assertEq(feeBps, 1000);
+    }
+
+    function testRemoveCustomProtocolFee() public {
+        // Set protocol fee recipient
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeRecipient(fish);
+
+        // Set custom fee
+        vm.prank(gov);
+        vaultFactory.setCustomProtocolFeeBps(bunny, 500);
+        assertTrue(vaultFactory.useCustomProtocolFee(bunny));
+
+        // Remove custom fee
+        vm.prank(gov);
+        vaultFactory.removeCustomProtocolFee(bunny);
+        assertFalse(vaultFactory.useCustomProtocolFee(bunny));
+    }
+
+    // --- Fee validation ---
+
+    function testSetProtocolFeeBps_tooHigh_reverts() public {
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeRecipient(fish);
+
+        vm.prank(gov);
+        vm.expectRevert("fee too high");
+        vaultFactory.setProtocolFeeBps(5001);
+    }
+
+    function testSetProtocolFeeBps_noRecipient_reverts() public {
+        vm.prank(gov);
+        vm.expectRevert("no recipient");
+        vaultFactory.setProtocolFeeBps(1000);
+    }
+
+    function testSetProtocolFeeBps_notGovernance_reverts() public {
+        vm.prank(bunny);
+        vm.expectRevert("not governance");
+        vaultFactory.setProtocolFeeBps(1000);
+    }
+
+    function testSetProtocolFeeRecipient_zeroAddress_reverts() public {
+        vm.prank(gov);
+        vm.expectRevert("zero address");
+        vaultFactory.setProtocolFeeRecipient(address(0));
+    }
+
+    function testSetProtocolFeeRecipient_notGovernance_reverts() public {
+        vm.prank(bunny);
+        vm.expectRevert("not governance");
+        vaultFactory.setProtocolFeeRecipient(fish);
+    }
+
+    function testSetCustomProtocolFeeBps_tooHigh_reverts() public {
+        vm.prank(gov);
+        vaultFactory.setProtocolFeeRecipient(fish);
+
+        vm.prank(gov);
+        vm.expectRevert("fee too high");
+        vaultFactory.setCustomProtocolFeeBps(bunny, 5001);
+    }
+
+    function testSetCustomProtocolFeeBps_noRecipient_reverts() public {
+        vm.prank(gov);
+        vm.expectRevert("no recipient");
+        vaultFactory.setCustomProtocolFeeBps(bunny, 1000);
+    }
+
+    function testSetCustomProtocolFeeBps_notGovernance_reverts() public {
+        vm.prank(bunny);
+        vm.expectRevert("not governance");
+        vaultFactory.setCustomProtocolFeeBps(bunny, 1000);
+    }
+
+    function testRemoveCustomProtocolFee_notGovernance_reverts() public {
+        vm.prank(bunny);
+        vm.expectRevert("not governance");
+        vaultFactory.removeCustomProtocolFee(bunny);
+    }
+
+    // --- Governance transfer ---
+
+    function testTransferGovernance_succeeds() public {
+        vm.prank(gov);
+        vaultFactory.transferGovernance(bunny);
+        assertEq(vaultFactory.pendingGovernance(), bunny);
+
+        vm.prank(bunny);
+        vaultFactory.acceptGovernance();
+        assertEq(vaultFactory.governance(), bunny);
+        assertEq(vaultFactory.pendingGovernance(), address(0));
+    }
+
+    function testTransferGovernance_notGovernance_reverts() public {
+        vm.prank(bunny);
+        vm.expectRevert("not governance");
+        vaultFactory.transferGovernance(bunny);
+    }
+
+    function testAcceptGovernance_notPending_reverts() public {
+        vm.prank(bunny);
+        vm.expectRevert("not pending governance");
+        vaultFactory.acceptGovernance();
+    }
+
+    // --- Shutdown already shutdown ---
+
+    function testShutdownFactory_alreadyShutdown_reverts() public {
+        vm.prank(gov);
+        vaultFactory.shutdownFactory();
+
+        vm.prank(gov);
+        vm.expectRevert("shutdown");
+        vaultFactory.shutdownFactory();
+    }
+
+    // --- View functions ---
+
+    function testApiVersion() public view {
+        assertEq(vaultFactory.apiVersion(), "3.0.4");
+    }
+
+    function testVaultOriginal() public view {
+        assertEq(vaultFactory.vaultOriginal(), vaultImplementation);
+    }
+
     function testReinitializeVaultReverts() public {
         // Get the vault original
         address original = vaultFactory.vaultOriginal();

@@ -299,4 +299,345 @@ contract RegenStakerFactoryTest is Test {
             "Staker allowset should be null when address(0) is passed"
         );
     }
+
+    function testGetStakersByDeployer_EmptyInitially() public view {
+        RegenStakerFactory.StakerInfo[] memory infos = factory.getStakersByDeployer(deployer1);
+        assertEq(infos.length, 0, "Should be empty initially");
+    }
+
+    function testGetStakersByDeployer_RecordsCorrectData() public {
+        bytes32 salt = keccak256("RECORD_SALT");
+
+        vm.prank(deployer1);
+        address stakerAddress = factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt,
+            getRegenStakerBytecode()
+        );
+
+        RegenStakerFactory.StakerInfo[] memory infos = factory.getStakersByDeployer(deployer1);
+        assertEq(infos.length, 1, "Should have one staker");
+        assertEq(infos[0].deployerAddress, deployer1, "Deployer should be recorded");
+        assertEq(infos[0].admin, admin, "Admin should be recorded");
+        assertEq(infos[0].stakerAddress, stakerAddress, "Staker address should be recorded");
+        assertEq(
+            uint(infos[0].variant),
+            uint(RegenStakerFactory.RegenStakerVariant.WITH_DELEGATION),
+            "Variant should be WITH_DELEGATION"
+        );
+        assertEq(infos[0].calculatorAddress, address(earningPowerCalculator), "Calculator should be recorded");
+        assertEq(infos[0].salt, salt, "Salt should be recorded");
+        assertTrue(infos[0].timestamp > 0, "Timestamp should be set");
+    }
+
+    function testGetStakersByDeployer_MultipleStakers() public {
+        bytes32 salt1 = keccak256("MULTI_SALT_1");
+        bytes32 salt2 = keccak256("MULTI_SALT_2");
+
+        vm.startPrank(deployer1);
+        factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt1,
+            getRegenStakerBytecode()
+        );
+
+        factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP + 100,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT + 50e18,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt2,
+            getRegenStakerBytecode()
+        );
+        vm.stopPrank();
+
+        RegenStakerFactory.StakerInfo[] memory infos = factory.getStakersByDeployer(deployer1);
+        assertEq(infos.length, 2, "Should have two stakers");
+        assertEq(infos[0].salt, salt1, "First salt should match");
+        assertEq(infos[1].salt, salt2, "Second salt should match");
+    }
+
+    function testGetStakersByDeployer_IndependentPerDeployer() public {
+        bytes32 salt1 = keccak256("DEPLOYER1_INDEPENDENT");
+        bytes32 salt2 = keccak256("DEPLOYER2_INDEPENDENT");
+
+        vm.prank(deployer1);
+        factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt1,
+            getRegenStakerBytecode()
+        );
+
+        vm.prank(deployer2);
+        factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt2,
+            getRegenStakerBytecode()
+        );
+
+        RegenStakerFactory.StakerInfo[] memory infos1 = factory.getStakersByDeployer(deployer1);
+        RegenStakerFactory.StakerInfo[] memory infos2 = factory.getStakersByDeployer(deployer2);
+
+        assertEq(infos1.length, 1, "Deployer1 should have 1 staker");
+        assertEq(infos2.length, 1, "Deployer2 should have 1 staker");
+        assertEq(infos1[0].deployerAddress, deployer1);
+        assertEq(infos2[0].deployerAddress, deployer2);
+    }
+
+    function testStakersPublicAccessor() public {
+        bytes32 salt = keccak256("ACCESSOR_SALT");
+
+        vm.prank(deployer1);
+        address stakerAddress = factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt,
+            getRegenStakerBytecode()
+        );
+
+        (
+            address deployerAddress,
+            uint256 timestamp,
+            address infoAdmin,
+            address infoStakerAddress,
+            RegenStakerFactory.RegenStakerVariant variant,
+            address calculatorAddress,
+            bytes32 infoSalt
+        ) = factory.stakers(deployer1, 0);
+
+        assertEq(deployerAddress, deployer1);
+        assertTrue(timestamp > 0);
+        assertEq(infoAdmin, admin);
+        assertEq(infoStakerAddress, stakerAddress);
+        assertEq(uint(variant), uint(RegenStakerFactory.RegenStakerVariant.WITH_DELEGATION));
+        assertEq(calculatorAddress, address(earningPowerCalculator));
+        assertEq(infoSalt, salt);
+    }
+
+    // ========================================================
+    //  Branch coverage: _validateBytecode untested branches
+    // ========================================================
+
+    /// @notice _validateBytecode reverts with InvalidBytecode for empty code (WITH_DELEGATION)
+    function testCreateStakerWithDelegation_RevertIf_EmptyBytecode() public {
+        bytes32 salt = keccak256("EMPTY_BYTECODE_SALT");
+        bytes memory emptyCode = "";
+
+        vm.prank(deployer1);
+        vm.expectRevert(RegenStakerFactory.InvalidBytecode.selector);
+        factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt,
+            emptyCode
+        );
+    }
+
+    /// @notice _validateBytecode reverts with InvalidBytecode for empty code (WITHOUT_DELEGATION)
+    function testCreateStakerWithoutDelegation_RevertIf_EmptyBytecode() public {
+        bytes32 salt = keccak256("EMPTY_BYTECODE_NO_DEL_SALT");
+        bytes memory emptyCode = "";
+
+        vm.prank(deployer1);
+        vm.expectRevert(RegenStakerFactory.InvalidBytecode.selector);
+        factory.createStakerWithoutDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt,
+            emptyCode
+        );
+    }
+
+    /// @notice _validateBytecode reverts with UnauthorizedBytecode for wrong hash (WITH_DELEGATION)
+    function testCreateStakerWithDelegation_RevertIf_UnauthorizedBytecode() public {
+        bytes32 salt = keccak256("UNAUTHORIZED_BYTECODE_SALT");
+        // Use the WITHOUT_DELEGATION bytecode for WITH_DELEGATION variant -> hash mismatch
+        bytes memory wrongCode = type(RegenStakerWithoutDelegateSurrogateVotes).creationCode;
+        bytes32 expectedHash = factory.canonicalBytecodeHash(RegenStakerFactory.RegenStakerVariant.WITH_DELEGATION);
+        bytes32 providedHash = keccak256(wrongCode);
+
+        vm.prank(deployer1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RegenStakerFactory.UnauthorizedBytecode.selector,
+                RegenStakerFactory.RegenStakerVariant.WITH_DELEGATION,
+                providedHash,
+                expectedHash
+            )
+        );
+        factory.createStakerWithDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt,
+            wrongCode
+        );
+    }
+
+    /// @notice _validateBytecode reverts with UnauthorizedBytecode for wrong hash (WITHOUT_DELEGATION)
+    function testCreateStakerWithoutDelegation_RevertIf_UnauthorizedBytecode() public {
+        bytes32 salt = keccak256("UNAUTHORIZED_BYTECODE_NO_DEL_SALT");
+        // Use the WITH_DELEGATION bytecode for WITHOUT_DELEGATION variant -> hash mismatch
+        bytes memory wrongCode = type(RegenStaker).creationCode;
+        bytes32 expectedHash = factory.canonicalBytecodeHash(RegenStakerFactory.RegenStakerVariant.WITHOUT_DELEGATION);
+        bytes32 providedHash = keccak256(wrongCode);
+
+        vm.prank(deployer1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RegenStakerFactory.UnauthorizedBytecode.selector,
+                RegenStakerFactory.RegenStakerVariant.WITHOUT_DELEGATION,
+                providedHash,
+                expectedHash
+            )
+        );
+        factory.createStakerWithoutDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt,
+            wrongCode
+        );
+    }
+
+    function testCreateStakerWithoutDelegation_RecordsCorrectVariant() public {
+        bytes32 salt = keccak256("WITHOUT_DELEGATION_RECORD_SALT");
+
+        vm.prank(deployer1);
+        factory.createStakerWithoutDelegation(
+            RegenStakerFactory.CreateStakerParams({
+                rewardsToken: rewardsToken,
+                stakeToken: stakeToken,
+                admin: admin,
+                stakerAllowset: stakerAllowset,
+                stakerBlockset: IAddressSet(address(0)),
+                stakerAccessMode: AccessMode.NONE,
+                allocationMechanismAllowset: allocationMechanismAllowset,
+                earningPowerCalculator: earningPowerCalculator,
+                maxBumpTip: MAX_BUMP_TIP,
+                minimumStakeAmount: MINIMUM_STAKE_AMOUNT,
+                rewardDuration: REWARD_DURATION
+            }),
+            salt,
+            type(RegenStakerWithoutDelegateSurrogateVotes).creationCode
+        );
+
+        RegenStakerFactory.StakerInfo[] memory infos = factory.getStakersByDeployer(deployer1);
+        assertEq(infos.length, 1);
+        assertEq(
+            uint(infos[0].variant),
+            uint(RegenStakerFactory.RegenStakerVariant.WITHOUT_DELEGATION),
+            "Variant should be WITHOUT_DELEGATION"
+        );
+    }
 }
