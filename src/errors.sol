@@ -41,7 +41,5 @@ error TokenizedStrategy__RedeemMoreThanMax();
 error TokenizedStrategy__NotPendingManagement();
 error TokenizedStrategy__StrategyNotInShutdown();
 error TokenizedStrategy__TooMuchLoss();
-error TokenizedStrategy__HatsAlreadyInitialized();
-error TokenizedStrategy__InvalidHatsAddress();
 
 error BaseStrategy__NotSelf();
