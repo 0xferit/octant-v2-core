@@ -40,13 +40,25 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
         vm.createSelectFork(vm.envString("TEST_RPC_URL"));
 
         earningPowerCalculator = new RegenEarningPowerCalculator(
-            admin, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE
+            admin,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE
         );
         allocationAllowset = new AddressSet();
 
         staker = new RegenStakerWithoutDelegateSurrogateVotes(
-            WETH, GLM, earningPowerCalculator, 0, admin, REWARD_DURATION, 0,
-            IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE, allocationAllowset
+            WETH,
+            GLM,
+            earningPowerCalculator,
+            0,
+            admin,
+            REWARD_DURATION,
+            0,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE,
+            allocationAllowset
         );
 
         vm.prank(admin);
@@ -63,10 +75,20 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
         IAddressSet _blockset,
         AccessMode mode
     ) internal returns (RegenStakerWithoutDelegateSurrogateVotes) {
-        return new RegenStakerWithoutDelegateSurrogateVotes(
-            WETH, GLM, calc, 0, admin, REWARD_DURATION, 0,
-            _allowset, _blockset, mode, allocationAllowset
-        );
+        return
+            new RegenStakerWithoutDelegateSurrogateVotes(
+                WETH,
+                GLM,
+                calc,
+                0,
+                admin,
+                REWARD_DURATION,
+                0,
+                _allowset,
+                _blockset,
+                mode,
+                allocationAllowset
+            );
     }
 
     // --- Balance validation (different-token) ---
@@ -80,9 +102,7 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
 
         // Notifying without transferring WETH first should revert
         vm.startPrank(notifier);
-        vm.expectRevert(
-            abi.encodeWithSelector(RegenStakerBase.InsufficientRewardBalance.selector, 0, REWARD_AMOUNT)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RegenStakerBase.InsufficientRewardBalance.selector, 0, REWARD_AMOUNT));
         staker.notifyRewardAmount(REWARD_AMOUNT);
         vm.stopPrank();
 
@@ -223,9 +243,7 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
         bytes32 structHash = keccak256(
             abi.encode(staker.ALTER_DELEGATEE_TYPEHASH(), depositId, bob, alice, nonce, deadline)
         );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", staker.DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", staker.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, digest);
 
         vm.expectRevert(RegenStakerWithoutDelegateSurrogateVotes.DelegationNotSupported.selector);
@@ -377,8 +395,12 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
         AddressSet stakerAllowset = new AddressSet();
         stakerAllowset.add(alice);
 
-        RegenStakerWithoutDelegateSurrogateVotes s =
-            _deployStaker(earningPowerCalculator, IAddressSet(address(stakerAllowset)), IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenStakerWithoutDelegateSurrogateVotes s = _deployStaker(
+            earningPowerCalculator,
+            IAddressSet(address(stakerAllowset)),
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         vm.prank(admin);
         s.setRewardNotifier(notifier, true);
@@ -401,8 +423,12 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
         AddressSet stakerBlockset = new AddressSet();
         stakerBlockset.add(bob);
 
-        RegenStakerWithoutDelegateSurrogateVotes s =
-            _deployStaker(earningPowerCalculator, IAddressSet(address(0)), IAddressSet(address(stakerBlockset)), AccessMode.BLOCKSET);
+        RegenStakerWithoutDelegateSurrogateVotes s = _deployStaker(
+            earningPowerCalculator,
+            IAddressSet(address(0)),
+            IAddressSet(address(stakerBlockset)),
+            AccessMode.BLOCKSET
+        );
 
         vm.prank(admin);
         s.setRewardNotifier(notifier, true);
@@ -425,8 +451,12 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
         AddressSet stakerAllowset = new AddressSet();
         stakerAllowset.add(alice);
 
-        RegenStakerWithoutDelegateSurrogateVotes s =
-            _deployStaker(earningPowerCalculator, IAddressSet(address(stakerAllowset)), IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenStakerWithoutDelegateSurrogateVotes s = _deployStaker(
+            earningPowerCalculator,
+            IAddressSet(address(stakerAllowset)),
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         vm.prank(admin);
         s.setRewardNotifier(notifier, true);
@@ -454,19 +484,28 @@ contract RegenStakerGLMWETHIntegrationTest is Test {
 
     // --- bumpEarningPower (real RegenEarningPowerCalculator) ---
 
-    function _deployCalcWithAllowset(address who) internal returns (RegenEarningPowerCalculator calc, AddressSet calcAllowset) {
+    function _deployCalcWithAllowset(
+        address who
+    ) internal returns (RegenEarningPowerCalculator calc, AddressSet calcAllowset) {
         calcAllowset = new AddressSet();
         calcAllowset.add(who);
         calc = new RegenEarningPowerCalculator(
-            address(this), IAddressSet(address(calcAllowset)), IAddressSet(address(0)), AccessMode.ALLOWSET
+            address(this),
+            IAddressSet(address(calcAllowset)),
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
         );
     }
 
-    function _deployStakerWithCalc(RegenEarningPowerCalculator calc)
-        internal
-        returns (RegenStakerWithoutDelegateSurrogateVotes s)
-    {
-        s = _deployStaker(IEarningPowerCalculator(address(calc)), IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE);
+    function _deployStakerWithCalc(
+        RegenEarningPowerCalculator calc
+    ) internal returns (RegenStakerWithoutDelegateSurrogateVotes s) {
+        s = _deployStaker(
+            IEarningPowerCalculator(address(calc)),
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE
+        );
         vm.prank(admin);
         s.setRewardNotifier(notifier, true);
     }
