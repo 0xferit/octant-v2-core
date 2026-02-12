@@ -159,3 +159,57 @@ contract BaseStrategyBranchCoverageTest is Test {
         assertEq(keccak256(bytes(name)), keccak256(bytes("Test Strategy")));
     }
 }
+
+/// @title Mock strategy that does NOT override _tendTrigger, exercising the default implementation
+contract MockStrategyDefaultTend is BaseStrategy {
+    constructor(
+        address _asset,
+        address _tokenizedStrategyAddress
+    )
+        BaseStrategy(
+            _asset,
+            "DefaultTend Strategy",
+            "tsDT",
+            msg.sender,
+            msg.sender,
+            msg.sender,
+            msg.sender,
+            false,
+            _tokenizedStrategyAddress
+        )
+    {}
+
+    function _deployFunds(uint256) internal override {}
+    function _freeFunds(uint256) internal override {}
+    function _harvestAndReport() internal view override returns (uint256) {
+        return ITokenizedStrategy(address(this)).totalAssets();
+    }
+    function _emergencyWithdraw(uint256) internal override {}
+}
+
+/// @title Tests for the default _tendTrigger implementation in BaseStrategy
+contract BaseStrategyDefaultTendTriggerTest is Test {
+    MockStrategyDefaultTend strategyDefaultTend;
+    MockERC20 asset2;
+    YieldDonatingTokenizedStrategy implementation2;
+
+    function setUp() public {
+        asset2 = new MockERC20(18);
+        implementation2 = new YieldDonatingTokenizedStrategy();
+        strategyDefaultTend = new MockStrategyDefaultTend(address(asset2), address(implementation2));
+    }
+
+    /// @notice Default _tendTrigger returns false (BaseStrategy line 329-331)
+    function test_tendTrigger_defaultImplementation_returnsFalse() public view {
+        (bool shouldTend, bytes memory callData) = strategyDefaultTend.tendTrigger();
+        assertFalse(shouldTend, "Default _tendTrigger should return false");
+        assertEq(callData, abi.encodeWithSelector(ITokenizedStrategy.tend.selector));
+    }
+
+    /// @notice Default _tend is a no-op (BaseStrategy line 321) - exercise via tendThis
+    function test_tend_defaultImplementation_noOp() public {
+        // Call tendThis as the strategy itself (simulating delegatecall context)
+        vm.prank(address(strategyDefaultTend));
+        strategyDefaultTend.tendThis(0);
+    }
+}
