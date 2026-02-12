@@ -7,7 +7,7 @@ import { MultistrategyVaultFactory } from "src/factories/MultistrategyVaultFacto
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IMultistrategyVault } from "src/core/interfaces/IMultistrategyVault.sol";
 import { MockERC20 } from "test/mocks/MockERC20.sol";
-import { MockYieldStrategy } from "test/mocks/zodiac-core/MockYieldStrategy.sol";
+import { MockYieldStrategy } from "test/mocks/core/MockYieldStrategy.sol";
 import { MockFactory } from "test/mocks/MockFactory.sol";
 import { MockLossyStrategy } from "test/mocks/core/MockLossyStrategy.sol";
 import { MockLockedStrategy } from "test/mocks/core/MockLockedStrategy.sol";
