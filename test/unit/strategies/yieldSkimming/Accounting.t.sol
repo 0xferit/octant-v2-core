@@ -1107,9 +1107,8 @@ contract AccountingTest is Setup {
         strategy.report();
 
         // Track total debt before transfers
-        uint256 totalDebtBefore = strategy.totalSupply() -
-            strategy.balanceOf(strategy.dragonRouter()) +
-            strategy.balanceOf(strategy.dragonRouter());
+        uint256 totalDebtBefore = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue() +
+            IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
 
         // Perform random transfers
         for (uint256 i = 0; i < numTransfers; i++) {
@@ -1138,9 +1137,8 @@ contract AccountingTest is Setup {
         }
 
         // Verify total debt is conserved
-        uint256 totalDebtAfter = strategy.totalSupply() -
-            strategy.balanceOf(strategy.dragonRouter()) +
-            strategy.balanceOf(strategy.dragonRouter());
+        uint256 totalDebtAfter = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue() +
+            IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
 
         assertEq(totalDebtAfter, totalDebtBefore, "Total debt should be conserved across transfers");
     }
@@ -1553,6 +1551,134 @@ contract AccountingTest is Setup {
         uint256 userDebtAfter;
         uint256 dragonDebtAfter;
         uint256 totalDebtAfter;
+    }
+
+    function test_isVaultInsolvent_excludesDragonDebt() public {
+        address alice = makeAddr("alice");
+        uint256 depositAmount = 100e18;
+
+        // 1. User deposits (creates user debt)
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        // 2. Create profit (mints dragon shares, creates dragon debt)
+        MockStrategySkimming(address(strategy)).updateExchangeRate(15e17); // 1.5
+        vm.prank(keeper);
+        strategy.report();
+        uint256 dragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        assertGt(dragonDebt, 0, "dragon should have debt");
+
+        // 3. Drop exchange rate so vault_value is between user_debt and user_debt + dragon_debt
+        //    user_debt = 100e18, dragon_debt ~50e18, total_debt ~150e18
+        //    At rate 1.2: vault_value = 100 * 1.2 = 120e18
+        //    120e18 > 100e18 (user_debt) but 120e18 < 150e18 (total_debt)
+        MockStrategySkimming(address(strategy)).updateExchangeRate(12e17);
+
+        // 4. Assert isVaultInsolvent() == false (dragon debt excluded from insolvency check)
+        assertFalse(
+            IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(),
+            "vault should NOT be insolvent when it can cover user debt but not dragon debt"
+        );
+
+        // 5. Drop rate further below user_debt
+        //    At rate 0.9: vault_value = 100 * 0.9 = 90e18 < 100e18 (user_debt)
+        MockStrategySkimming(address(strategy)).updateExchangeRate(9e17);
+
+        // 6. Assert isVaultInsolvent() == true
+        assertTrue(
+            IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(),
+            "vault should be insolvent when it cannot cover user debt"
+        );
+    }
+
+    function test_maxDeposit_maxMint_return_zero_when_rate_zero() public {
+        address alice = makeAddr("alice");
+        uint256 depositAmount = 100e18;
+
+        // Setup: user deposits first (so strategy has state)
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        // 1. Set exchange rate to 0
+        MockStrategySkimming(address(strategy)).updateExchangeRate(0);
+
+        // 2. Assert maxDeposit returns 0
+        assertEq(strategy.maxDeposit(alice), 0, "maxDeposit should return 0 when rate is 0");
+
+        // 3. Assert maxMint returns 0
+        assertEq(strategy.maxMint(alice), 0, "maxMint should return 0 when rate is 0");
+
+        // 4. Verify deposit reverts (vault is insolvent: value debt > 0 but vault value = 0)
+        yieldSource.mint(alice, 1e18);
+        vm.prank(alice);
+        yieldSource.approve(address(strategy), 1e18);
+        vm.expectRevert("Cannot operate when vault is insolvent");
+        vm.prank(alice);
+        strategy.deposit(1e18, alice);
+
+        // 5. Verify mint reverts (same insolvency guard)
+        vm.expectRevert("Cannot operate when vault is insolvent");
+        vm.prank(alice);
+        strategy.mint(1e18, alice);
+    }
+
+    /// @notice Dragon router migration cannot desync balance vs debt to cause revert in report()
+    /// @dev Edge case: new dragon has pre-existing shares (transferred before finalization).
+    ///      finalizeDragonRouterChange() adds newDragonBalance to dragonRouterDebtInAssetValue,
+    ///      so debt >= balance is preserved. Then dragonBurn <= balance <= debt, and the subtraction is safe.
+    function test_dragonDebtSubtractionSafeAfterMigration() public {
+        address alice = makeAddr("alice");
+        address newRouter = makeAddr("newDragonRouter");
+        uint256 depositAmount = 100e18;
+
+        // 1. Setup: deposit, create dragon shares via profit
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        vm.prank(management);
+        strategy.setEnableBurning(true);
+
+        MockStrategySkimming(address(strategy)).updateExchangeRate(15e17); // 1.5
+        vm.prank(keeper);
+        strategy.report();
+
+        uint256 dragonBalance = strategy.balanceOf(donationAddress);
+        uint256 dragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        assertGt(dragonBalance, 0, "dragon should have shares");
+        assertEq(dragonBalance, dragonDebt, "balance and debt should match before migration");
+
+        // 2. Transfer shares TO newRouter BEFORE finalization (user→user transfer, no debt rebalancing).
+        //    This gives newRouter a pre-existing balance without corresponding dragon debt.
+        uint256 extraDeposit = 20e18;
+        mintAndDepositIntoStrategy(strategy, alice, extraDeposit);
+        uint256 aliceShares = strategy.balanceOf(alice);
+        uint256 sharesToTransfer = aliceShares / 4;
+        vm.prank(alice);
+        strategy.transfer(newRouter, sharesToTransfer);
+
+        uint256 newRouterBalance = strategy.balanceOf(newRouter);
+        assertGt(newRouterBalance, 0, "newRouter should have shares before finalization");
+
+        // 3. Finalize: migration adds newDragonBalance to dragonRouterDebtInAssetValue
+        vm.prank(management);
+        strategy.setDragonRouter(newRouter);
+        skip(14 days);
+        strategy.finalizeDragonRouterChange();
+
+        // Verify: debt covers new dragon's balance (finalization migrates debt correctly)
+        uint256 dragonDebtAfterMigration = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        assertGe(dragonDebtAfterMigration, newRouterBalance, "dragon debt should cover new router balance");
+
+        // 4. Trigger loss — exercises the subtraction path in _handleDragonLossProtection
+        MockStrategySkimming(address(strategy)).updateExchangeRate(8e17); // loss
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        assertEq(profit, 0, "no profit expected");
+        assertGt(loss, 0, "loss expected");
+
+        // 5. Verify the burn path was actually exercised (dragonBurn > 0).
+        //    After finalization, new dragon has shares and burning is enabled,
+        //    so _handleDragonLossProtection burns shares (does NOT short-circuit on 0 balance).
+        uint256 newDragonBalanceAfterLoss = strategy.balanceOf(newRouter);
+        assertLt(newDragonBalanceAfterLoss, newRouterBalance, "dragon shares should have been burned");
     }
 
     /**

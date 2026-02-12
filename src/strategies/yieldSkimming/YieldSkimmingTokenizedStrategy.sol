@@ -340,11 +340,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
     }
 
     /**
-     * @notice Transfer shares with dragon solvency protection
+     * @notice Transfer shares with dragon solvency protection and debt rebalancing
      * @dev Special behaviors for dragon router:
      *      - Dragon cannot transfer to itself (reverts)
      *      - Dragon transfers trigger solvency checks to prevent user debt undercoverage
      *      - Transfers blocked if they would make vault unable to cover user debt
+     *      - Dragon-involved transfers rebalance debt tracking (sender loses debt, receiver gains it)
      *      For non-dragon transfers, behaves like standard ERC20 transfer
      * @param to Address receiving shares
      * @param amount Amount of shares to transfer
@@ -372,11 +373,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
     }
 
     /**
-     * @notice Transfer shares from one address to another with dragon solvency protection
+     * @notice Transfer shares from one address to another with dragon solvency protection and debt rebalancing
      * @dev Special behaviors for dragon router:
      *      - Dragon cannot transfer to itself (reverts)
      *      - Dragon transfers trigger solvency checks to prevent user debt undercoverage
      *      - Transfers blocked if they would make vault unable to cover user debt
+     *      - Dragon-involved transfers rebalance debt tracking (sender loses debt, receiver gains it)
      *      For non-dragon transfers, behaves like standard ERC20 transferFrom
      * @param from Address transferring shares
      * @param to Address receiving shares
