@@ -556,7 +556,11 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         uint256 idleBalance = ERC20(_asset()).balanceOf(address(strategy));
 
         // When aTokenBalance >= poolLiquidity, withdrawableFromPool = poolLiquidity
-        assertEq(limit, lowPoolLiquidity + idleBalance, "Withdraw limit should use poolLiquidity when it's the constraint");
+        assertEq(
+            limit,
+            lowPoolLiquidity + idleBalance,
+            "Withdraw limit should use poolLiquidity when it's the constraint"
+        );
         assertLt(limit, aTokenBalance + idleBalance, "Should be less than full aToken balance + idle");
 
         vm.clearMockedCalls();

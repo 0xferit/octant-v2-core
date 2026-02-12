@@ -76,9 +76,7 @@ contract TokenizedStrategyBranchCoverageTest is Test {
             abi.encode(EIP712DOMAIN_TYPEHASH, nameHash, VERSION_HASH, block.chainid, address(strategy))
         );
         uint256 nonce = ITokenizedStrategy(address(strategy)).nonces(owner_);
-        bytes32 structHash = keccak256(
-            abi.encode(PERMIT_TYPEHASH, owner_, spender_, value_, nonce, deadline_)
-        );
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner_, spender_, value_, nonce, deadline_));
         return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
     }
 
@@ -438,9 +436,7 @@ contract TokenizedStrategyBranchCoverageTest is Test {
         ITokenizedStrategy(address(strategy)).deposit(10e18, user);
 
         // Default redeem (no maxLoss param) should accept any loss
-        uint256 assets = ITokenizedStrategy(address(strategy)).redeem(
-            5e18, user, user
-        );
+        uint256 assets = ITokenizedStrategy(address(strategy)).redeem(5e18, user, user);
         assertGt(assets, 0);
         vm.stopPrank();
     }
@@ -453,9 +449,7 @@ contract TokenizedStrategyBranchCoverageTest is Test {
         asset.approve(address(strategy), 10e18);
         ITokenizedStrategy(address(strategy)).deposit(10e18, user);
 
-        uint256 assets = ITokenizedStrategy(address(strategy)).redeem(
-            5e18, user, user, 10000
-        );
+        uint256 assets = ITokenizedStrategy(address(strategy)).redeem(5e18, user, user, 10000);
         assertGt(assets, 0);
         vm.stopPrank();
     }
@@ -468,9 +462,7 @@ contract TokenizedStrategyBranchCoverageTest is Test {
         asset.approve(address(strategy), 10e18);
         ITokenizedStrategy(address(strategy)).deposit(10e18, user);
 
-        uint256 shares = ITokenizedStrategy(address(strategy)).withdraw(
-            5e18, user, user
-        );
+        uint256 shares = ITokenizedStrategy(address(strategy)).withdraw(5e18, user, user);
         assertGt(shares, 0);
         vm.stopPrank();
     }
@@ -701,8 +693,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_redeem_zeroAssets_reverts() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Loss Strategy", "LOSS",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Loss Strategy",
+            "LOSS",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         // Mint shares directly (totalSupply > 0, totalAssets == 0)
@@ -718,8 +716,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_mint_zeroAssets_reverts() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Loss Strategy", "LOSS",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Loss Strategy",
+            "LOSS",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         // totalSupply > 0 but totalAssets == 0 => _convertToAssets returns 0
@@ -735,8 +739,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_convertToShares_totalAssetsZero_returnsZero() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Loss Strategy", "LOSS",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Loss Strategy",
+            "LOSS",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         lossImpl.mintShares(user, 10e18);
@@ -750,8 +760,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_maxMint_withLimitedDeposit() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Limited Strategy", "LIM",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Limited Strategy",
+            "LIM",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         lossImpl.setAvailableDepositLimit(100e18);
@@ -765,8 +781,12 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_maxWithdraw_withLimitedWithdraw() public {
         MockYieldSource illiqYS = new MockYieldSource(address(asset));
         MockIlliquidStrategy illiqStrat = new MockIlliquidStrategy(
-            address(asset), address(illiqYS),
-            address(this), address(this), address(this), address(0x99),
+            address(asset),
+            address(illiqYS),
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
             address(implementation)
         );
 
@@ -787,8 +807,12 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_maxRedeem_withLimitedWithdraw() public {
         MockYieldSource illiqYS = new MockYieldSource(address(asset));
         MockIlliquidStrategy illiqStrat = new MockIlliquidStrategy(
-            address(asset), address(illiqYS),
-            address(this), address(this), address(this), address(0x99),
+            address(asset),
+            address(illiqYS),
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
             address(implementation)
         );
 
@@ -809,8 +833,12 @@ contract TokenizedStrategyBranchCoverageTest is Test {
         // MockIlliquidStrategy._freeFunds does nothing => loss on withdraw
         MockYieldSource illiqYS = new MockYieldSource(address(asset));
         MockIlliquidStrategy illiqStrat = new MockIlliquidStrategy(
-            address(asset), address(illiqYS),
-            address(this), address(this), address(this), address(0x99),
+            address(asset),
+            address(illiqYS),
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
             address(implementation)
         );
 
@@ -847,8 +875,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
         // where freeFunds reduces mockTotalAssets but doesn't actually transfer tokens back
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Loss Strategy", "LOSS",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Loss Strategy",
+            "LOSS",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         // Give strategy some idle tokens and set up accounting
@@ -876,8 +910,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_withdraw_withLoss_withinTolerance_succeeds() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Loss Strategy", "LOSS",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Loss Strategy",
+            "LOSS",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         asset.mint(address(lossImpl), 10e18);
@@ -900,8 +940,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_redeem_withLoss_defaultMaxLoss_succeeds() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Loss Strategy", "LOSS",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Loss Strategy",
+            "LOSS",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         asset.mint(address(lossImpl), 10e18);
@@ -924,8 +970,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_initialize_alreadyInitialized_reverts() public {
         vm.expectRevert("initialized");
         ITokenizedStrategy(address(strategy)).initialize(
-            address(asset), "Dup", "DUP",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Dup",
+            "DUP",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
     }
 
@@ -934,37 +986,25 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_initialize_zeroManagement_reverts() public {
         MockTokenizedStrategyWithLoss impl = _freshLossImpl();
         vm.expectRevert("ZERO ADDRESS");
-        impl.initialize(
-            address(asset), "Test", "TST",
-            address(0), address(this), address(this), address(0x99), false
-        );
+        impl.initialize(address(asset), "Test", "TST", address(0), address(this), address(this), address(0x99), false);
     }
 
     function test_initialize_zeroKeeper_reverts() public {
         MockTokenizedStrategyWithLoss impl = _freshLossImpl();
         vm.expectRevert("ZERO ADDRESS");
-        impl.initialize(
-            address(asset), "Test", "TST",
-            address(this), address(0), address(this), address(0x99), false
-        );
+        impl.initialize(address(asset), "Test", "TST", address(this), address(0), address(this), address(0x99), false);
     }
 
     function test_initialize_zeroEmergencyAdmin_reverts() public {
         MockTokenizedStrategyWithLoss impl = _freshLossImpl();
         vm.expectRevert("ZERO ADDRESS");
-        impl.initialize(
-            address(asset), "Test", "TST",
-            address(this), address(this), address(0), address(0x99), false
-        );
+        impl.initialize(address(asset), "Test", "TST", address(this), address(this), address(0), address(0x99), false);
     }
 
     function test_initialize_zeroDragonRouter_reverts() public {
         MockTokenizedStrategyWithLoss impl = _freshLossImpl();
         vm.expectRevert("ZERO ADDRESS");
-        impl.initialize(
-            address(asset), "Test", "TST",
-            address(this), address(this), address(this), address(0), false
-        );
+        impl.initialize(address(asset), "Test", "TST", address(this), address(this), address(this), address(0), false);
     }
 
     // --- Deposit to strategy address returns 0 in maxDeposit => reverts (line 984) ---
@@ -1078,8 +1118,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_withdraw_idleSufficient_noFreeFundsNeeded() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Idle Strategy", "IDLE",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Idle Strategy",
+            "IDLE",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         asset.mint(address(lossImpl), 10e18);
@@ -1149,8 +1195,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_maxMint_limitedDeposit_convertsToShares() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Lim Strategy", "LIM",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Lim Strategy",
+            "LIM",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         // Set up supply and assets with different PPS
@@ -1169,8 +1221,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_maxWithdraw_limitedWithdrawLimit() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Lim Strategy", "LIM",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Lim Strategy",
+            "LIM",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         lossImpl.mintShares(user, 10e18);
@@ -1187,8 +1245,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_maxRedeem_limitedWithdrawLimit() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Lim Strategy", "LIM",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Lim Strategy",
+            "LIM",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         lossImpl.mintShares(user, 10e18);
@@ -1205,8 +1269,14 @@ contract TokenizedStrategyBranchCoverageTest is Test {
     function test_withdraw_withLoss_nonDefaultMaxLoss_withinTolerance() public {
         MockTokenizedStrategyWithLoss lossImpl = _freshLossImpl();
         lossImpl.initialize(
-            address(asset), "Loss Strategy", "LOSS",
-            address(this), address(this), address(this), address(0x99), false
+            address(asset),
+            "Loss Strategy",
+            "LOSS",
+            address(this),
+            address(this),
+            address(this),
+            address(0x99),
+            false
         );
 
         asset.mint(address(lossImpl), 10e18);

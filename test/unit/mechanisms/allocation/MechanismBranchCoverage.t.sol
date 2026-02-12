@@ -456,17 +456,7 @@ contract MechanismBranchCoverageTest is Test {
     function test_initialize_alreadyInitialized_reverts() public {
         // The proxy is already initialized via factory deployment - calling again reverts
         vm.expectRevert(TokenizedAllocationMechanism.AlreadyInitialized.selector);
-        _tam().initialize(
-            address(this),
-            IERC20(address(token)),
-            "test",
-            "T",
-            1,
-            1,
-            1,
-            1,
-            1
-        );
+        _tam().initialize(address(this), IERC20(address(token)), "test", "T", 1, 1, 1, 1, 1);
     }
 
     // ===== TokenizedAllocationMechanism: Signup with zero address =====
@@ -2037,7 +2027,7 @@ contract QVMBranchCoverageTest is Test {
     function test_receive_ETH_reverts() public {
         vm.deal(alice, 1 ether);
         vm.prank(alice);
-        (bool success,) = address(mechanism).call{value: 1 ether}("");
+        (bool success, ) = address(mechanism).call{ value: 1 ether }("");
         assertFalse(success, "ETH transfer should revert");
     }
 
@@ -2137,7 +2127,9 @@ contract QVMBranchCoverageTest is Test {
     // ===== _beforeProposeHook: non-keeper non-management proposer =====
     function test_propose_nonKeeperNonManagement_reverts() public {
         vm.prank(makeAddr("random"));
-        vm.expectRevert(abi.encodeWithSelector(TokenizedAllocationMechanism.ProposeNotAllowed.selector, makeAddr("random")));
+        vm.expectRevert(
+            abi.encodeWithSelector(TokenizedAllocationMechanism.ProposeNotAllowed.selector, makeAddr("random"))
+        );
         _tam().propose(recipient1, "Test");
     }
 
@@ -2493,153 +2485,63 @@ contract TAMDeepBranchCoverage2 is Test {
     function test_initialize_zeroOwner_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.Unauthorized.selector);
-        impl.initialize(
-            address(0),
-            IERC20(address(token)),
-            "test",
-            "T",
-            1,
-            1,
-            1,
-            1,
-            1
-        );
+        impl.initialize(address(0), IERC20(address(token)), "test", "T", 1, 1, 1, 1, 1);
     }
 
     // ===== Initialize: zero asset reverts =====
     function test_initialize_zeroAsset_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.ZeroAssetAddress.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(0)),
-            "test",
-            "T",
-            1,
-            1,
-            1,
-            1,
-            1
-        );
+        impl.initialize(address(this), IERC20(address(0)), "test", "T", 1, 1, 1, 1, 1);
     }
 
     // ===== Initialize: zero votingDelay reverts =====
     function test_initialize_zeroVotingDelay_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.ZeroVotingDelay.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(token)),
-            "test",
-            "T",
-            0,
-            1,
-            1,
-            1,
-            1
-        );
+        impl.initialize(address(this), IERC20(address(token)), "test", "T", 0, 1, 1, 1, 1);
     }
 
     // ===== Initialize: zero votingPeriod reverts =====
     function test_initialize_zeroVotingPeriod_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.ZeroVotingPeriod.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(token)),
-            "test",
-            "T",
-            1,
-            0,
-            1,
-            1,
-            1
-        );
+        impl.initialize(address(this), IERC20(address(token)), "test", "T", 1, 0, 1, 1, 1);
     }
 
     // ===== Initialize: zero quorumShares reverts =====
     function test_initialize_zeroQuorumShares_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.ZeroQuorumShares.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(token)),
-            "test",
-            "T",
-            1,
-            1,
-            0,
-            1,
-            1
-        );
+        impl.initialize(address(this), IERC20(address(token)), "test", "T", 1, 1, 0, 1, 1);
     }
 
     // ===== Initialize: zero timelockDelay reverts =====
     function test_initialize_zeroTimelockDelay_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.ZeroTimelockDelay.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(token)),
-            "test",
-            "T",
-            1,
-            1,
-            1,
-            0,
-            1
-        );
+        impl.initialize(address(this), IERC20(address(token)), "test", "T", 1, 1, 1, 0, 1);
     }
 
     // ===== Initialize: zero gracePeriod reverts =====
     function test_initialize_zeroGracePeriod_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.ZeroGracePeriod.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(token)),
-            "test",
-            "T",
-            1,
-            1,
-            1,
-            1,
-            0
-        );
+        impl.initialize(address(this), IERC20(address(token)), "test", "T", 1, 1, 1, 1, 0);
     }
 
     // ===== Initialize: empty name reverts =====
     function test_initialize_emptyName_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.EmptyName.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(token)),
-            "",
-            "T",
-            1,
-            1,
-            1,
-            1,
-            1
-        );
+        impl.initialize(address(this), IERC20(address(token)), "", "T", 1, 1, 1, 1, 1);
     }
 
     // ===== Initialize: empty symbol reverts =====
     function test_initialize_emptySymbol_reverts() public {
         TokenizedAllocationMechanism impl = new TokenizedAllocationMechanism();
         vm.expectRevert(TokenizedAllocationMechanism.EmptySymbol.selector);
-        impl.initialize(
-            address(this),
-            IERC20(address(token)),
-            "test",
-            "",
-            1,
-            1,
-            1,
-            1,
-            1
-        );
+        impl.initialize(address(this), IERC20(address(token)), "test", "", 1, 1, 1, 1, 1);
     }
 
     // ===== DOMAIN_SEPARATOR: different chain ID =====
@@ -2666,9 +2568,7 @@ contract TAMDeepBranchCoverage2 is Test {
         bytes32 structHash = keccak256(
             abi.encode(SIGNUP_TYPEHASH, address(signer), address(signer), DEPOSIT, nonce, deadline)
         );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash));
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(1, digest);
 
@@ -2692,9 +2592,7 @@ contract TAMDeepBranchCoverage2 is Test {
         bytes32 structHash = keccak256(
             abi.encode(SIGNUP_TYPEHASH, address(signer), address(signer), DEPOSIT, nonce, deadline)
         );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash));
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(1, digest);
 
@@ -2718,9 +2616,7 @@ contract TAMDeepBranchCoverage2 is Test {
         bytes32 structHash = keccak256(
             abi.encode(SIGNUP_TYPEHASH, address(signer), address(signer), DEPOSIT, nonce, deadline)
         );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash));
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(1, digest);
 
@@ -2951,12 +2847,8 @@ contract TAMDeepBranchCoverage2 is Test {
         );
         uint256 deadline = block.timestamp + 1000;
         uint256 nonce = _tam().nonces(signerAddr);
-        bytes32 structHash = keccak256(
-            abi.encode(SIGNUP_TYPEHASH, signerAddr, signerAddr, DEPOSIT, nonce, deadline)
-        );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 structHash = keccak256(abi.encode(SIGNUP_TYPEHASH, signerAddr, signerAddr, DEPOSIT, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash));
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPk, digest);
 
@@ -3174,12 +3066,7 @@ contract BaseAllocationInitFailTest is Test {
         });
 
         vm.expectRevert("Initialization failed");
-        new QuadraticVotingMechanism(
-            address(badImpl),
-            config,
-            50,
-            100
-        );
+        new QuadraticVotingMechanism(address(badImpl), config, 50, 100);
     }
 }
 
@@ -3246,12 +3133,8 @@ contract TAMSignatureBranchCoverageTest is Test {
         uint256 nonce = _tam().nonces(user);
 
         // User signs approval for payer to deposit on their behalf
-        bytes32 structHash = keccak256(
-            abi.encode(SIGNUP_TYPEHASH, user, payer, DEPOSIT, nonce, deadline)
-        );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 structHash = keccak256(abi.encode(SIGNUP_TYPEHASH, user, payer, DEPOSIT, nonce, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(USER_PK, digest);
 
         // Payer calls signupOnBehalfWithSignature
@@ -3314,15 +3197,21 @@ contract TAMSignatureBranchCoverageTest is Test {
                 deadline
             )
         );
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _tam().DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(USER_PK, digest);
 
         // Relayer submits the vote
         vm.prank(payer);
         _tam().castVoteWithSignature(
-            user, pid, TokenizedAllocationMechanism.VoteType.For, weight, recipient1, deadline, v, r, s
+            user,
+            pid,
+            TokenizedAllocationMechanism.VoteType.For,
+            weight,
+            recipient1,
+            deadline,
+            v,
+            r,
+            s
         );
     }
 
@@ -3341,7 +3230,15 @@ contract TAMSignatureBranchCoverageTest is Test {
         uint256 deadline = block.timestamp - 1;
         vm.expectRevert();
         _tam().castVoteWithSignature(
-            user, pid, TokenizedAllocationMechanism.VoteType.For, 10, recipient1, deadline, 27, bytes32(0), bytes32(0)
+            user,
+            pid,
+            TokenizedAllocationMechanism.VoteType.For,
+            10,
+            recipient1,
+            deadline,
+            27,
+            bytes32(0),
+            bytes32(0)
         );
     }
 
@@ -3851,9 +3748,7 @@ contract TAMCastVoteBranchCoverageTest is Test {
         vm.warp(block.timestamp + VOTING_DELAY + 1);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                TokenizedAllocationMechanism.RecipientMismatch.selector, pid, recipient2, recipient1
-            )
+            abi.encodeWithSelector(TokenizedAllocationMechanism.RecipientMismatch.selector, pid, recipient2, recipient1)
         );
         _tam().castVote(pid, TokenizedAllocationMechanism.VoteType.For, 10, recipient2);
         vm.stopPrank();
@@ -4082,13 +3977,19 @@ contract MockConfigurableMechanism is BaseAllocationMechanism {
         AllocationConfig memory _config
     ) BaseAllocationMechanism(_implementation, _config) {}
 
-    function setBlockSignup(bool val) external { blockSignup = val; }
-    function setBlockFinalization(bool val) external { blockFinalization = val; }
+    function setBlockSignup(bool val) external {
+        blockSignup = val;
+    }
+    function setBlockFinalization(bool val) external {
+        blockFinalization = val;
+    }
     function setCustomDistribution(bool use, uint256 assetsAmount) external {
         useCustomDistribution = use;
         customAssetsTransferred = assetsAmount;
     }
-    function setCustomSharesToMint(uint256 val) external { customSharesToMint = val; }
+    function setCustomSharesToMint(uint256 val) external {
+        customSharesToMint = val;
+    }
 
     function _beforeSignupHook(address) internal view override returns (bool) {
         return !blockSignup;
@@ -4425,10 +4326,18 @@ contract MockPowerIncreaseMechanism is BaseAllocationMechanism {
         AllocationConfig memory _config
     ) BaseAllocationMechanism(_implementation, _config) {}
 
-    function _beforeSignupHook(address) internal pure override returns (bool) { return true; }
-    function _beforeProposeHook(address) internal pure override returns (bool) { return true; }
-    function _getVotingPowerHook(address, uint256 deposit) internal pure override returns (uint256) { return deposit; }
-    function _validateProposalHook(uint256 pid) internal view override returns (bool) { return _proposalExists(pid); }
+    function _beforeSignupHook(address) internal pure override returns (bool) {
+        return true;
+    }
+    function _beforeProposeHook(address) internal pure override returns (bool) {
+        return true;
+    }
+    function _getVotingPowerHook(address, uint256 deposit) internal pure override returns (uint256) {
+        return deposit;
+    }
+    function _validateProposalHook(uint256 pid) internal view override returns (bool) {
+        return _proposalExists(pid);
+    }
 
     function _processVoteHook(
         uint256,
@@ -4441,13 +4350,27 @@ contract MockPowerIncreaseMechanism is BaseAllocationMechanism {
         return oldPower + 1;
     }
 
-    function _hasQuorumHook(uint256) internal pure override returns (bool) { return true; }
-    function _convertVotesToShares(uint256) internal pure override returns (uint256) { return 1000e18; }
-    function _beforeFinalizeVoteTallyHook() internal pure override returns (bool) { return true; }
-    function _getRecipientAddressHook(uint256 pid) internal view override returns (address) { return _getProposal(pid).recipient; }
-    function _requestCustomDistributionHook(address, uint256) internal pure override returns (bool, uint256) { return (false, 0); }
-    function _availableWithdrawLimit(address) internal pure override returns (uint256) { return type(uint256).max; }
-    function _calculateTotalAssetsHook() internal view override returns (uint256) { return asset.balanceOf(address(this)); }
+    function _hasQuorumHook(uint256) internal pure override returns (bool) {
+        return true;
+    }
+    function _convertVotesToShares(uint256) internal pure override returns (uint256) {
+        return 1000e18;
+    }
+    function _beforeFinalizeVoteTallyHook() internal pure override returns (bool) {
+        return true;
+    }
+    function _getRecipientAddressHook(uint256 pid) internal view override returns (address) {
+        return _getProposal(pid).recipient;
+    }
+    function _requestCustomDistributionHook(address, uint256) internal pure override returns (bool, uint256) {
+        return (false, 0);
+    }
+    function _availableWithdrawLimit(address) internal pure override returns (uint256) {
+        return type(uint256).max;
+    }
+    function _calculateTotalAssetsHook() internal view override returns (uint256) {
+        return asset.balanceOf(address(this));
+    }
     receive() external payable override {}
 }
 
@@ -4505,8 +4428,8 @@ contract TAMPowerIncreasedTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(
                 TokenizedAllocationMechanism.PowerIncreased.selector,
-                DEPOSIT,          // oldPower
-                DEPOSIT + 1       // newPower (oldPower + 1)
+                DEPOSIT, // oldPower
+                DEPOSIT + 1 // newPower (oldPower + 1)
             )
         );
         _tam().castVote(pid, TokenizedAllocationMechanism.VoteType.For, 100, recipient1);
@@ -4714,12 +4637,7 @@ contract QVMRecipientZeroTest is Test {
         assertEq(prop.recipient, address(0), "Recipient should be zeroed after vm.store");
 
         // queueProposal should now revert with InvalidRecipient(address(0))
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                TokenizedAllocationMechanism.InvalidRecipient.selector,
-                address(0)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(TokenizedAllocationMechanism.InvalidRecipient.selector, address(0)));
         tam.queueProposal(pid);
     }
 }

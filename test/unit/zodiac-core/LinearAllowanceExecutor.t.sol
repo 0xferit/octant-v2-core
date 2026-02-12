@@ -386,11 +386,7 @@ contract LinearAllowanceExecutorTest is Test {
     function testAssignModuleAddressSet_UpdatesReference() public {
         AddressSet newAddressSet = new AddressSet();
         executor.assignModuleAddressSet(IAddressSet(address(newAddressSet)));
-        assertEq(
-            address(executor.moduleAddressSet()),
-            address(newAddressSet),
-            "Module address set should be updated"
-        );
+        assertEq(address(executor.moduleAddressSet()), address(newAddressSet), "Module address set should be updated");
     }
 
     function testExecuteMultipleTransfersWithChangingAllowance() public {

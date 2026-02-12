@@ -47,11 +47,9 @@ contract MockDataProvider {
         totalSupply = _totalSupply;
     }
 
-    function getReserveTokensAddresses(address)
-        external
-        view
-        returns (address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress)
-    {
+    function getReserveTokensAddresses(
+        address
+    ) external view returns (address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress) {
         return (aToken, address(0), address(0));
     }
 

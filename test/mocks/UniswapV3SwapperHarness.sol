@@ -14,21 +14,11 @@ contract UniswapV3SwapperHarness is UniswapV3Swapper {
         _setUniFees(_token0, _token1, _fee);
     }
 
-    function swapFrom(
-        address _from,
-        address _to,
-        uint256 _amountIn,
-        uint256 _minAmountOut
-    ) external returns (uint256) {
+    function swapFrom(address _from, address _to, uint256 _amountIn, uint256 _minAmountOut) external returns (uint256) {
         return _swapFrom(_from, _to, _amountIn, _minAmountOut);
     }
 
-    function swapTo(
-        address _from,
-        address _to,
-        uint256 _amountTo,
-        uint256 _maxAmountFrom
-    ) external returns (uint256) {
+    function swapTo(address _from, address _to, uint256 _amountTo, uint256 _maxAmountFrom) external returns (uint256) {
         return _swapTo(_from, _to, _amountTo, _maxAmountFrom);
     }
 

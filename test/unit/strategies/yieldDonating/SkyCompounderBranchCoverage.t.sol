@@ -71,17 +71,18 @@ contract SkyCompounderBranchCoverageTest is Test {
 
     /// @dev Helper to deploy a valid SkyCompounderStrategy
     function _deployStrategy() internal returns (SkyCompounderStrategy) {
-        return new SkyCompounderStrategy(
-            address(staking),
-            "Test SkyComp",
-            "tsSKY",
-            management,
-            keeper,
-            emergencyAdmin,
-            donationAddress,
-            false,
-            address(implementation)
-        );
+        return
+            new SkyCompounderStrategy(
+                address(staking),
+                "Test SkyComp",
+                "tsSKY",
+                management,
+                keeper,
+                emergencyAdmin,
+                donationAddress,
+                false,
+                address(implementation)
+            );
     }
 
     /// @notice Constructor reverts when staking is paused (line 88)

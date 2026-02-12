@@ -20,9 +20,7 @@ contract MockUniswapV3Router {
         return amountOut;
     }
 
-    function exactInput(
-        ISwapRouter.ExactInputParams calldata params
-    ) external payable returns (uint256 amountOut) {
+    function exactInput(ISwapRouter.ExactInputParams calldata params) external payable returns (uint256 amountOut) {
         // Decode first token from path (first 20 bytes)
         address tokenIn;
         bytes calldata path = params.path;
@@ -51,9 +49,7 @@ contract MockUniswapV3Router {
         return amountIn;
     }
 
-    function exactOutput(
-        ISwapRouter.ExactOutputParams calldata params
-    ) external payable returns (uint256 amountIn) {
+    function exactOutput(ISwapRouter.ExactOutputParams calldata params) external payable returns (uint256 amountIn) {
         amountIn = params.amountOut; // 1:1 mock swap
 
         // For exactOutput, the path is reversed: tokenOut is first, tokenIn is last

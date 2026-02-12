@@ -181,7 +181,7 @@ contract VaultFactoryTest is Test {
 
         // Query with address(0) should use msg.sender
         vm.prank(bunny);
-        (uint16 feeBps,) = vaultFactory.protocolFeeConfig(address(0));
+        (uint16 feeBps, ) = vaultFactory.protocolFeeConfig(address(0));
         assertEq(feeBps, 1000);
     }
 

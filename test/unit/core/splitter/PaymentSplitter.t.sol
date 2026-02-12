@@ -407,7 +407,10 @@ contract PaymentSplitterTest is Test {
 
         bytes32 salt = keccak256("eth-salt");
         address newSplitter = factory.createPaymentSplitterWithETHAndSalt{ value: 1 ether }(
-            _payees, _payeeNames, _shares, salt
+            _payees,
+            _payeeNames,
+            _shares,
+            salt
         );
         assertTrue(newSplitter != address(0));
         assertEq(address(newSplitter).balance, 1 ether);

@@ -247,12 +247,7 @@ contract RegenEarningPowerCalculatorBlocksetTest is Test {
 
     function test_blocksetMode_getNewEarningPower_capped() public view {
         uint256 veryLargeStake = uint256(type(uint96).max) + 1000;
-        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(
-            veryLargeStake,
-            staker1,
-            address(0),
-            0
-        );
+        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(veryLargeStake, staker1, address(0), 0);
 
         assertEq(newEP, uint256(type(uint96).max), "Should be capped at uint96 max");
         assertTrue(qualifies);
@@ -538,7 +533,9 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         Staker.DepositIdentifier depositId = _stakeFor(staker1, 1000e18);
 
         vm.prank(staker2);
-        vm.expectRevert(abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not claimer or owner"), staker2));
+        vm.expectRevert(
+            abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not claimer or owner"), staker2)
+        );
         regenStaker.compoundRewards(depositId);
     }
 
@@ -811,7 +808,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         _notifyReward(5000e18);
 
         // Verify schedule was updated
-        (uint256 addedAmount,,,,,) = regenStaker.latestRewardSchedule();
+        (uint256 addedAmount, , , , , ) = regenStaker.latestRewardSchedule();
         assertEq(addedAmount, 5000e18);
     }
 
@@ -1142,9 +1139,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         stakeToken.mint(address(regenStaker), 10000e18);
 
         vm.prank(staker1);
-        vm.expectRevert(
-            abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not notifier"), staker1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not notifier"), staker1));
         regenStaker.notifyRewardAmount(10000e18);
     }
 
@@ -1212,9 +1207,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
     function test_setRewardDuration_notAdmin_reverts() public {
         vm.prank(staker1);
-        vm.expectRevert(
-            abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not admin"), staker1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not admin"), staker1));
         regenStaker.setRewardDuration(uint128(14 days));
     }
 
@@ -1232,9 +1225,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         stakeToken.mint(staker1, 50e18);
         vm.startPrank(staker1);
         stakeToken.approve(address(regenStaker), 50e18);
-        vm.expectRevert(
-            abi.encodeWithSelector(RegenStakerBase.MinimumStakeAmountNotMet.selector, 500e18, 250e18)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RegenStakerBase.MinimumStakeAmountNotMet.selector, 500e18, 250e18));
         regenStaker.stakeMore(depositId, 50e18);
         vm.stopPrank();
     }
@@ -1484,15 +1475,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
         vm.prank(staker1);
         vm.expectRevert();
-        regenStaker.contribute(
-            depositId,
-            address(0),
-            1e18,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
-        );
+        regenStaker.contribute(depositId, address(0), 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0));
     }
 
     // ===== contribute: mechanism not in allowset reverts =====
@@ -1503,15 +1486,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
         vm.prank(staker1);
         vm.expectRevert();
-        regenStaker.contribute(
-            depositId,
-            fakeMechanism,
-            1e18,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
-        );
+        regenStaker.contribute(depositId, fakeMechanism, 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0));
     }
 
     // ===== contribute: not claimer or owner reverts =====
@@ -1536,15 +1511,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not claimer or owner"), staker2)
         );
-        regenStaker.contribute(
-            depositId,
-            fakeMechanism,
-            1e18,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
-        );
+        regenStaker.contribute(depositId, fakeMechanism, 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0));
 
         vm.clearMockedCalls();
     }
@@ -1566,23 +1533,11 @@ contract RegenStakerBaseBranchCoverageTest is Test {
             abi.encodeWithSelector(IAddressSet.contains.selector, fakeMechanism),
             abi.encode(true)
         );
-        vm.mockCall(
-            fakeMechanism,
-            abi.encodeWithSelector(bytes4(keccak256("canSignup(address)"))),
-            abi.encode(true)
-        );
+        vm.mockCall(fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("canSignup(address)"))), abi.encode(true));
 
         vm.prank(staker1);
         vm.expectRevert(abi.encodeWithSelector(RegenStakerBase.CantAfford.selector, 1e18, 0));
-        regenStaker.contribute(
-            depositId,
-            fakeMechanism,
-            1e18,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
-        );
+        regenStaker.contribute(depositId, fakeMechanism, 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0));
 
         vm.clearMockedCalls();
     }
@@ -1603,15 +1558,13 @@ contract RegenStakerBaseBranchCoverageTest is Test {
             abi.encodeWithSelector(IAddressSet.contains.selector, fakeMechanism),
             abi.encode(true)
         );
-        vm.mockCall(
-            fakeMechanism,
-            abi.encodeWithSelector(bytes4(keccak256("canSignup(address)"))),
-            abi.encode(true)
-        );
+        vm.mockCall(fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("canSignup(address)"))), abi.encode(true));
         // Mock signupOnBehalfWithSignature to succeed
         vm.mockCall(
             fakeMechanism,
-            abi.encodeWithSelector(bytes4(keccak256("signupOnBehalfWithSignature(address,uint256,uint256,uint8,bytes32,bytes32)"))),
+            abi.encodeWithSelector(
+                bytes4(keccak256("signupOnBehalfWithSignature(address,uint256,uint256,uint8,bytes32,bytes32)"))
+            ),
             abi.encode()
         );
 
@@ -1657,15 +1610,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(RegenStakerBase.DepositOwnerNotEligibleForMechanism.selector, fakeMechanism, staker1)
         );
-        regenStaker.contribute(
-            depositId,
-            fakeMechanism,
-            1e18,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
-        );
+        regenStaker.contribute(depositId, fakeMechanism, 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0));
 
         vm.clearMockedCalls();
     }

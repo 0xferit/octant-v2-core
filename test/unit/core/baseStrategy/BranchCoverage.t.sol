@@ -65,7 +65,7 @@ contract BaseStrategyBranchCoverageTest is Test {
     }
 
     function test_tendTrigger_returnsFalseByDefault() public view {
-        (bool shouldTend,) = strategy.tendTrigger();
+        (bool shouldTend, ) = strategy.tendTrigger();
         assertFalse(shouldTend);
     }
 

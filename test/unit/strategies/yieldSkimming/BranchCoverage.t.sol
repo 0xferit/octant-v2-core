@@ -233,8 +233,16 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         vm.prank(user1);
         strategy.redeem(shares, user1, user1);
 
-        assertEq(IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue(), 0, "User debt should be 0");
-        assertEq(IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(), 0, "Dragon debt should be 0");
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue(),
+            0,
+            "User debt should be 0"
+        );
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(),
+            0,
+            "Dragon debt should be 0"
+        );
         assertEq(strategy.totalSupply(), 0, "Total supply should be 0");
     }
 
@@ -264,7 +272,11 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         vm.prank(dragon);
         strategy.redeem(dragonShares, dragon, dragon);
 
-        assertEq(IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(), 0, "Dragon debt should be 0");
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(),
+            0,
+            "Dragon debt should be 0"
+        );
     }
 
     // ========================================================
@@ -337,8 +349,16 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         vm.prank(user1);
         strategy.withdraw(maxWithdraw, user1, user1, 10000);
 
-        assertEq(IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue(), 0, "User debt should be 0");
-        assertEq(IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(), 0, "Dragon debt should be 0");
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue(),
+            0,
+            "User debt should be 0"
+        );
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(),
+            0,
+            "Dragon debt should be 0"
+        );
     }
 
     /// @notice withdraw: 3-argument wrapper (default maxLoss = 0)
@@ -364,7 +384,11 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         vm.prank(dragon);
         strategy.withdraw(dragonMaxWithdraw, dragon, dragon, 10000);
 
-        assertEq(IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(), 0, "Dragon debt should be 0");
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(),
+            0,
+            "Dragon debt should be 0"
+        );
     }
 
     // ========================================================
@@ -580,7 +604,11 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         assertGt(loss, 0);
 
         // Dragon shares should NOT be burned since burning is disabled
-        assertEq(strategy.balanceOf(dragon), dragonSharesBefore, "Dragon shares should not be burned when burning is disabled");
+        assertEq(
+            strategy.balanceOf(dragon),
+            dragonSharesBefore,
+            "Dragon shares should not be burned when burning is disabled"
+        );
     }
 
     /// @notice report: no profit, no loss path
@@ -1066,7 +1094,10 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         assertFalse(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "Empty vault should be solvent");
 
         mintAndDepositIntoStrategy(strategy, user1, 100e18);
-        assertFalse(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "Vault with deposits should be solvent");
+        assertFalse(
+            IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(),
+            "Vault with deposits should be solvent"
+        );
     }
 
     /// @notice getLastRateRay returns the last reported rate

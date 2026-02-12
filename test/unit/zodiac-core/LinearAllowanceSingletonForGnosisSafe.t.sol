@@ -107,9 +107,7 @@ contract LinearAllowanceSingletonForGnosisSafeTest is Test {
         rates[1] = DRIP_RATE;
 
         vm.prank(address(safe));
-        vm.expectRevert(
-            abi.encodeWithSelector(ILinearAllowanceSingleton.ArrayLengthsMismatch.selector, 2, 1, 2)
-        );
+        vm.expectRevert(abi.encodeWithSelector(ILinearAllowanceSingleton.ArrayLengthsMismatch.selector, 2, 1, 2));
         module.setAllowances(delegates, tokens, rates);
     }
 
@@ -178,9 +176,7 @@ contract LinearAllowanceSingletonForGnosisSafeTest is Test {
         tokens[0] = NATIVE_TOKEN;
 
         vm.prank(address(safe));
-        vm.expectRevert(
-            abi.encodeWithSelector(ILinearAllowanceSingleton.ArrayLengthsMismatch.selector, 2, 1, 0)
-        );
+        vm.expectRevert(abi.encodeWithSelector(ILinearAllowanceSingleton.ArrayLengthsMismatch.selector, 2, 1, 0));
         module.revokeAllowances(delegates, tokens);
     }
 
@@ -320,9 +316,7 @@ contract LinearAllowanceSingletonForGnosisSafeTest is Test {
         tos[1] = makeAddr("recipient");
 
         vm.prank(delegate);
-        vm.expectRevert(
-            abi.encodeWithSelector(ILinearAllowanceSingleton.ArrayLengthsMismatch.selector, 2, 1, 2)
-        );
+        vm.expectRevert(abi.encodeWithSelector(ILinearAllowanceSingleton.ArrayLengthsMismatch.selector, 2, 1, 2));
         module.executeAllowanceTransfers(safes, tokens, tos);
     }
 
@@ -400,12 +394,8 @@ contract LinearAllowanceSingletonForGnosisSafeTest is Test {
         vm.prank(address(safe));
         module.setAllowance(delegate, NATIVE_TOKEN, DRIP_RATE);
 
-        (
-            uint192 dripRatePerDay,
-            uint64 lastBookedAtInSeconds,
-            uint256 totalUnspent,
-            uint256 totalSpent
-        ) = module.allowances(address(safe), delegate, NATIVE_TOKEN);
+        (uint192 dripRatePerDay, uint64 lastBookedAtInSeconds, uint256 totalUnspent, uint256 totalSpent) = module
+            .allowances(address(safe), delegate, NATIVE_TOKEN);
 
         assertEq(dripRatePerDay, DRIP_RATE);
         assertTrue(lastBookedAtInSeconds > 0);

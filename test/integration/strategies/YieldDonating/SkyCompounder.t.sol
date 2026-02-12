@@ -893,11 +893,7 @@ contract SkyCompounderTest is BaseYieldDonatingIntegrationTest {
 
         // Ensure there are no pending rewards and no reward tokens held
         // Mock staking.getReward() to do nothing (no rewards to claim)
-        vm.mockCall(
-            SkyCompounderTestConfig.STAKING,
-            abi.encodeWithSelector(IStaking.getReward.selector),
-            ""
-        );
+        vm.mockCall(SkyCompounderTestConfig.STAKING, abi.encodeWithSelector(IStaking.getReward.selector), "");
 
         // Ensure reward token balance is 0
         address rewardsToken = strategy.rewardsToken();
@@ -954,11 +950,7 @@ contract SkyCompounderTest is BaseYieldDonatingIntegrationTest {
         vm.stopPrank();
 
         // Mock getReward to do nothing (we pre-dealt tokens)
-        vm.mockCall(
-            SkyCompounderTestConfig.STAKING,
-            abi.encodeWithSelector(IStaking.getReward.selector),
-            ""
-        );
+        vm.mockCall(SkyCompounderTestConfig.STAKING, abi.encodeWithSelector(IStaking.getReward.selector), "");
 
         // This should attempt UniV2 swap with 3-hop path: [rewardsToken, WETH, USDS]
         // The swap may revert on mainnet fork if the path has no liquidity, but
@@ -1022,11 +1014,7 @@ contract SkyCompounderTest is BaseYieldDonatingIntegrationTest {
         vm.stopPrank();
 
         // Mock getReward to do nothing (we pre-dealt tokens)
-        vm.mockCall(
-            SkyCompounderTestConfig.STAKING,
-            abi.encodeWithSelector(IStaking.getReward.selector),
-            ""
-        );
+        vm.mockCall(SkyCompounderTestConfig.STAKING, abi.encodeWithSelector(IStaking.getReward.selector), "");
 
         vm.prank(keeper);
         vault.report();

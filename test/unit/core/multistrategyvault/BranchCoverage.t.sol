@@ -1151,9 +1151,7 @@ contract MultistrategyVaultBranchCoverageTest is Test {
             abi.encode(DOMAIN_TYPE_HASH, nameHash, versionHash, block.chainid, address(vault))
         );
         uint256 nonce = vault.nonces(owner_);
-        bytes32 structHash = keccak256(
-            abi.encode(PERMIT_TYPE_HASH, owner_, spender_, value_, nonce, deadline_)
-        );
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPE_HASH, owner_, spender_, value_, nonce, deadline_));
         return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
     }
 }
