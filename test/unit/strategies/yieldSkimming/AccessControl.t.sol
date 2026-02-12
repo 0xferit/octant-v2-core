@@ -292,11 +292,15 @@ contract AccessControlTest is Setup {
         vm.prank(management);
         strategy.setDragonRouter(newRouter);
 
-        // Arrange: crash to insolvency
+        // Arrange: crash to insolvency (with burning disabled so dragon keeps shares)
         MockStrategySkimming(address(strategy)).updateExchangeRate(6e17);
         vm.prank(keeper);
         strategy.report();
         assertTrue(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "vault should be insolvent");
+
+        // Enable burning after insolvency so dragon solvency checks are active
+        vm.prank(management);
+        strategy.setEnableBurning(true);
 
         // Act + Assert: finalize should revert during insolvency
         skip(14 days);
@@ -602,6 +606,49 @@ contract AccessControlTest is Setup {
         assertEq(strategy.pendingDragonRouter(), _pendingRouter);
         assertEq(strategy.dragonRouterChangeTimestamp(), _timestamp);
         assertEq(strategy.dragonRouter(), donationAddress);
+    }
+
+    /**
+     * @notice Test that enableBurning=false bypasses dragon solvency protection during finalization
+     * @dev Documents the !enableBurning early-return path in _requireDragonSolvency.
+     *      When enableBurning=false, dragon operations are unrestricted regardless of vault solvency.
+     *      Contrast with test_finalizeDragonRouterChange_revertsWhenInsolventWithOldDragonShares
+     *      which shows that enableBurning=true DOES block finalization during insolvency.
+     */
+    function test_finalizeDragonRouterChange_enableBurningFalse_duringInsolvency() public {
+        address alice = makeAddr("alice");
+        address newRouter = address(0x123);
+        uint256 depositAmount = 100e18;
+
+        // 1. Set enableBurning=false (already default, but be explicit)
+        vm.prank(management);
+        strategy.setEnableBurning(false);
+
+        // Setup: user deposit and profit so dragon holds shares
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+        MockStrategySkimming(address(strategy)).updateExchangeRate(15e17);
+        vm.prank(keeper);
+        strategy.report();
+        uint256 dragonShares = strategy.balanceOf(donationAddress);
+        assertGt(dragonShares, 0, "dragon should have shares");
+
+        // 2. Create insolvency (crash rate below user debt coverage)
+        MockStrategySkimming(address(strategy)).updateExchangeRate(6e17);
+        vm.prank(keeper);
+        strategy.report();
+        assertTrue(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "vault should be insolvent");
+
+        // 3. Initiate and finalize dragon router change
+        vm.prank(management);
+        strategy.setDragonRouter(newRouter);
+        skip(14 days);
+
+        // 4. Verify it succeeds — enableBurning=false bypasses _requireDragonSolvency early-return
+        strategy.finalizeDragonRouterChange();
+        assertEq(strategy.dragonRouter(), newRouter, "dragon router should be updated");
+
+        // 5. Verify the complementary case: enabling burning WOULD block finalization.
+        //    (Already covered by test_finalizeDragonRouterChange_revertsWhenInsolventWithOldDragonShares)
     }
 
     function test_cooldownPeriodConstant() public pure {

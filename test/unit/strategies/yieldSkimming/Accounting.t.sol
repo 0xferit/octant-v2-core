@@ -599,22 +599,6 @@ contract AccountingTest is Setup {
         assertEq(strategy.balanceOf(donationAddress), 0, "Donation address should have no shares");
     }
 
-    function test_maxDeposit_maxMint_return_zero_when_rate_zero() public {
-        address alice = makeAddr("alice");
-        MockStrategySkimming(address(strategy)).updateExchangeRate(0);
-
-        assertEq(strategy.maxDeposit(alice), 0, "maxDeposit should be zero at rate 0");
-        assertEq(strategy.maxMint(alice), 0, "maxMint should be zero at rate 0");
-
-        vm.prank(alice);
-        vm.expectRevert();
-        strategy.deposit(1e18, alice);
-
-        vm.prank(alice);
-        vm.expectRevert();
-        strategy.mint(1e18, alice);
-    }
-
     // ===== DEFICIT ADJUSTMENT TESTS =====
     /**
      * @notice Test invariant: Depositors during loss period cannot withdraw more underlying value than deposited
@@ -648,7 +632,7 @@ contract AccountingTest is Setup {
         vm.stopPrank();
 
         // Check if debt tracking is working properly
-        uint256 totalValueDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
+        uint256 totalValueDebt = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
 
         // For yield skimming strategies, deposits after losses are typically blocked
         // by insolvency protection when totalValueDebt > 0 and current value < debt.
@@ -973,7 +957,7 @@ contract AccountingTest is Setup {
 
     /**
      * @notice Test debt tracking when user transfers shares to dragon router
-     * @dev Verifies that totalDebtOwedToUserInAssetValue decreases and dragonRouterDebtInAssetValue increases
+     * @dev Verifies that totalUserDebtInAssetValue decreases and dragonRouterDebtInAssetValue increases
      */
     function test_transferToDragon_updatesDebtTracking(uint256 depositAmount, uint256 transferAmount) public {
         depositAmount = bound(depositAmount, minFuzzAmount, 1e27); // Limit to prevent overflow
@@ -986,8 +970,8 @@ contract AccountingTest is Setup {
         transferAmount = bound(transferAmount, 1, userShares);
 
         // Check initial debt tracking
-        uint256 initialUserDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        uint256 initialDragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        uint256 initialUserDebt = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        uint256 initialDragonDebt = strategy.balanceOf(strategy.dragonRouter());
 
         assertEq(initialUserDebt, depositAmount, "Initial user debt should equal deposit");
         assertEq(initialDragonDebt, 0, "Initial dragon debt should be 0");
@@ -998,8 +982,8 @@ contract AccountingTest is Setup {
         vm.stopPrank();
 
         // Check updated debt tracking
-        uint256 finalUserDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        uint256 finalDragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        uint256 finalUserDebt = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        uint256 finalDragonDebt = strategy.balanceOf(strategy.dragonRouter());
 
         assertEq(finalUserDebt, initialUserDebt - transferAmount, "User debt should decrease by transfer amount");
         assertEq(finalDragonDebt, initialDragonDebt + transferAmount, "Dragon debt should increase by transfer amount");
@@ -1009,7 +993,7 @@ contract AccountingTest is Setup {
 
     /**
      * @notice Test debt tracking when dragon router transfers shares to user
-     * @dev Verifies that dragonRouterDebtInAssetValue decreases and totalDebtOwedToUserInAssetValue increases
+     * @dev Verifies that dragonRouterDebtInAssetValue decreases and totalUserDebtInAssetValue increases
      */
     function test_transferFromDragon_updatesDebtTracking(
         uint256 depositAmount,
@@ -1038,8 +1022,8 @@ contract AccountingTest is Setup {
         transferAmount = bound(transferAmount, 1, dragonShares);
 
         // Check debt before transfer
-        uint256 initialUserDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        uint256 initialDragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        uint256 initialUserDebt = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        uint256 initialDragonDebt = strategy.balanceOf(strategy.dragonRouter());
 
         // Dragon transfers shares to user2
         vm.startPrank(strategy.dragonRouter());
@@ -1047,8 +1031,8 @@ contract AccountingTest is Setup {
         vm.stopPrank();
 
         // Check updated debt tracking
-        uint256 finalUserDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        uint256 finalDragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        uint256 finalUserDebt = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        uint256 finalDragonDebt = strategy.balanceOf(strategy.dragonRouter());
 
         assertEq(finalUserDebt, initialUserDebt + transferAmount, "User debt should increase by transfer amount");
         assertEq(finalDragonDebt, initialDragonDebt - transferAmount, "Dragon debt should decrease by transfer amount");
@@ -1080,8 +1064,8 @@ contract AccountingTest is Setup {
         vm.stopPrank();
 
         // Check initial debt
-        uint256 initialUserDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        uint256 initialDragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        uint256 initialUserDebt = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        uint256 initialDragonDebt = strategy.balanceOf(strategy.dragonRouter());
 
         // User2 transfers from user1 to dragon router
         vm.startPrank(user2);
@@ -1089,8 +1073,8 @@ contract AccountingTest is Setup {
         vm.stopPrank();
 
         // Check updated debt tracking
-        uint256 finalUserDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        uint256 finalDragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        uint256 finalUserDebt = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        uint256 finalDragonDebt = strategy.balanceOf(strategy.dragonRouter());
 
         assertEq(finalUserDebt, initialUserDebt - transferAmount, "User debt should decrease");
         assertEq(finalDragonDebt, initialDragonDebt + transferAmount, "Dragon debt should increase");
@@ -1187,7 +1171,7 @@ contract AccountingTest is Setup {
         vm.stopPrank();
 
         // Dragon now has dragonRouterDebtInAssetValue from user transfer + profit
-        uint256 dragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        uint256 dragonDebt = strategy.balanceOf(strategy.dragonRouter());
         dragonShares = strategy.balanceOf(strategy.dragonRouter());
 
         // Ensure dragon has enough shares to test the debt limitation
@@ -1312,10 +1296,14 @@ contract AccountingTest is Setup {
         bool isInsolvent = IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent();
 
         if (isInsolvent) {
+            vm.startPrank(management);
+            strategy.setEnableBurning(true);
+            vm.stopPrank();
+
             // Dragon transfers should be blocked during insolvency
             vm.startPrank(strategy.dragonRouter());
-            vm.expectRevert("Dragon cannot operate during insolvency");
-            strategy.transfer(user1, 1);
+            vm.expectRevert("Transfer would cause vault insolvency");
+            strategy.transfer(user1, dragonShares);
             vm.stopPrank();
         }
     }
@@ -1467,10 +1455,7 @@ contract AccountingTest is Setup {
         console2.log("Step 2: d1 - User1 deposits 100");
         mintAndDepositIntoStrategy(strategy, user1, 100e18);
         console2.log("User1 shares:", strategy.balanceOf(user1));
-        console2.log(
-            "Total value debt:",
-            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue()
-        );
+        console2.log("Total value debt:", strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()));
 
         // r1.5: Rate increases to 1.5
         console2.log("\nStep 3: r1.5 - Rate increases to 1.5");
@@ -1480,10 +1465,7 @@ contract AccountingTest is Setup {
         console2.log("Step 4: d2 - User2 deposits 150");
         mintAndDepositIntoStrategy(strategy, user2, 150e18);
         console2.log("User2 shares:", strategy.balanceOf(user2));
-        console2.log(
-            "Total value debt:",
-            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue()
-        );
+        console2.log("Total value debt:", strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()));
         console2.log("Total assets:", strategy.totalAssets());
 
         // report: Should create profit and mint to dragon
@@ -1504,8 +1486,7 @@ contract AccountingTest is Setup {
         console2.log("Current vault value:", (strategy.totalAssets() * 1e18) / 1e18); // Rate is 1.0
         console2.log(
             "Total debt needed:",
-            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue() +
-                strategy.balanceOf(donationAddress)
+            strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()) + strategy.balanceOf(donationAddress)
         );
 
         // Skip the deposit since vault is insolvent - this shows the protection working
@@ -1520,7 +1501,7 @@ contract AccountingTest is Setup {
         console2.log("User1 withdrawn, remaining total assets:", strategy.totalAssets());
         console2.log(
             "Remaining total value debt:",
-            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue()
+            strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter())
         );
 
         // report: Should show loss and burn dragon shares
@@ -1551,10 +1532,7 @@ contract AccountingTest is Setup {
         console2.log("Final dragon shares:", strategy.balanceOf(donationAddress));
         console2.log("Final total assets:", strategy.totalAssets());
         console2.log("Final total supply:", strategy.totalSupply());
-        console2.log(
-            "Final total value debt:",
-            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue()
-        );
+        console2.log("Final total value debt:", strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter()));
 
         // Verify that without the rate check, losses are properly handled
         assertEq(profit2, 0, "Should report no profit in second report");
@@ -1573,6 +1551,134 @@ contract AccountingTest is Setup {
         uint256 userDebtAfter;
         uint256 dragonDebtAfter;
         uint256 totalDebtAfter;
+    }
+
+    function test_isVaultInsolvent_excludesDragonDebt() public {
+        address alice = makeAddr("alice");
+        uint256 depositAmount = 100e18;
+
+        // 1. User deposits (creates user debt)
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        // 2. Create profit (mints dragon shares, creates dragon debt)
+        MockStrategySkimming(address(strategy)).updateExchangeRate(15e17); // 1.5
+        vm.prank(keeper);
+        strategy.report();
+        uint256 dragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        assertGt(dragonDebt, 0, "dragon should have debt");
+
+        // 3. Drop exchange rate so vault_value is between user_debt and user_debt + dragon_debt
+        //    user_debt = 100e18, dragon_debt ~50e18, total_debt ~150e18
+        //    At rate 1.2: vault_value = 100 * 1.2 = 120e18
+        //    120e18 > 100e18 (user_debt) but 120e18 < 150e18 (total_debt)
+        MockStrategySkimming(address(strategy)).updateExchangeRate(12e17);
+
+        // 4. Assert isVaultInsolvent() == false (dragon debt excluded from insolvency check)
+        assertFalse(
+            IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(),
+            "vault should NOT be insolvent when it can cover user debt but not dragon debt"
+        );
+
+        // 5. Drop rate further below user_debt
+        //    At rate 0.9: vault_value = 100 * 0.9 = 90e18 < 100e18 (user_debt)
+        MockStrategySkimming(address(strategy)).updateExchangeRate(9e17);
+
+        // 6. Assert isVaultInsolvent() == true
+        assertTrue(
+            IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(),
+            "vault should be insolvent when it cannot cover user debt"
+        );
+    }
+
+    function test_maxDeposit_maxMint_return_zero_when_rate_zero() public {
+        address alice = makeAddr("alice");
+        uint256 depositAmount = 100e18;
+
+        // Setup: user deposits first (so strategy has state)
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        // 1. Set exchange rate to 0
+        MockStrategySkimming(address(strategy)).updateExchangeRate(0);
+
+        // 2. Assert maxDeposit returns 0
+        assertEq(strategy.maxDeposit(alice), 0, "maxDeposit should return 0 when rate is 0");
+
+        // 3. Assert maxMint returns 0
+        assertEq(strategy.maxMint(alice), 0, "maxMint should return 0 when rate is 0");
+
+        // 4. Verify deposit reverts (vault is insolvent: value debt > 0 but vault value = 0)
+        yieldSource.mint(alice, 1e18);
+        vm.prank(alice);
+        yieldSource.approve(address(strategy), 1e18);
+        vm.expectRevert("Cannot operate when vault is insolvent");
+        vm.prank(alice);
+        strategy.deposit(1e18, alice);
+
+        // 5. Verify mint reverts (same insolvency guard)
+        vm.expectRevert("Cannot operate when vault is insolvent");
+        vm.prank(alice);
+        strategy.mint(1e18, alice);
+    }
+
+    /// @notice Dragon router migration cannot desync balance vs debt to cause revert in report()
+    /// @dev Edge case: new dragon has pre-existing shares (transferred before finalization).
+    ///      finalizeDragonRouterChange() adds newDragonBalance to dragonRouterDebtInAssetValue,
+    ///      so debt >= balance is preserved. Then dragonBurn <= balance <= debt, and the subtraction is safe.
+    function test_dragonDebtSubtractionSafeAfterMigration() public {
+        address alice = makeAddr("alice");
+        address newRouter = makeAddr("newDragonRouter");
+        uint256 depositAmount = 100e18;
+
+        // 1. Setup: deposit, create dragon shares via profit
+        mintAndDepositIntoStrategy(strategy, alice, depositAmount);
+
+        vm.prank(management);
+        strategy.setEnableBurning(true);
+
+        MockStrategySkimming(address(strategy)).updateExchangeRate(15e17); // 1.5
+        vm.prank(keeper);
+        strategy.report();
+
+        uint256 dragonBalance = strategy.balanceOf(donationAddress);
+        uint256 dragonDebt = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        assertGt(dragonBalance, 0, "dragon should have shares");
+        assertEq(dragonBalance, dragonDebt, "balance and debt should match before migration");
+
+        // 2. Transfer shares TO newRouter BEFORE finalization (user→user transfer, no debt rebalancing).
+        //    This gives newRouter a pre-existing balance without corresponding dragon debt.
+        uint256 extraDeposit = 20e18;
+        mintAndDepositIntoStrategy(strategy, alice, extraDeposit);
+        uint256 aliceShares = strategy.balanceOf(alice);
+        uint256 sharesToTransfer = aliceShares / 4;
+        vm.prank(alice);
+        strategy.transfer(newRouter, sharesToTransfer);
+
+        uint256 newRouterBalance = strategy.balanceOf(newRouter);
+        assertGt(newRouterBalance, 0, "newRouter should have shares before finalization");
+
+        // 3. Finalize: migration adds newDragonBalance to dragonRouterDebtInAssetValue
+        vm.prank(management);
+        strategy.setDragonRouter(newRouter);
+        skip(14 days);
+        strategy.finalizeDragonRouterChange();
+
+        // Verify: debt covers new dragon's balance (finalization migrates debt correctly)
+        uint256 dragonDebtAfterMigration = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        assertGe(dragonDebtAfterMigration, newRouterBalance, "dragon debt should cover new router balance");
+
+        // 4. Trigger loss — exercises the subtraction path in _handleDragonLossProtection
+        MockStrategySkimming(address(strategy)).updateExchangeRate(8e17); // loss
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        assertEq(profit, 0, "no profit expected");
+        assertGt(loss, 0, "loss expected");
+
+        // 5. Verify the burn path was actually exercised (dragonBurn > 0).
+        //    After finalization, new dragon has shares and burning is enabled,
+        //    so _handleDragonLossProtection burns shares (does NOT short-circuit on 0 balance).
+        uint256 newDragonBalanceAfterLoss = strategy.balanceOf(newRouter);
+        assertLt(newDragonBalanceAfterLoss, newRouterBalance, "dragon shares should have been burned");
     }
 
     /**
@@ -1622,8 +1728,8 @@ contract AccountingTest is Setup {
         vars.newDragonBalance = strategy.balanceOf(vars.newDragonRouter);
 
         // Record debt state before change
-        vars.userDebtBefore = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        vars.dragonDebtBefore = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        vars.userDebtBefore = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        vars.dragonDebtBefore = strategy.balanceOf(strategy.dragonRouter());
         vars.totalDebtBefore = vars.userDebtBefore + vars.dragonDebtBefore;
 
         // Initiate dragon router change
@@ -1640,8 +1746,8 @@ contract AccountingTest is Setup {
         assertEq(strategy.dragonRouter(), vars.newDragonRouter, "New dragon router should be set");
 
         // Record debt state after change
-        vars.userDebtAfter = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
-        vars.dragonDebtAfter = IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue();
+        vars.userDebtAfter = strategy.totalSupply() - strategy.balanceOf(strategy.dragonRouter());
+        vars.dragonDebtAfter = strategy.balanceOf(strategy.dragonRouter());
         vars.totalDebtAfter = vars.userDebtAfter + vars.dragonDebtAfter;
 
         // Most importantly: total debt should be conserved

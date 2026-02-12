@@ -222,8 +222,8 @@ contract PrivilegedMorphoCompounderStrategyTest is BasePrivilegedYieldDonatingIn
         (uint256 profit, uint256 loss) = vault.report();
         vm.stopPrank();
 
-        // Allow 1 wei tolerance for Morpho rounding
-        assertApproxEqAbs(profit, profitAmount, 1, "Should have captured profit");
+        // Allow 2 wei tolerance for Morpho + profit-to-shares conversion rounding
+        assertApproxEqAbs(profit, profitAmount, 2, "Should have captured profit");
         assertEq(loss, 0, "Should have no loss");
         assertEq(vault.balanceOf(user), userSharesBefore, "User shares should not change");
         assertGt(vault.totalAssets(), totalAssetsBefore, "Total assets should increase");

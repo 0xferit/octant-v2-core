@@ -78,8 +78,8 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
     error TransferExceedsAvailableShares();
     error NoPendingRageQuitCooldownPeriodChange();
     error RageQuitCooldownPeriodChangeDelayNotElapsed();
-    error RageQuitCooldownPeriodChangeDelayElapsed();
     error InvalidGovernanceAddress();
+    error RageQuitCooldownPeriodChangeDelayElapsed();
 
     /**
      * @notice Initiates a rage quit by locking shares until the unlock time is reached
@@ -107,6 +107,11 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
      * @custom:security Only regen governance
      */
     function cancelRageQuitCooldownPeriodChange() external;
+    /// @notice Get the pending rage quit cooldown period awaiting governance timelock
+    function getPendingRageQuitCooldownPeriod() external view returns (uint256);
+
+    /// @notice Get the timestamp when the rage quit cooldown period change was initiated
+    function getRageQuitCooldownPeriodChangeTimestamp() external view returns (uint256);
 
     /**
      * @notice Sets the regen governance address authorized to manage rage quit parameters
@@ -119,4 +124,18 @@ interface IMultistrategyLockedVault is IMultistrategyVault {
      * @notice Cancels an active rage quit for the caller and frees any locked shares
      */
     function cancelRageQuit() external;
+
+    /**
+     * @notice Get the amount of shares that can be transferred by a user
+     * @param user The address to check transferable shares for
+     * @return The amount of shares available for transfer (not locked in custody)
+     */
+    function getTransferableShares(address user) external view returns (uint256);
+
+    /**
+     * @notice Get the amount of shares available for rage quit initiation
+     * @param user The address to check rage quitable shares for
+     * @return The amount of shares available for initiating rage quit
+     */
+    function getRageQuitableShares(address user) external view returns (uint256);
 }

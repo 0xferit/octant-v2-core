@@ -482,6 +482,16 @@ contract MultistrategyLockedVault is MultistrategyVault, IMultistrategyLockedVau
         super._transfer(sender_, receiver_, amount_);
     }
 
+    /// @inheritdoc IMultistrategyLockedVault
+    function getPendingRageQuitCooldownPeriod() external view returns (uint256) {
+        return pendingRageQuitCooldownPeriod;
+    }
+
+    /// @inheritdoc IMultistrategyLockedVault
+    function getRageQuitCooldownPeriodChangeTimestamp() external view returns (uint256) {
+        return rageQuitCooldownPeriodChangeTimestamp;
+    }
+
     /**
      * @notice Get the maximum amount of assets that can be withdrawn by an owner
      * @param owner_ Address owning shares to check withdrawal limits for
