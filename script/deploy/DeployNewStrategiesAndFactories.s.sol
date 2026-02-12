@@ -14,15 +14,13 @@ import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
 import { MorphoCompounderStrategyFactory } from "src/factories/MorphoCompounderStrategyFactory.sol";
 import { SkyCompounderStrategyFactory } from "src/factories/SkyCompounderStrategyFactory.sol";
 import { YearnV3StrategyFactory } from "src/factories/yieldDonating/YearnV3StrategyFactory.sol";
-import { AaveV3StrategyFactory } from "src/factories/AaveV3StrategyFactory.sol";
-import { SparkStrategyFactory } from "src/factories/SparkStrategyFactory.sol";
 
 /**
  * @title DeployNewStrategiesAndFactories
  * @author Golem Foundation
  * @notice Deploys new tokenized strategies, PaymentSplitterFactory, and all strategy factories via Safe multisig
- * @dev Due to the EIP-7825 per-transaction gas limit of 16,777,216 gas (2^24), all 9 contracts
- *      cannot be deployed in a single transaction (~21.8M gas total). The deployment is split
+ * @dev Due to the EIP-7825 per-transaction gas limit of 16,777,216 gas (2^24), all 7 contracts
+ *      cannot be deployed in a single transaction. The deployment is split
  *      into two Safe MultiSend batches:
  *
  *      Batch 1 (~12.4M gas): Implementations + PaymentSplitter + YieldSkimming factories
@@ -32,11 +30,9 @@ import { SparkStrategyFactory } from "src/factories/SparkStrategyFactory.sol";
  *        - LidoStrategyFactory
  *        - MorphoCompounderStrategyFactory
  *
- *      Batch 2 (~9.4M gas): Remaining YieldDonating factories
+ *      Batch 2: Remaining YieldDonating factories
  *        - SkyCompounderStrategyFactory
  *        - YearnV3StrategyFactory
- *        - AaveV3StrategyFactory
- *        - SparkStrategyFactory
  *
  * Usage:
  * ```bash
@@ -74,8 +70,6 @@ contract DeployNewStrategiesAndFactories is Script, BatchScript {
     bytes32 public constant MORPHO_FACTORY_SALT = keccak256("MORPHO_COMPOUNDER_FACTORY_10022026");
     bytes32 public constant SKY_FACTORY_SALT = keccak256("SKY_COMPOUNDER_FACTORY_10022026");
     bytes32 public constant YEARN_V3_FACTORY_SALT = keccak256("YEARN_V3_STRATEGY_FACTORY_10022026");
-    bytes32 public constant AAVE_V3_FACTORY_SALT = keccak256("AAVE_V3_STRATEGY_FACTORY_10022026");
-    bytes32 public constant SPARK_FACTORY_SALT = keccak256("SPARK_STRATEGY_FACTORY_10022026");
 
     // ═══════════════════════════════════════════════════════════════════════
     // DEPLOYED ADDRESSES (computed, logged after deployment)
@@ -91,8 +85,6 @@ contract DeployNewStrategiesAndFactories is Script, BatchScript {
     // Batch 2
     address public skyFactory;
     address public yearnV3Factory;
-    address public aaveV3Factory;
-    address public sparkFactory;
     address public safe;
 
     function setUp() public {
@@ -137,7 +129,6 @@ contract DeployNewStrategiesAndFactories is Script, BatchScript {
 
     // ═══════════════════════════════════════════════════════════════════════
     // BATCH 2: Remaining YieldDonating factories
-    // Estimated gas: ~11.3M (under 16.78M EIP-7825 limit)
     // ═══════════════════════════════════════════════════════════════════════
 
     function runBatch2() external isBatch(safe) {
@@ -205,12 +196,6 @@ contract DeployNewStrategiesAndFactories is Script, BatchScript {
 
         _addCreate2Deployment(YEARN_V3_FACTORY_SALT, type(YearnV3StrategyFactory).creationCode);
         console.log("- YearnV3StrategyFactory:", yearnV3Factory);
-
-        _addCreate2Deployment(AAVE_V3_FACTORY_SALT, type(AaveV3StrategyFactory).creationCode);
-        console.log("- AaveV3StrategyFactory:", aaveV3Factory);
-
-        _addCreate2Deployment(SPARK_FACTORY_SALT, type(SparkStrategyFactory).creationCode);
-        console.log("- SparkStrategyFactory:", sparkFactory);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -232,17 +217,15 @@ contract DeployNewStrategiesAndFactories is Script, BatchScript {
     function _logBatch2Summary() internal view {
         console.log("\n=== BATCH 2 SUMMARY ===");
         console.log("Safe Address:", safe);
-        console.log("Contracts: 4 (nonce N+1)");
+        console.log("Contracts: 2 (nonce N+1)");
         console.log("  SkyCompounderStrategyFactory:", skyFactory);
         console.log("  YearnV3StrategyFactory:", yearnV3Factory);
-        console.log("  AaveV3StrategyFactory:", aaveV3Factory);
-        console.log("  SparkStrategyFactory:", sparkFactory);
         console.log("Transaction sent to Safe for signing.\n");
     }
 
     function _logFullSummary() internal pure {
         console.log("=== FULL DEPLOYMENT SUMMARY ===");
-        console.log("Total contracts: 9 across 2 Safe transactions");
+        console.log("Total contracts: 7 across 2 Safe transactions");
         console.log("Both transactions proposed to Safe for signing.");
         console.log("Execute batch 1 first, then batch 2.");
         console.log("================================\n");
@@ -260,14 +243,6 @@ contract DeployNewStrategiesAndFactories is Script, BatchScript {
         yearnV3Factory = _computeCreate2AddressViaFactory(
             YEARN_V3_FACTORY_SALT,
             keccak256(type(YearnV3StrategyFactory).creationCode)
-        );
-        aaveV3Factory = _computeCreate2AddressViaFactory(
-            AAVE_V3_FACTORY_SALT,
-            keccak256(type(AaveV3StrategyFactory).creationCode)
-        );
-        sparkFactory = _computeCreate2AddressViaFactory(
-            SPARK_FACTORY_SALT,
-            keccak256(type(SparkStrategyFactory).creationCode)
         );
     }
 }
