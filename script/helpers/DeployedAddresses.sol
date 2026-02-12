@@ -26,17 +26,7 @@ contract DeployedAddresses is Script {
      */
     struct ContractAddresses {
         // Core Infrastructure
-        address moduleProxyFactory;
         address linearAllowanceSingleton;
-        address dragonTokenizedStrategy;
-        address dragonRouter;
-        address splitChecker;
-        // Mock Contracts (for testing)
-        address mockStrategySingleton;
-        address mockToken;
-        address mockYieldSource;
-        // Hats Protocol
-        address hats;
         // Factory Contracts
         address paymentSplitterFactory;
         address skyCompounderStrategyFactory;
@@ -85,16 +75,7 @@ contract DeployedAddresses is Script {
     function getMainnetAddresses() internal pure returns (ContractAddresses memory) {
         return
             ContractAddresses({
-                // Core infrastructure - to be deployed
-                moduleProxyFactory: address(0),
                 linearAllowanceSingleton: address(0),
-                dragonTokenizedStrategy: address(0),
-                dragonRouter: address(0),
-                splitChecker: address(0),
-                mockStrategySingleton: address(0),
-                mockToken: address(0),
-                mockYieldSource: address(0),
-                hats: address(0),
                 // Factory contracts - existing mainnet deployments
                 paymentSplitterFactory: 0x5711765E0756B45224fc1FdA1B41ab344682bBcb,
                 skyCompounderStrategyFactory: 0xbe5352d0eCdB13D9f74c244B634FdD729480Bb6F,
@@ -121,15 +102,7 @@ contract DeployedAddresses is Script {
     function getSepoliaAddresses() internal pure returns (ContractAddresses memory) {
         return
             ContractAddresses({
-                moduleProxyFactory: address(0),
                 linearAllowanceSingleton: address(0),
-                dragonTokenizedStrategy: address(0),
-                dragonRouter: address(0),
-                splitChecker: address(0),
-                mockStrategySingleton: address(0),
-                mockToken: address(0),
-                mockYieldSource: address(0),
-                hats: address(0),
                 paymentSplitterFactory: address(0),
                 skyCompounderStrategyFactory: address(0),
                 morphoCompounderStrategyFactory: address(0),
@@ -153,18 +126,7 @@ contract DeployedAddresses is Script {
     function getStagingAddresses() internal pure returns (ContractAddresses memory) {
         return
             ContractAddresses({
-                // Core infrastructure - deploy fresh each time
-                moduleProxyFactory: address(0),
                 linearAllowanceSingleton: address(0),
-                dragonTokenizedStrategy: address(0),
-                dragonRouter: address(0),
-                splitChecker: address(0),
-                // Mock contracts - deploy fresh each time
-                mockStrategySingleton: address(0),
-                mockToken: address(0),
-                mockYieldSource: address(0),
-                // Hats - deploy fresh each time
-                hats: address(0),
                 // Factory contracts - reuse existing mainnet deployments
                 paymentSplitterFactory: 0x5711765E0756B45224fc1FdA1B41ab344682bBcb,
                 skyCompounderStrategyFactory: 0xbe5352d0eCdB13D9f74c244B634FdD729480Bb6F,
@@ -192,15 +154,7 @@ contract DeployedAddresses is Script {
     function getAnvilAddresses() internal pure returns (ContractAddresses memory) {
         return
             ContractAddresses({
-                moduleProxyFactory: address(0),
                 linearAllowanceSingleton: address(0),
-                dragonTokenizedStrategy: address(0),
-                dragonRouter: address(0),
-                splitChecker: address(0),
-                mockStrategySingleton: address(0),
-                mockToken: address(0),
-                mockYieldSource: address(0),
-                hats: address(0),
                 paymentSplitterFactory: address(0),
                 skyCompounderStrategyFactory: address(0),
                 morphoCompounderStrategyFactory: address(0),
