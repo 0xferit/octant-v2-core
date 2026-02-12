@@ -258,6 +258,11 @@ jobs:
             fi
           }
 
+          # Export for badge steps
+          echo "COVERAGE_LINES=$LINES_PCT" >> $GITHUB_ENV
+          echo "COVERAGE_BRANCHES=$BRANCH_PCT" >> $GITHUB_ENV
+          echo "COVERAGE_FUNCTIONS=$FUNCS_PCT" >> $GITHUB_ENV
+
           check_threshold "Lines" "$LINES_PCT" || FAILED=1
           check_threshold "Statements" "$STMTS_PCT" || FAILED=1
           check_threshold "Branches" "$BRANCH_PCT" || FAILED=1
@@ -271,6 +276,45 @@ jobs:
 
           echo ""
           echo "All coverage metrics meet the ${THRESHOLD}% threshold."
+
+      - name: Update Coverage Badges
+        if: always() && github.event.pull_request.base.ref == 'develop'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: coverage-lines.json
+          label: lines
+          message: ${{ env.COVERAGE_LINES }}%
+          valColorRange: ${{ env.COVERAGE_LINES }}
+          minColorRange: 0
+          maxColorRange: 100
+
+      - name: Update Branches Badge
+        if: always() && github.event.pull_request.base.ref == 'develop'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: coverage-branches.json
+          label: branches
+          message: ${{ env.COVERAGE_BRANCHES }}%
+          valColorRange: ${{ env.COVERAGE_BRANCHES }}
+          minColorRange: 0
+          maxColorRange: 100
+
+      - name: Update Functions Badge
+        if: always() && github.event.pull_request.base.ref == 'develop'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: coverage-functions.json
+          label: functions
+          message: ${{ env.COVERAGE_FUNCTIONS }}%
+          valColorRange: ${{ env.COVERAGE_FUNCTIONS }}
+          minColorRange: 0
+          maxColorRange: 100
 
   kontrol-proofs:
     name: Kontrol Formal Verification
