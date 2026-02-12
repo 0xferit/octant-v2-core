@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.25;
 
-import { MockYieldStrategy } from "../zodiac-core/MockYieldStrategy.sol";
+import { MockYieldStrategy } from "./MockYieldStrategy.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract MockLossyStrategy is MockYieldStrategy {

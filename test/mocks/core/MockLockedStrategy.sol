@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.25;
 
-import { MockYieldStrategy } from "../zodiac-core/MockYieldStrategy.sol";
+import { MockYieldStrategy } from "./MockYieldStrategy.sol";
 
 contract MockLockedStrategy is MockYieldStrategy {
     uint256 public lockedFunds;
