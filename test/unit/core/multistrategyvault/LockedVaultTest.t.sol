@@ -694,4 +694,55 @@ contract LockedVaultTest is Test {
         assertEq(withdrawnAmount, remainingAmount, "Should redeem remaining amount");
         vm.stopPrank();
     }
+
+    // ========================================================
+    //  Coverage: getter functions and edge case branches
+    // ========================================================
+
+    function test_getPendingRageQuitCooldownPeriod_returnsValue() public {
+        // Before any proposal, should be 0
+        assertEq(vault.getPendingRageQuitCooldownPeriod(), 0);
+
+        // After proposal, should return the pending value
+        vm.prank(gov);
+        vault.proposeRageQuitCooldownPeriodChange(14 days);
+        assertEq(vault.getPendingRageQuitCooldownPeriod(), 14 days);
+    }
+
+    function test_getRageQuitCooldownPeriodChangeTimestamp_returnsValue() public {
+        // Before any proposal, should be 0
+        assertEq(vault.getRageQuitCooldownPeriodChangeTimestamp(), 0);
+
+        // After proposal, should return the timestamp
+        vm.prank(gov);
+        vault.proposeRageQuitCooldownPeriodChange(14 days);
+        assertGt(vault.getRageQuitCooldownPeriodChangeTimestamp(), 0);
+    }
+
+    function test_processCustodyWithdrawal_insufficientBalance() public {
+        // Deposit and initiate rage quit
+        userDeposit(fish, fishAmount);
+        uint256 shares = vault.balanceOf(fish);
+
+        vm.prank(fish);
+        vault.initiateRageQuit(shares);
+
+        // Fast forward past cooldown
+        vm.warp(block.timestamp + vault.rageQuitCooldownPeriod() + 1);
+
+        // Directly reduce fish's balance below lockedShares via vm.store
+        // ERC20Upgradeable uses slot keccak256(abi.encode(account, uint256(0x52))) for balances
+        // (ERC20StorageLocation = keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.ERC20")) - 1)) & ~bytes32(uint256(0xff)))
+        // Slot 0 in the ERC20 storage struct is _balances mapping
+        // But we can use the deal cheatcode for ERC20 tokens:
+        deal(address(vault), fish, shares - 1, true);
+
+        // Now balanceOf(fish) < shares but lockedShares == shares
+        assertLt(vault.balanceOf(fish), shares);
+
+        // Try to redeem - should hit InsufficientBalance
+        vm.prank(fish);
+        vm.expectRevert(IMultistrategyLockedVault.InsufficientBalance.selector);
+        vault.redeem(shares, fish, fish, 0, new address[](0));
+    }
 }

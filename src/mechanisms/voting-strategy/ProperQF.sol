@@ -122,8 +122,7 @@ abstract contract ProperQF {
         if (contribution == 0) revert ContributionMustBePositive();
         if (voteWeight == 0) revert VoteWeightMustBePositive();
 
-        uint256 voteWeightSquared = voteWeight * voteWeight;
-        if (voteWeightSquared / voteWeight != voteWeight) revert VoteWeightOverflow();
+        uint256 voteWeightSquared = voteWeight * voteWeight; // Reverts on overflow in Solidity 0.8+
         if (voteWeightSquared > contribution) revert SquareRootTooLarge();
 
         // 10% tolerance, asymmetric: voteWeight can be lower than actualSqrt, but not higher

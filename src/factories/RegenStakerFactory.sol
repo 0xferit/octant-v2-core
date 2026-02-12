@@ -125,7 +125,6 @@ contract RegenStakerFactory {
         bytes32 salt,
         bytes calldata code
     ) external validatedBytecode(code, RegenStakerVariant.WITHOUT_DELEGATION) returns (address stakerAddress) {
-        if (code.length == 0) revert InvalidBytecode();
         stakerAddress = _deployStaker(params, salt, code, RegenStakerVariant.WITHOUT_DELEGATION);
     }
 
@@ -141,7 +140,6 @@ contract RegenStakerFactory {
         bytes32 salt,
         bytes calldata code
     ) external validatedBytecode(code, RegenStakerVariant.WITH_DELEGATION) returns (address stakerAddress) {
-        if (code.length == 0) revert InvalidBytecode();
         stakerAddress = _deployStaker(params, salt, code, RegenStakerVariant.WITH_DELEGATION);
     }
 
