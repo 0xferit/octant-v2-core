@@ -3,81 +3,93 @@ pragma solidity ^0.8.25;
 
 import { Test, Vm } from "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { YieldForwarder, IRedeemable, IReportable } from "src/core/YieldForwarder.sol";
+import { ERC20Mock } from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
-/// @notice Mock strategy that acts as both an ERC20 (shares) and implements report + redeem
-/// @dev On report(), mints profit shares to the configured donation address.
-///      On redeem(), burns shares from owner and transfers assets 1:1 to receiver.
-contract MockRedeemableStrategy is ERC20 {
-    ERC20 public asset;
-    address public donationAddress;
-    uint256 public profitPerReport;
+import { YieldForwarder } from "src/core/YieldForwarder.sol";
+import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
 
-    constructor(ERC20 _asset) ERC20("Mock Strategy", "mSTRAT") {
-        asset = _asset;
-    }
-
-    function setDonationAddress(address _addr) external {
-        donationAddress = _addr;
-    }
-
-    function setProfitPerReport(uint256 _amount) external {
-        profitPerReport = _amount;
-    }
-
-    /// @notice Simulates strategy report: mints profit shares to donation address
-    function report() external returns (uint256 profit, uint256 loss) {
-        if (profitPerReport > 0) {
-            _mint(donationAddress, profitPerReport);
-        }
-        return (profitPerReport, 0);
-    }
-
-    /// @notice Simulates strategy redemption: burns shares from owner, transfers assets to receiver
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner,
-        uint256 maxLoss
-    ) external returns (uint256 assets) {
-        maxLoss; // silence unused param
-        _burn(owner, shares);
-        assets = shares; // 1:1 for testing
-        asset.transfer(receiver, assets);
-    }
-}
-
-/// @notice Simple mock asset token
-contract MockAsset is ERC20 {
-    constructor() ERC20("Mock Asset", "mASSET") {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
+import { MockFactory } from "test/mocks/MockFactory.sol";
+import { MockStrategy } from "test/mocks/core/tokenized-strategies/MockStrategy.sol";
+import { MockYieldSource } from "test/mocks/core/tokenized-strategies/MockYieldSource.sol";
+import { IMockStrategy } from "test/mocks/core/IMockStrategy.sol";
 
 contract YieldForwarderTest is Test {
     YieldForwarder public forwarder;
-    MockAsset public asset;
-    MockRedeemableStrategy public strategy;
+    ERC20Mock public asset;
+    IMockStrategy public strategy;
+    MockYieldSource public yieldSource;
+    MockFactory public mockFactory;
+    YieldDonatingTokenizedStrategy public implementation;
 
     address public receiver = address(0xBEEF);
     address public keeperEOA = address(0xCAFE);
+    address public management = address(0xA1);
+    address public emergencyAdmin = address(0xA2);
+    address public user = address(0xA3);
+    address public protocolFeeRecipient = address(0xA4);
+
+    uint256 public constant DEPOSIT_AMOUNT = 100e18;
 
     function setUp() public {
-        asset = new MockAsset();
-        strategy = new MockRedeemableStrategy(asset);
+        // Deploy factory (0 fees for clean test math)
+        mockFactory = new MockFactory(0, protocolFeeRecipient);
+
+        // Deploy YieldDonatingTokenizedStrategy implementation
+        implementation = new YieldDonatingTokenizedStrategy();
+
+        // Deploy asset and yield source
+        asset = new ERC20Mock();
+        yieldSource = new MockYieldSource(address(asset));
+
+        // Deploy YieldForwarder first (address needed for strategy config)
         forwarder = new YieldForwarder(receiver, keeperEOA);
 
-        // Configure mock: profit shares go to the forwarder
-        strategy.setDonationAddress(address(forwarder));
+        // Deploy strategy with the forwarder as both keeper and donation address
+        strategy = IMockStrategy(
+            address(
+                new MockStrategy(
+                    address(asset),
+                    address(yieldSource),
+                    management,
+                    address(forwarder), // keeper = forwarder (so forwarder can call report())
+                    emergencyAdmin,
+                    address(forwarder), // donationAddress = forwarder (profit shares go here)
+                    address(implementation)
+                )
+            )
+        );
 
+        // Configure strategy roles
+        vm.startPrank(management);
+        strategy.setKeeper(address(forwarder));
+        strategy.setEmergencyAdmin(emergencyAdmin);
+        strategy.setPendingManagement(management);
+        strategy.acceptManagement();
+        vm.stopPrank();
+
+        // Labels
         vm.label(receiver, "Receiver");
         vm.label(keeperEOA, "KeeperEOA");
         vm.label(address(forwarder), "YieldForwarder");
-        vm.label(address(strategy), "MockStrategy");
-        vm.label(address(asset), "MockAsset");
+        vm.label(address(strategy), "Strategy");
+        vm.label(address(asset), "Asset");
+        vm.label(address(yieldSource), "YieldSource");
+        vm.label(management, "Management");
+        vm.label(user, "User");
+    }
+
+    /// @dev Mints assets to a user, approves, and deposits into the strategy
+    function _depositIntoStrategy(address _user, uint256 _amount) internal {
+        asset.mint(_user, _amount);
+        vm.startPrank(_user);
+        asset.approve(address(strategy), _amount);
+        strategy.deposit(_amount, _user);
+        vm.stopPrank();
+    }
+
+    /// @dev Simulates yield by minting extra assets directly to the yield source
+    function _simulateProfit(uint256 _profit) internal {
+        asset.mint(address(yieldSource), _profit);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -103,23 +115,32 @@ contract YieldForwarderTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // reportAndForward TESTS
+    // reportAndForward — FULL VAULT INTEGRATION TESTS
     // ═══════════════════════════════════════════════════════════
 
-    function test_reportAndForward_success() public {
-        uint256 profitAmount = 100e18;
-        strategy.setProfitPerReport(profitAmount);
-        // Fund strategy with assets so it can pay out on redeem
-        asset.mint(address(strategy), profitAmount);
+    function test_reportAndForward_fullFlow() public {
+        // 1. User deposits into strategy
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
 
+        // 2. Strategy deploys funds to yield source on report
+        //    (initial report to move idle → deployed)
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        // 3. Simulate profit in yield source
+        uint256 profit = 10e18;
+        _simulateProfit(profit);
+
+        // 4. Keeper triggers reportAndForward
+        uint256 receiverBalanceBefore = asset.balanceOf(receiver);
         vm.prank(keeperEOA);
-        uint256 assets = forwarder.reportAndForward(address(strategy), 0);
+        uint256 assets = forwarder.reportAndForward(address(strategy), 10_000);
 
-        // Assets should arrive at receiver
-        assertEq(assets, profitAmount);
-        assertEq(asset.balanceOf(receiver), profitAmount);
-        // Forwarder should have no shares left
-        assertEq(strategy.balanceOf(address(forwarder)), 0);
+        // 5. Verify: assets forwarded to receiver
+        assertGt(assets, 0, "Should forward nonzero assets");
+        assertEq(asset.balanceOf(receiver), receiverBalanceBefore + assets, "Receiver should get forwarded assets");
+        // 6. Forwarder should hold no shares
+        assertEq(strategy.balanceOf(address(forwarder)), 0, "Forwarder should have 0 shares");
     }
 
     function test_reportAndForward_revertsWhenNotKeeper() public {
@@ -130,33 +151,53 @@ contract YieldForwarderTest is Test {
     }
 
     function test_reportAndForward_zeroProfit_returnsZero() public {
-        // No profit configured (default 0)
-        vm.prank(keeperEOA);
-        uint256 assets = forwarder.reportAndForward(address(strategy), 0);
+        // Deposit but no yield → report produces no profit
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
 
-        assertEq(assets, 0);
-        assertEq(asset.balanceOf(receiver), 0);
+        // Initial report to deploy funds
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        // No profit simulated; second report has nothing new
+        vm.prank(keeperEOA);
+        uint256 assets = forwarder.reportAndForward(address(strategy), 10_000);
+
+        assertEq(assets, 0, "Should return 0 when no profit");
+        assertEq(asset.balanceOf(receiver), 0, "Receiver should get nothing");
     }
 
     function test_reportAndForward_emitsEvent() public {
-        uint256 profitAmount = 50e18;
-        strategy.setProfitPerReport(profitAmount);
-        asset.mint(address(strategy), profitAmount);
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
 
-        vm.expectEmit(true, true, false, true);
-        emit YieldForwarder.YieldForwarded(address(strategy), receiver, profitAmount, profitAmount);
+        // Deploy funds
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        // Simulate profit
+        uint256 profit = 20e18;
+        _simulateProfit(profit);
+
+        // We expect a YieldForwarded event with the strategy and receiver addresses
+        // The exact shares/assets depend on vault math, so check indexed params only
+        vm.expectEmit(true, true, false, false);
+        emit YieldForwarder.YieldForwarded(address(strategy), receiver, 0, 0);
 
         vm.prank(keeperEOA);
-        forwarder.reportAndForward(address(strategy), 0);
+        forwarder.reportAndForward(address(strategy), 10_000);
     }
 
     function test_reportAndForward_noEventOnZeroProfit() public {
-        // With zero profit, no YieldForwarded event should be emitted
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
+
+        // Deploy funds
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        // No profit — check no YieldForwarded event
         vm.recordLogs();
         vm.prank(keeperEOA);
-        forwarder.reportAndForward(address(strategy), 0);
+        forwarder.reportAndForward(address(strategy), 10_000);
 
-        // Check no YieldForwarded event was emitted
         bytes32 yieldForwardedSelector = keccak256("YieldForwarded(address,address,uint256,uint256)");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
@@ -168,57 +209,156 @@ contract YieldForwarderTest is Test {
     }
 
     function test_reportAndForward_multipleReports() public {
-        uint256 profit1 = 30e18;
-        uint256 profit2 = 70e18;
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
 
-        // First report
-        strategy.setProfitPerReport(profit1);
-        asset.mint(address(strategy), profit1);
-        vm.prank(keeperEOA);
-        forwarder.reportAndForward(address(strategy), 0);
-        assertEq(asset.balanceOf(receiver), profit1);
+        // Deploy funds
+        vm.prank(address(forwarder));
+        strategy.report();
 
-        // Second report
-        strategy.setProfitPerReport(profit2);
-        asset.mint(address(strategy), profit2);
+        // First profit cycle
+        uint256 profit1 = 5e18;
+        _simulateProfit(profit1);
+
         vm.prank(keeperEOA);
-        forwarder.reportAndForward(address(strategy), 0);
-        assertEq(asset.balanceOf(receiver), profit1 + profit2);
+        uint256 assets1 = forwarder.reportAndForward(address(strategy), 10_000);
+        assertGt(assets1, 0, "First report should yield assets");
+
+        // Second profit cycle
+        uint256 profit2 = 15e18;
+        _simulateProfit(profit2);
+
+        vm.prank(keeperEOA);
+        uint256 assets2 = forwarder.reportAndForward(address(strategy), 10_000);
+        assertGt(assets2, 0, "Second report should yield assets");
+
+        // Receiver accumulated both payouts
+        assertEq(asset.balanceOf(receiver), assets1 + assets2, "Receiver should accumulate all payouts");
     }
 
     function test_reportAndForward_multipleStrategies() public {
-        // Create a second strategy with a separate asset
-        MockAsset asset2 = new MockAsset();
-        MockRedeemableStrategy strategy2 = new MockRedeemableStrategy(asset2);
-        strategy2.setDonationAddress(address(forwarder));
+        // Create a second independent vault + yield source
+        ERC20Mock asset2 = new ERC20Mock();
+        MockYieldSource yieldSource2 = new MockYieldSource(address(asset2));
 
-        uint256 profit1 = 40e18;
-        uint256 profit2 = 60e18;
+        IMockStrategy strategy2 = IMockStrategy(
+            address(
+                new MockStrategy(
+                    address(asset2),
+                    address(yieldSource2),
+                    management,
+                    address(forwarder),
+                    emergencyAdmin,
+                    address(forwarder),
+                    address(implementation)
+                )
+            )
+        );
 
-        // Fund both strategies
-        strategy.setProfitPerReport(profit1);
-        asset.mint(address(strategy), profit1);
-        strategy2.setProfitPerReport(profit2);
-        asset2.mint(address(strategy2), profit2);
+        vm.startPrank(management);
+        strategy2.setKeeper(address(forwarder));
+        strategy2.setEmergencyAdmin(emergencyAdmin);
+        strategy2.setPendingManagement(management);
+        strategy2.acceptManagement();
+        vm.stopPrank();
 
-        // Report from strategy 1
+        // Deposit into both strategies
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
+
+        asset2.mint(user, DEPOSIT_AMOUNT);
+        vm.startPrank(user);
+        asset2.approve(address(strategy2), DEPOSIT_AMOUNT);
+        strategy2.deposit(DEPOSIT_AMOUNT, user);
+        vm.stopPrank();
+
+        // Deploy funds for both
+        vm.prank(address(forwarder));
+        strategy.report();
+        vm.prank(address(forwarder));
+        strategy2.report();
+
+        // Simulate profit in both
+        uint256 profit1 = 8e18;
+        uint256 profit2 = 12e18;
+        asset.mint(address(yieldSource), profit1);
+        asset2.mint(address(yieldSource2), profit2);
+
+        // Forward from strategy 1
         vm.prank(keeperEOA);
-        forwarder.reportAndForward(address(strategy), 0);
-        assertEq(asset.balanceOf(receiver), profit1);
+        uint256 assets1 = forwarder.reportAndForward(address(strategy), 10_000);
+        assertGt(assets1, 0, "Strategy 1 should produce assets");
+        assertEq(asset.balanceOf(receiver), assets1);
 
-        // Report from strategy 2
+        // Forward from strategy 2
         vm.prank(keeperEOA);
-        forwarder.reportAndForward(address(strategy2), 0);
-        assertEq(asset2.balanceOf(receiver), profit2);
+        uint256 assets2 = forwarder.reportAndForward(address(strategy2), 10_000);
+        assertGt(assets2, 0, "Strategy 2 should produce assets");
+        assertEq(asset2.balanceOf(receiver), assets2);
     }
 
     function test_reportAndForward_passesMaxLoss() public {
-        uint256 profitAmount = 10e18;
-        strategy.setProfitPerReport(profitAmount);
-        asset.mint(address(strategy), profitAmount);
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
+
+        // Deploy funds
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        // Simulate profit
+        _simulateProfit(10e18);
+
+        // Use specific maxLoss (100 bps = 1%)
+        vm.prank(keeperEOA);
+        uint256 assets = forwarder.reportAndForward(address(strategy), 100);
+        assertGt(assets, 0, "Should succeed with maxLoss=100bps");
+    }
+
+    function test_reportAndForward_lossScenario_noSharesMinted() public {
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
+
+        // Deploy funds
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        // Simulate a loss in yield source (assets disappear)
+        uint256 loss = 5e18;
+        vm.prank(address(strategy));
+        yieldSource.simulateLoss(loss);
+
+        // Report should register loss; no profit shares minted to forwarder
+        vm.prank(keeperEOA);
+        uint256 assets = forwarder.reportAndForward(address(strategy), 10_000);
+
+        assertEq(assets, 0, "Loss report should return 0 assets");
+        assertEq(strategy.balanceOf(address(forwarder)), 0, "No shares should remain");
+        assertEq(asset.balanceOf(receiver), 0, "Receiver gets nothing on loss");
+    }
+
+    function test_reportAndForward_fuzz_profitAmount(uint256 profit) public {
+        profit = bound(profit, 1e15, 1e27);
+
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
+
+        // Deploy funds
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        // Simulate fuzzed profit
+        _simulateProfit(profit);
 
         vm.prank(keeperEOA);
-        uint256 assets = forwarder.reportAndForward(address(strategy), 100); // 100 basis points
-        assertEq(assets, profitAmount);
+        uint256 assets = forwarder.reportAndForward(address(strategy), 10_000);
+
+        assertGt(assets, 0, "Should always forward positive assets for positive profit");
+        assertEq(strategy.balanceOf(address(forwarder)), 0, "Forwarder should redeem all shares");
+        assertEq(asset.balanceOf(receiver), assets, "Receiver balance should match returned assets");
+    }
+
+    function test_reportAndForward_donationAddressIsForwarder() public view {
+        // Verify the strategy's dragonRouter (donation address) is the forwarder
+        assertEq(strategy.dragonRouter(), address(forwarder), "Strategy donation address should be forwarder");
+    }
+
+    function test_reportAndForward_keeperIsForwarder() public view {
+        // Verify the strategy's keeper is the forwarder
+        assertEq(strategy.keeper(), address(forwarder), "Strategy keeper should be forwarder");
     }
 }
