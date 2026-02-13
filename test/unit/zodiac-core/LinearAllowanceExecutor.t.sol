@@ -6,7 +6,7 @@ import { LinearAllowanceExecutorTestHarness } from "test/mocks/zodiac-core/Linea
 import { LinearAllowanceSingletonForGnosisSafe } from "src/zodiac-core/modules/LinearAllowanceSingletonForGnosisSafe.sol";
 import { LinearAllowanceExecutor } from "src/zodiac-core/LinearAllowanceExecutor.sol";
 import { MockERC20 } from "test/mocks/MockERC20.sol";
-import { MockSafe } from "test/mocks/zodiac-core/MockSafe.sol";
+import { MockSafe } from "test/mocks/MockSafe.sol";
 import { NATIVE_TOKEN, AccessMode } from "src/constants.sol";
 import { AddressSet } from "src/utils/AddressSet.sol";
 import { IAddressSet } from "src/utils/IAddressSet.sol";

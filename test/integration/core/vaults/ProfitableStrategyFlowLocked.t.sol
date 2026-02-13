@@ -4,7 +4,7 @@ pragma solidity ^0.8.25;
 import "forge-std/Test.sol";
 import { MultistrategyLockedVault } from "src/core/MultistrategyLockedVault.sol";
 import { MockERC20 } from "test/mocks/MockERC20.sol";
-import { MockYieldStrategy } from "test/mocks/zodiac-core/MockYieldStrategy.sol";
+import { MockYieldStrategy } from "test/mocks/core/MockYieldStrategy.sol";
 
 import { IMultistrategyLockedVault } from "src/core/interfaces/IMultistrategyLockedVault.sol";
 import { IMultistrategyVault } from "src/core/interfaces/IMultistrategyVault.sol";

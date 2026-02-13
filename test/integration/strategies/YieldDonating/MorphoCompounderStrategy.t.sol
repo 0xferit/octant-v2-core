@@ -6,7 +6,7 @@ import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import { MorphoCompounderStrategy } from "src/strategies/yieldDonating/MorphoCompounderStrategy.sol";
 import { MorphoCompounderStrategyFactory } from "src/factories/MorphoCompounderStrategyFactory.sol";
 import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
-import { IMockStrategy } from "test/mocks/zodiac-core/IMockStrategy.sol";
+import { IMockStrategy } from "test/mocks/core/IMockStrategy.sol";
 import { BaseYieldDonatingIntegrationTest } from "./base/BaseYieldDonatingIntegrationTest.sol";
 import { MorphoTestConfig } from "../config/MorphoTestConfig.sol";
 

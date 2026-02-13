@@ -6,7 +6,7 @@ import { ERC20Mock } from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
 import { TokenizedStrategy } from "src/core/TokenizedStrategy.sol";
 import { MockFactory } from "test/mocks/MockFactory.sol";
-import { IMockStrategy } from "test/mocks/zodiac-core/IMockStrategy.sol";
+import { IMockStrategy } from "test/mocks/core/IMockStrategy.sol";
 import { MockFaultyStrategy } from "test/mocks/core/tokenized-strategies/MockFaultyStrategy.sol";
 import { MockIlliquidStrategy } from "test/mocks/core/tokenized-strategies/MockIlliquidStrategy.sol";
 import { MockYieldSource } from "test/mocks/core/tokenized-strategies/MockYieldSource.sol";

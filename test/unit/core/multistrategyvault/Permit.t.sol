@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import { Setup } from "test/unit/zodiac-core/vaults/Setup.sol";
+import { Test } from "forge-std/Test.sol";
 import { IERC20Permit } from "src/utils/vendor/shamirlabs/IERC20Permit.sol";
 import { MultistrategyVault } from "src/core/MultistrategyVault.sol";
 import { MultistrategyVaultFactory } from "src/factories/MultistrategyVaultFactory.sol";
 import { IMultistrategyVault } from "src/core/interfaces/IMultistrategyVault.sol";
+import { MockERC20 } from "test/mocks/MockERC20.sol";
 
-contract PermitTest is Setup {
+contract PermitTest is Test {
     uint256 constant AMOUNT = 10 ** 18;
     uint256 constant PRIVATE_KEY = 0xabcd; // Known private key for tests
     bytes32 constant EIP712DOMAIN_TYPEHASH =
@@ -15,21 +16,24 @@ contract PermitTest is Setup {
 
     MultistrategyVault public vault;
     MultistrategyVault public vaultImplementation;
+    MockERC20 public asset;
+    address public management = address(3);
     address public bunny;
     MultistrategyVaultFactory public vaultFactory;
 
-    function setUp() public override {
-        super.setUp();
-
+    function setUp() public {
         // Setup bunny address (similar to Python test's bunny)
         bunny = address(0x1234);
+
+        // Create asset
+        asset = new MockERC20(18);
 
         // Deploy vault implementation
         vaultImplementation = new MultistrategyVault();
 
         vaultFactory = new MultistrategyVaultFactory("Test Vault", address(vaultImplementation), management);
 
-        // Create a vault using the asset from Setup
+        // Create a vault
         vault = MultistrategyVault(vaultFactory.deployNewVault(address(asset), "Test Vault", "tVAULT", bunny, 10 days));
 
         // Label addresses for easier debugging

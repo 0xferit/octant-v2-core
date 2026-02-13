@@ -27,7 +27,7 @@ import { IAddressSet } from "src/utils/IAddressSet.sol";
 // Mocks
 import { MockERC20 } from "test/mocks/MockERC20.sol";
 import { MockERC20Staking } from "test/mocks/MockERC20Staking.sol";
-import { MockYieldStrategy } from "test/mocks/zodiac-core/MockYieldStrategy.sol";
+import { MockYieldStrategy } from "test/mocks/core/MockYieldStrategy.sol";
 
 // External dependencies
 import { Staker } from "staker/Staker.sol";

@@ -6,7 +6,7 @@ import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import { SparkStrategy } from "src/strategies/yieldDonating/SparkStrategy.sol";
 import { SparkStrategyFactory } from "src/factories/SparkStrategyFactory.sol";
 import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
-import { IMockStrategy } from "test/mocks/zodiac-core/IMockStrategy.sol";
+import { IMockStrategy } from "test/mocks/core/IMockStrategy.sol";
 import { MockERC20 } from "test/mocks/MockERC20.sol";
 import { BaseYieldDonatingIntegrationTest } from "./base/BaseYieldDonatingIntegrationTest.sol";
 import { SparkTestConfig } from "../config/SparkTestConfig.sol";
