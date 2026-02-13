@@ -388,10 +388,9 @@ contract YSStrategyTest is StrategyBaseTest, YSSetup {
         _assumeNoOverflow(preState.totalAssets, mockRate);
         uint256 currentValue = preState.totalAssets.mulDiv(mockRate, WadRayMath.RAY);
 
-        // Set up insolvency
-        _assumeNoOverflow(preState.userDebt, preState.dragonDebt);
-        vm.assume(preState.userDebt + preState.dragonDebt > 0);
-        vm.assume(currentValue < preState.userDebt + preState.dragonDebt);
+        // Set up insolvency: vault value < user debt (matches _isVaultInsolvent definition)
+        vm.assume(preState.userDebt > 0);
+        vm.assume(currentValue < preState.userDebt);
 
         // Not shutdown
         _storeData(address(ysStrategy), TS_FLAGS_SLOT, TS_SHUTDOWN_OFFSET, TS_SHUTDOWN_WIDTH, 0);
@@ -425,16 +424,19 @@ contract YSStrategyTest is StrategyBaseTest, YSSetup {
         _assumeNoOverflow(preState.totalAssets, mockRate);
         uint256 currentValue = preState.totalAssets.mulDiv(mockRate, WadRayMath.RAY);
 
-        // Insolvency
-        _assumeNoOverflow(preState.userDebt, preState.dragonDebt);
-        vm.assume(preState.userDebt + preState.dragonDebt > 0);
-        vm.assume(currentValue < preState.userDebt + preState.dragonDebt);
+        // Insolvency: vault value < user debt (matches _isVaultInsolvent definition)
+        vm.assume(preState.userDebt > 0);
+        vm.assume(currentValue < preState.userDebt);
+
+        // Ensure _convertToAssets(1) > 0 so we reach the solvency check
+        // During insolvency, parent logic: 1 * totalAssets / totalSupply >= 1
+        vm.assume(preState.totalAssets >= preState.totalSupply);
 
         // Set lastReport to now (no lockup)
         _storeData(address(ysStrategy), TS_KEEPER_SLOT, TS_LAST_REPORT_OFFSET, TS_LAST_REPORT_WIDTH, block.timestamp);
 
         vm.prank(_dragonRouter);
-        vm.expectRevert("Dragon cannot operate during insolvency");
+        vm.expectRevert("Transfer would cause vault insolvency");
         iYSStrategy.redeem(1, _dragonRouter, _dragonRouter);
     }
 
@@ -680,14 +682,12 @@ contract YSStrategyTest is StrategyBaseTest, YSSetup {
         uint256 mockRate = _loadUInt256(address(ysStrategy), MOCK_YS_EXCHANGE_RATE_SLOT);
         vm.assume(mockRate > 0);
 
-        // Ensure insolvent
+        // Ensure insolvent: vault value < user debt (matches _isVaultInsolvent definition)
         _assumeNoOverflow(totalAssets, mockRate);
         uint256 currentValue = totalAssets.mulDiv(mockRate, WadRayMath.RAY);
         uint256 userDebt = _loadUInt256(address(ysStrategy), YS_TOTAL_DEBT_OWED_TO_USER_SLOT);
-        uint256 dragonDebt = _loadUInt256(address(ysStrategy), YS_DRAGON_ROUTER_DEBT_SLOT);
-        _assumeNoOverflow(userDebt, dragonDebt);
-        vm.assume(userDebt + dragonDebt > 0);
-        vm.assume(currentValue < userDebt + dragonDebt);
+        vm.assume(userDebt > 0);
+        vm.assume(currentValue < userDebt);
 
         // Avoid overflow in proportional calc
         _assumeNoOverflow(amount, totalSupply);
