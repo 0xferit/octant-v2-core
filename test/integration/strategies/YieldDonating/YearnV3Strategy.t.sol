@@ -529,6 +529,25 @@ contract YearnV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         );
     }
 
+    // ========== AVAILABLE DEPOSIT LIMIT EDGE CASE TESTS ==========
+
+    /// @notice Test available deposit limit returns 0 when idle assets exceed vault limit
+    function testAvailableDepositLimitIdleExceedsVaultLimitYearn() public {
+        uint256 yearnLimit = ITokenizedStrategy(_compounderVault()).maxDeposit(address(strategy));
+
+        vm.assume(yearnLimit < type(uint256).max / 2);
+
+        uint256 excessIdleAmount = yearnLimit + 1000e6;
+        airdrop(ERC20(_asset()), address(strategy), excessIdleAmount);
+
+        uint256 limit = strategy.availableDepositLimit(user);
+        uint256 idleBalance = ERC20(_asset()).balanceOf(address(strategy));
+
+        assertEq(idleBalance, excessIdleAmount, "Strategy should have excess idle assets");
+        assertGt(idleBalance, yearnLimit, "Idle assets should exceed yearn limit");
+        assertEq(limit, 0, "Available deposit limit should be 0 when idle assets exceed yearn limit");
+    }
+
     // ========== AVAILABLE WITHDRAW LIMIT OVERFLOW TESTS ==========
 
     function testAvailableWithdrawLimitNoOverflowYearn() public {
@@ -549,6 +568,13 @@ contract YearnV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
     function testFuzzAvailableWithdrawLimitNeverRevertsYearn(uint256 a, uint256 b) public {
         _testFuzzAvailableWithdrawLimitNeverReverts(a, b);
+    }
+
+    // ========== HARVEST OVERFLOW TESTS ==========
+
+    /// @notice Test that _harvestAndReport caps at type(uint256).max when convertToAssets overflows with idle
+    function testHarvestOverflowFromVaultYearn() public {
+        _testHarvestOverflowFromVault();
     }
 
     // ===== LOSS SCENARIO TESTS =====

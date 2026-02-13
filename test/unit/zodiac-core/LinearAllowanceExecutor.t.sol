@@ -245,6 +245,150 @@ contract LinearAllowanceExecutorTest is Test {
         assertEq(transferredAmount, DRIP_RATE, "Should work in NONE mode");
     }
 
+    function testGetMaxWithdrawableAmount() public {
+        // Set up allowance for executor
+        vm.prank(address(mockSafe));
+        allowanceModule.setAllowance(address(executor), NATIVE_TOKEN, DRIP_RATE);
+
+        // Advance time to accrue allowance
+        vm.warp(block.timestamp + 1 days);
+
+        // Get max withdrawable - should be min(allowance, safe balance)
+        uint256 maxWithdrawable = executor.getMaxWithdrawableAmount(allowanceModule, address(mockSafe), NATIVE_TOKEN);
+
+        // Safe has 10 ether, allowance is 1 ether, so max should be 1 ether
+        assertEq(maxWithdrawable, DRIP_RATE, "Max withdrawable should be the allowance amount");
+    }
+
+    function testGetMaxWithdrawableAmount_LimitedBySafeBalance() public {
+        // Set up allowance for executor
+        vm.prank(address(mockSafe));
+        allowanceModule.setAllowance(address(executor), NATIVE_TOKEN, DRIP_RATE);
+
+        // Advance time to accrue a lot of allowance
+        vm.warp(block.timestamp + 100 days);
+
+        // Reduce safe balance
+        vm.deal(address(mockSafe), 0.5 ether);
+
+        uint256 maxWithdrawable = executor.getMaxWithdrawableAmount(allowanceModule, address(mockSafe), NATIVE_TOKEN);
+        assertEq(maxWithdrawable, 0.5 ether, "Max withdrawable should be limited by safe balance");
+    }
+
+    function testGetMaxWithdrawableAmount_ERC20() public {
+        // Set up allowance for executor
+        vm.prank(address(mockSafe));
+        allowanceModule.setAllowance(address(executor), address(mockToken), DRIP_RATE);
+
+        // Advance time
+        vm.warp(block.timestamp + 1 days);
+
+        uint256 maxWithdrawable = executor.getMaxWithdrawableAmount(
+            allowanceModule,
+            address(mockSafe),
+            address(mockToken)
+        );
+        assertEq(maxWithdrawable, DRIP_RATE, "Max withdrawable for ERC20 should work");
+    }
+
+    function testExecuteAllowanceTransfers_Batch() public {
+        // Set up allowance for executor with multiple safes
+        MockSafe mockSafe2 = new MockSafe();
+        vm.deal(address(mockSafe2), 10 ether);
+        mockSafe2.enableModule(address(allowanceModule));
+
+        vm.prank(address(mockSafe));
+        allowanceModule.setAllowance(address(executor), NATIVE_TOKEN, DRIP_RATE);
+
+        vm.prank(address(mockSafe2));
+        allowanceModule.setAllowance(address(executor), NATIVE_TOKEN, DRIP_RATE * 2);
+
+        // Advance time to accrue allowance
+        vm.warp(block.timestamp + 1 days);
+
+        uint256 executorBalanceBefore = address(executor).balance;
+
+        // Execute batch transfer
+        address[] memory safes = new address[](2);
+        safes[0] = address(mockSafe);
+        safes[1] = address(mockSafe2);
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = NATIVE_TOKEN;
+        tokens[1] = NATIVE_TOKEN;
+
+        uint256[] memory amounts = executor.executeAllowanceTransfers(allowanceModule, safes, tokens);
+
+        assertEq(amounts.length, 2, "Should return 2 amounts");
+        assertEq(amounts[0], DRIP_RATE, "First transfer should be DRIP_RATE");
+        assertEq(amounts[1], DRIP_RATE * 2, "Second transfer should be DRIP_RATE * 2");
+        assertEq(
+            address(executor).balance - executorBalanceBefore,
+            DRIP_RATE * 3,
+            "Total balance increase should be sum of transfers"
+        );
+    }
+
+    function testExecuteAllowanceTransfers_BatchWithModuleValidation() public {
+        // Deploy a non-allowlisted module
+        LinearAllowanceSingletonForGnosisSafe nonAllowsetedModule = new LinearAllowanceSingletonForGnosisSafe();
+
+        address[] memory safes = new address[](1);
+        safes[0] = address(mockSafe);
+        address[] memory tokens = new address[](1);
+        tokens[0] = NATIVE_TOKEN;
+
+        // Should revert because module is not in allowset
+        vm.expectRevert(abi.encodeWithSelector(NotInAllowset.selector, address(nonAllowsetedModule)));
+        executor.executeAllowanceTransfers(nonAllowsetedModule, safes, tokens);
+    }
+
+    function testWithdraw_ETH() public {
+        // Send ETH to executor
+        vm.deal(address(executor), 5 ether);
+        address payable recipient = payable(makeAddr("recipient"));
+
+        uint256 recipientBefore = recipient.balance;
+        executor.withdraw(NATIVE_TOKEN, 3 ether, recipient);
+        assertEq(recipient.balance - recipientBefore, 3 ether, "Recipient should receive 3 ether");
+    }
+
+    function testWithdraw_ERC20() public {
+        // Send tokens to executor
+        mockToken.mint(address(executor), 5 ether);
+        address payable recipient = payable(makeAddr("recipient"));
+
+        uint256 recipientBefore = mockToken.balanceOf(recipient);
+        executor.withdraw(address(mockToken), 3 ether, recipient);
+        assertEq(
+            mockToken.balanceOf(recipient) - recipientBefore,
+            3 ether,
+            "Recipient should receive 3 ether of tokens"
+        );
+    }
+
+    function testWithdraw_RevertIf_ZeroAddress() public {
+        vm.deal(address(executor), 5 ether);
+        vm.expectRevert("LinearAllowanceExecutorTestHarness: cannot withdraw to zero address");
+        executor.withdraw(NATIVE_TOKEN, 1 ether, payable(address(0)));
+    }
+
+    function testWithdraw_RevertIf_InsufficientETH() public {
+        vm.expectRevert("LinearAllowanceExecutorTestHarness: insufficient ETH balance");
+        executor.withdraw(NATIVE_TOKEN, 1 ether, payable(makeAddr("recipient")));
+    }
+
+    function testWithdraw_RevertIf_InsufficientTokenBalance() public {
+        vm.expectRevert("LinearAllowanceExecutorTestHarness: insufficient token balance");
+        executor.withdraw(address(mockToken), 1 ether, payable(makeAddr("recipient")));
+    }
+
+    function testAssignModuleAddressSet_UpdatesReference() public {
+        AddressSet newAddressSet = new AddressSet();
+        executor.assignModuleAddressSet(IAddressSet(address(newAddressSet)));
+        assertEq(address(executor.moduleAddressSet()), address(newAddressSet), "Module address set should be updated");
+    }
+
     function testExecuteMultipleTransfersWithChangingAllowance() public {
         // Set up allowance for executor
         vm.prank(address(mockSafe));

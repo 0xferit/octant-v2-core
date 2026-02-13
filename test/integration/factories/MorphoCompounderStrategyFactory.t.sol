@@ -166,6 +166,11 @@ contract MorphoCompounderStrategyFactoryTest is BaseFactoryIntegrationTest {
         _testComputeStrategyAddressDifferentParams();
     }
 
+    /// @notice Test getStrategiesByDeployer returns correct data
+    function testGetStrategiesByDeployerMorpho() public {
+        _testGetStrategiesByDeployer();
+    }
+
     /// @notice Test computeStrategyAddress reverts on invalid vault
     function testComputeStrategyAddressInvalidVaultMorpho() public {
         _testComputeStrategyAddressInvalidVault();

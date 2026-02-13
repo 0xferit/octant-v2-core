@@ -629,6 +629,195 @@ contract PaymentSplitterFactoryTest is Test {
         assertEq(splitters[1].splitterAddress, addr2);
     }
 
+    // --- sweep tests ---
+
+    function testSweep_Success() public {
+        // Force-send ETH to the factory (simulating accidental send)
+        vm.deal(address(factory), 1 ether);
+
+        uint256 balanceBefore = alice.balance;
+        factory.sweep(alice);
+        assertEq(alice.balance, balanceBefore + 1 ether, "Alice should receive swept ETH");
+        assertEq(address(factory).balance, 0, "Factory should have zero balance after sweep");
+    }
+
+    function testSweep_RevertIf_NotOwner() public {
+        vm.deal(address(factory), 1 ether);
+
+        vm.prank(alice);
+        vm.expectRevert("PaymentSplitterFactory: not owner");
+        factory.sweep(alice);
+    }
+
+    function testSweep_RevertIf_NoBalance() public {
+        vm.expectRevert("PaymentSplitterFactory: no ETH to sweep");
+        factory.sweep(alice);
+    }
+
+    // --- predictDeterministicAddress tests ---
+
+    function testPredictDeterministicAddress_MatchesCreate() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        // Predict before deploying
+        address predicted = factory.predictDeterministicAddress(address(this));
+
+        // Deploy
+        address actual = factory.createPaymentSplitter(payees, payeeNames, shares);
+
+        assertEq(predicted, actual, "Predicted address should match actual deployment");
+    }
+
+    function testPredictDeterministicAddress_DifferentAfterDeploy() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        address predicted1 = factory.predictDeterministicAddress(address(this));
+        factory.createPaymentSplitter(payees, payeeNames, shares);
+
+        // After a deployment, the prediction for the same deployer should change
+        // (because deployment count is part of the salt)
+        address predicted2 = factory.predictDeterministicAddress(address(this));
+        assertTrue(predicted1 != predicted2, "Prediction should change after deployment");
+    }
+
+    // --- length mismatch on createPaymentSplitterWithSalt ---
+
+    function testCreatePaymentSplitterWithSalt_RevertIf_LengthMismatch() public {
+        address[] memory payees = new address[](2);
+        payees[0] = alice;
+        payees[1] = bob;
+
+        string[] memory payeeNames = new string[](1); // Mismatched
+        payeeNames[0] = "Recipient";
+
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = 50;
+        shares[1] = 50;
+
+        bytes32 salt = keccak256("mismatch-salt-test");
+
+        vm.expectRevert("PaymentSplitterFactory: length mismatch");
+        factory.createPaymentSplitterWithSalt(payees, payeeNames, shares, salt);
+    }
+
+    // --- length mismatch on createPaymentSplitterWithETH ---
+
+    function testCreatePaymentSplitterWithETH_RevertIf_LengthMismatch() public {
+        address[] memory payees = new address[](2);
+        payees[0] = alice;
+        payees[1] = bob;
+
+        string[] memory payeeNames = new string[](1); // Mismatched
+        payeeNames[0] = "Recipient";
+
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = 50;
+        shares[1] = 50;
+
+        vm.expectRevert("PaymentSplitterFactory: length mismatch");
+        factory.createPaymentSplitterWithETH{ value: 1 ether }(payees, payeeNames, shares);
+    }
+
+    // --- getSplittersByDeployer ---
+
+    function testGetSplittersByDeployer_EmptyInitially() public view {
+        PaymentSplitterFactory.SplitterInfo[] memory splitters = factory.getSplittersByDeployer(alice);
+        assertEq(splitters.length, 0, "Should be empty initially");
+    }
+
+    // --- implementation is non-zero ---
+
+    function testImplementation_IsSet() public view {
+        assertTrue(factory.implementation() != address(0), "Implementation should be set");
+    }
+
+    // --- owner is set ---
+
+    function testOwner_IsDeployer() public view {
+        assertEq(factory.owner(), address(this), "Owner should be the deployer");
+    }
+
+    // --- PaymentSplitterCreated event emission ---
+
+    function testEmitsPaymentSplitterCreatedEvent() public {
+        address[] memory payees = new address[](1);
+        payees[0] = alice;
+        string[] memory payeeNames = new string[](1);
+        payeeNames[0] = "Recipient";
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 100;
+
+        address predicted = factory.predictDeterministicAddress(address(this));
+
+        vm.expectEmit(true, true, false, true);
+        emit PaymentSplitterFactory.PaymentSplitterCreated(address(this), predicted, payees, payeeNames, shares);
+
+        factory.createPaymentSplitter(payees, payeeNames, shares);
+    }
+
+    // ========================================================
+    //  Branch coverage: initialization failure paths
+    // ========================================================
+
+    /// @notice createPaymentSplitterWithETH reverts when initialization fails (empty payees)
+    function testCreatePaymentSplitterWithETH_RevertIf_InitializationFails() public {
+        address[] memory emptyPayees = new address[](0);
+        string[] memory emptyNames = new string[](0);
+        uint256[] memory emptyShares = new uint256[](0);
+
+        vm.expectRevert("PaymentSplitterFactory: initialization failed");
+        factory.createPaymentSplitterWithETH{ value: 1 ether }(emptyPayees, emptyNames, emptyShares);
+    }
+
+    /// @notice createPaymentSplitterWithSalt reverts when initialization fails (empty payees)
+    function testCreatePaymentSplitterWithSalt_RevertIf_InitializationFails() public {
+        address[] memory emptyPayees = new address[](0);
+        string[] memory emptyNames = new string[](0);
+        uint256[] memory emptyShares = new uint256[](0);
+        bytes32 salt = keccak256("init-fail-salt");
+
+        vm.expectRevert("PaymentSplitterFactory: initialization failed");
+        factory.createPaymentSplitterWithSalt(emptyPayees, emptyNames, emptyShares, salt);
+    }
+
+    /// @notice createPaymentSplitterWithETHAndSalt reverts when initialization fails (empty payees)
+    function testCreatePaymentSplitterWithETHAndSalt_RevertIf_InitializationFails() public {
+        address[] memory emptyPayees = new address[](0);
+        string[] memory emptyNames = new string[](0);
+        uint256[] memory emptyShares = new uint256[](0);
+        bytes32 salt = keccak256("init-fail-eth-salt");
+
+        vm.expectRevert("PaymentSplitterFactory: initialization failed");
+        factory.createPaymentSplitterWithETHAndSalt{ value: 1 ether }(emptyPayees, emptyNames, emptyShares, salt);
+    }
+
+    /// @notice sweep reverts when recipient cannot receive ETH
+    function testSweep_RevertIf_RecipientRejectsETH() public {
+        // Deploy a contract that rejects ETH
+        EthRejecter rejecter = new EthRejecter();
+
+        // Force-send ETH to the factory
+        vm.deal(address(factory), 1 ether);
+
+        vm.expectRevert("PaymentSplitterFactory: sweep failed");
+        factory.sweep(payable(address(rejecter)));
+    }
+
     // Helper function for receiving ETH
     receive() external payable {}
+}
+
+/// @notice Helper contract that rejects all ETH transfers
+contract EthRejecter {
+    // No receive or fallback - will revert on ETH transfer
 }

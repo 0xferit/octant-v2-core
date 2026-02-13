@@ -262,6 +262,40 @@ abstract contract BaseFactoryIntegrationTest is Test {
         assertTrue(addr1 != addr4, "Different symbol should produce different address");
     }
 
+    /// @notice Shared test: getStrategiesByDeployer returns correct data
+    function _testGetStrategiesByDeployer() internal virtual {
+        // Initially empty
+        BaseStrategyFactory.StrategyInfo[] memory empty = BaseStrategyFactory(_factory()).getStrategiesByDeployer(
+            management
+        );
+        assertEq(empty.length, 0, "Should be empty initially");
+
+        // Deploy a strategy
+        vm.startPrank(management);
+        _createStrategy("Test Vault", string.concat(_strategySymbolPrefix(), "TST"), management);
+        vm.stopPrank();
+
+        // Check getter returns correct data
+        BaseStrategyFactory.StrategyInfo[] memory infos = BaseStrategyFactory(_factory()).getStrategiesByDeployer(
+            management
+        );
+        assertEq(infos.length, 1, "Should have one strategy");
+        assertEq(infos[0].deployerAddress, management, "Deployer address should match");
+        assertEq(infos[0].vaultTokenName, "Test Vault", "Vault name should match");
+        assertEq(infos[0].donationAddress, donationAddress, "Donation address should match");
+        assertTrue(infos[0].timestamp > 0, "Timestamp should be set");
+
+        // Deploy a second strategy
+        vm.startPrank(management);
+        _createStrategy("Test Vault 2", string.concat(_strategySymbolPrefix(), "TST2"), management);
+        vm.stopPrank();
+
+        BaseStrategyFactory.StrategyInfo[] memory infos2 = BaseStrategyFactory(_factory()).getStrategiesByDeployer(
+            management
+        );
+        assertEq(infos2.length, 2, "Should have two strategies");
+    }
+
     /// @notice Shared test: computeStrategyAddress reverts on invalid vault (for factories with validation)
     /// @dev Only call this for factories where _factoryValidatesVaultAsset() returns true
     function _testComputeStrategyAddressInvalidVault() internal virtual {
