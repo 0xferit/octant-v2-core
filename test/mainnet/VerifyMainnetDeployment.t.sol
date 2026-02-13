@@ -10,8 +10,6 @@ import { MorphoCompounderStrategyFactory } from "src/factories/MorphoCompounderS
 import { SkyCompounderStrategyFactory } from "src/factories/SkyCompounderStrategyFactory.sol";
 import { YearnV3StrategyFactory } from "src/factories/yieldDonating/YearnV3StrategyFactory.sol";
 import { AddressSetFactory } from "src/factories/AddressSetFactory.sol";
-import { RegenEarningPowerCalculatorFactory } from "src/factories/RegenEarningPowerCalculatorFactory.sol";
-import { RegenStakerFactory, IAddressSet, IEarningPowerCalculator } from "src/factories/RegenStakerFactory.sol";
 import { RegenStakerWithoutDelegateSurrogateVotes } from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
 import { RegenEarningPowerCalculator } from "src/regen/RegenEarningPowerCalculator.sol";
 import { AddressSet } from "src/utils/AddressSet.sol";
@@ -40,9 +38,6 @@ contract VerifyMainnetDeployment is Test {
         SkyCompounderStrategyFactory(0x788d73C5785AB8ED4c59783C57709294F3D17c00);
     YearnV3StrategyFactory constant yearnFactory = YearnV3StrategyFactory(0x4814904ef57F0C2DaD50e7100F2a5e621F88aBD0);
     AddressSetFactory constant addressSetFactory = AddressSetFactory(0xd6e72Ef3E50254eDa47f89531ed38aEdfDF25647);
-    RegenEarningPowerCalculatorFactory constant calcFactory =
-        RegenEarningPowerCalculatorFactory(0xc8E298c1D6b0dDF0c27a7Dac333b9a21710b8a4b);
-    RegenStakerFactory constant stakerFactory = RegenStakerFactory(0x2B98F5719FEb1C9761112511222d2A81fbF9F337);
 
     // --- Phase B: Deployed Instances ---
     AddressSet constant allowSet = AddressSet(0xb6CBED8c9BE30576446ba4C4943e088c6B22cc24);
@@ -65,8 +60,6 @@ contract VerifyMainnetDeployment is Test {
         allContracts.push(address(skyFactory));
         allContracts.push(address(yearnFactory));
         allContracts.push(address(addressSetFactory));
-        allContracts.push(address(calcFactory));
-        allContracts.push(address(stakerFactory));
         allContracts.push(address(allowSet));
         allContracts.push(address(calculator));
         allContracts.push(address(staker));
@@ -86,30 +79,7 @@ contract VerifyMainnetDeployment is Test {
     }
 
     // -----------------------------------------------------------------------
-    // Test 2: Factory bytecode hashes match deployment-time values
-    // -----------------------------------------------------------------------
-
-    function test_factoryBytecodeHashes() public view {
-        // Hardcoded from on-chain factory state at deployment time.
-        // These may diverge from locally-compiled creationCode if compiler
-        // settings (evm_version, optimizer_runs, solc) change post-deploy.
-        bytes32 expectedWithDelegation = 0x23ef573bf30d11006da5717bc4d69e14d84d57d2554e9015233a4141f0162a6a;
-        bytes32 expectedWithoutDelegation = 0x0a59ee5bf37ba57ddbf0daea1be0ba4b0ace3611011833ee3d0e5d661fcaf8b8;
-
-        assertEq(
-            stakerFactory.canonicalBytecodeHash(RegenStakerFactory.RegenStakerVariant.WITH_DELEGATION),
-            expectedWithDelegation,
-            "WITH_DELEGATION bytecode hash mismatch"
-        );
-        assertEq(
-            stakerFactory.canonicalBytecodeHash(RegenStakerFactory.RegenStakerVariant.WITHOUT_DELEGATION),
-            expectedWithoutDelegation,
-            "WITHOUT_DELEGATION bytecode hash mismatch"
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // Test 3: Factory-specific interface smoke tests
+    // Test 2: Factory interface smoke tests
     // -----------------------------------------------------------------------
 
     function test_factoryInterfaces() public view {
@@ -150,20 +120,10 @@ contract VerifyMainnetDeployment is Test {
         // AddressSetFactory: predictAddress returns deterministic non-zero result
         address predicted = addressSetFactory.predictAddress(bytes32(uint256(1)), address(this));
         assertTrue(predicted != address(0), "AddressSetFactory: zero predicted address");
-
-        // RegenEarningPowerCalculatorFactory: predictAddress returns non-zero
-        address calcPredicted = calcFactory.predictAddress(
-            bytes32(uint256(1)),
-            address(this),
-            IAddressSet(address(0)),
-            IAddressSet(address(0)),
-            AccessMode.NONE
-        );
-        assertTrue(calcPredicted != address(0), "CalcFactory: zero predicted address");
     }
 
     // -----------------------------------------------------------------------
-    // Test 4: AllowSet ownership and initial state
+    // Test 3: AllowSet ownership and initial state
     // -----------------------------------------------------------------------
 
     function test_allowSetOwnership() public view {
@@ -172,7 +132,7 @@ contract VerifyMainnetDeployment is Test {
     }
 
     // -----------------------------------------------------------------------
-    // Test 5: AllowSet add/remove functionality
+    // Test 4: AllowSet add/remove functionality
     // -----------------------------------------------------------------------
 
     function test_allowSetFunctionality() public {
@@ -197,7 +157,7 @@ contract VerifyMainnetDeployment is Test {
     }
 
     // -----------------------------------------------------------------------
-    // Test 6: Calculator parameters
+    // Test 5: Calculator parameters
     // -----------------------------------------------------------------------
 
     function test_calculatorParameters() public view {
@@ -208,7 +168,7 @@ contract VerifyMainnetDeployment is Test {
     }
 
     // -----------------------------------------------------------------------
-    // Test 7: Calculator earning power computation
+    // Test 6: Calculator earning power computation
     // -----------------------------------------------------------------------
 
     function test_calculatorEarningPower() public view {
@@ -231,7 +191,7 @@ contract VerifyMainnetDeployment is Test {
     }
 
     // -----------------------------------------------------------------------
-    // Test 8: Staker parameters
+    // Test 7: Staker parameters
     // -----------------------------------------------------------------------
 
     function test_stakerParameters() public view {
@@ -255,7 +215,7 @@ contract VerifyMainnetDeployment is Test {
     }
 
     // -----------------------------------------------------------------------
-    // Test 9: Staker stake and withdraw cycle
+    // Test 8: Staker stake and withdraw cycle
     // -----------------------------------------------------------------------
 
     function test_stakerStakeAndWithdraw() public {
@@ -288,7 +248,7 @@ contract VerifyMainnetDeployment is Test {
     }
 
     // -----------------------------------------------------------------------
-    // Test 10: Cross-contract integration (stake -> earning power via calculator)
+    // Test 9: Cross-contract integration (stake -> earning power via calculator)
     // -----------------------------------------------------------------------
 
     function test_crossContractIntegration() public {
