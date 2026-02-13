@@ -11,7 +11,7 @@ import { IBaseStrategy } from "src/core/interfaces/IBaseStrategy.sol";
  * @dev Behavior overview:
  *      - On report(), harvests the underlying position via BaseStrategy.harvestAndReport()
  *      - If newTotalAssets > oldTotalAssets, mints shares equal to the profit (asset value) to the dragon router
- *      - If losses occur and burning is enabled, burns dragon router shares (up to its balance) using rounding-up shares-to-burn
+ *      - If losses occur and burning is enabled, burns dragon router shares (up to its balance) using rounding-down shares-to-burn
  *      - No tracked-loss bucket exists; any loss not covered by dragon router burning reduces totalAssets and affects PPS for all holders
  *
  * Economic notes:
@@ -89,8 +89,11 @@ contract YieldDonatingTokenizedStrategy is TokenizedStrategy {
      */
     function _handleDragonLossProtection(StrategyData storage S, uint256 loss) internal {
         if (S.enableBurning) {
-            // Convert loss to shares that should be burned
-            uint256 sharesToBurn = _convertToShares(S, loss, Math.Rounding.Ceil);
+            // Convert loss to shares that should be burned.
+            // Floor rounding: any sub-wei remainder is socialized via PPS reduction
+            // rather than over-burning dragon shares. This avoids systematically
+            // extracting value from dragon in favor of depositors.
+            uint256 sharesToBurn = _convertToShares(S, loss, Math.Rounding.Floor);
 
             // Can only burn up to available shares from dragon router
             uint256 sharesBurned = Math.min(sharesToBurn, S.balances[S.dragonRouter]);
