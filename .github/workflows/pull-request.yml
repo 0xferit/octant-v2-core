@@ -121,8 +121,26 @@ jobs:
           echo "|------|---------|--------------|------------|---------|" >> src_coverage.md
 
           # Run coverage using yarn script (handles Hats protocol patching)
-          echo "Running yarn coverage:summary..."
-          if yarn coverage:summary > full_coverage.txt 2>coverage_error.txt; then
+          # Retry up to 3 times to handle transient RPC errors in fork tests
+          MAX_RETRIES=3
+          ATTEMPT=0
+          COVERAGE_OK=false
+          while [ "$ATTEMPT" -lt "$MAX_RETRIES" ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Running yarn coverage:summary (attempt $ATTEMPT/$MAX_RETRIES)..."
+            if yarn coverage:summary > full_coverage.txt 2>coverage_error.txt; then
+              COVERAGE_OK=true
+              break
+            else
+              echo "Attempt $ATTEMPT failed (exit code $?)"
+              if [ "$ATTEMPT" -lt "$MAX_RETRIES" ]; then
+                echo "Retrying in 10 seconds..."
+                sleep 10
+              fi
+            fi
+          done
+
+          if [ "$COVERAGE_OK" = true ]; then
             echo "Coverage completed successfully"
 
             # Process each src/ line and add emoji indicators
@@ -177,11 +195,10 @@ jobs:
               echo "| $file | $lines_formatted | $stmts_formatted | $branch_formatted | $funcs_formatted |" >> src_coverage.md
             done
           else
-            exit_code=$?
-            echo "Coverage failed with exit code $exit_code"
+            echo "Coverage failed after $MAX_RETRIES attempts"
             echo "## ⚠️ Coverage Generation Failed" >> src_coverage.md
             echo "" >> src_coverage.md
-            echo "Exit code: $exit_code" >> src_coverage.md
+            echo "Failed after $MAX_RETRIES attempts" >> src_coverage.md
             echo "" >> src_coverage.md
             echo "### Error output (stderr):" >> src_coverage.md
             echo '```' >> src_coverage.md
