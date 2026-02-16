@@ -93,7 +93,7 @@ address constant EXPECTED_STAKER_FACTORY = 0x8f15465724bF7a7fF4171257E4f03Df1A58
 // Phase B: Instances
 address constant EXPECTED_ALLOWSET = 0x19cD4e88f7F76948e54285b4E47B7d202225ee50;
 address constant EXPECTED_CALCULATOR = 0x66F7b714360866725EF9d5C13EB4761113F3580c;
-address constant EXPECTED_STAKER = 0x222613976Ac9D97dcc259302f5f7d85cb1a18C22;
+address constant EXPECTED_STAKER = 0xD883B716F03EDcC3a007b6B1e5131eE81f04490a;
 address constant EXPECTED_STAKER_ALLOWSET = 0xb0661B32f9B5D0eBAde3fec11DF21FBd12a1e941;
 address constant EXPECTED_STAKER_BLOCKSET = 0xa64E2d8dd4C283F89dCF1Db5414A0c78ae4e85b5;
 
@@ -110,10 +110,11 @@ address constant EXPECTED_STAKER_BLOCKSET = 0xa64E2d8dd4C283F89dCF1Db5414A0c78ae
 ///         WALLET_TYPE, PRIVATE_KEY) remain as env vars since they are
 ///         deployment-time concerns.
 ///
-///         The deployment is structured as 6 Gnosis Safe transactions:
+///         The deployment is structured as 7 Gnosis Safe transactions:
 ///           Phase A (Tx 1-3): 10 factory/implementation contracts via Nick's CREATE2
-///           Phase B (Tx 4-6): 3 address sets + calculator + staker
-///                             Staker receives its allowset/blockset at construction
+///           Phase B (Tx 4-7): 3 address sets + calculator + staker + staker access set assignment
+///                             Staker is constructed with address(0) for allowset/blockset,
+///                             then assigned post-construction via admin setters in Tx 7
 ///                             (accessMode=NONE, so they are initially inactive).
 ///
 ///         Replay on a fork (simulation only, default):
@@ -190,8 +191,8 @@ contract DeployProtocol is Script, BatchScript {
             SAFE, // admin
             REWARD_DURATION, // rewardDuration
             MINIMUM_STAKE, // minimumStakeAmount
-            IAddressSet(_predictAddressSet(asFactory, STAKER_ALLOWSET_SALT, SAFE)), // stakerAllowset
-            IAddressSet(_predictAddressSet(asFactory, STAKER_BLOCKSET_SALT, SAFE)), // stakerBlockset
+            IAddressSet(address(0)), // stakerAllowset (assigned post-construction via Tx 7)
+            IAddressSet(address(0)), // stakerBlockset (assigned post-construction via Tx 7)
             AccessMode.NONE, // stakerAccessMode
             IAddressSet(_predictAddressSet(asFactory, ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE)) // allocationMechanismAllowset
         );
@@ -348,12 +349,12 @@ contract DeployProtocol is Script, BatchScript {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    //  PHASE B: Instance Deployment (3 Safe Transactions)
+    //  PHASE B: Instance Deployment (4 Safe Transactions)
     //
     //  Requires Phase A factories to be deployed and executed on-chain first.
     //  Deploys 3 address sets, the earning power calculator, and the staker.
-    //  The staker receives its allowset and blockset at construction time
-    //  (with accessMode=NONE, so they are initially inactive).
+    //  The staker is constructed with address(0) for allowset/blockset, then
+    //  assigned post-construction via admin setters in Tx 7.
     // ═════════════════════════════════════════════════════════════════════════
 
     /// @notice Tx 4: Deploy all 3 address sets via AddressSetFactory
@@ -415,9 +416,9 @@ contract DeployProtocol is Script, BatchScript {
     }
 
     /// @notice Tx 6: Deploy RegenStaker (WITHOUT delegation) via RegenStakerFactory
-    ///         Staker receives its allowset/blockset at construction time (computed
-    ///         deterministically via AddressSetFactory.predictAddress). accessMode
-    ///         is set to NONE so the sets are initially inactive.
+    ///         Staker is constructed with address(0) for stakerAllowset and
+    ///         stakerBlockset. These are assigned post-construction in Tx 7.
+    ///         accessMode is set to NONE so the sets are initially inactive.
     ///         Single Safe transaction (not MultiSend).
     function phaseB_staker() external isBatch(SAFE) {
         // Compute deterministic addresses for staker access control sets
@@ -427,8 +428,8 @@ contract DeployProtocol is Script, BatchScript {
             rewardsToken: IERC20(WETH),
             stakeToken: IERC20(GLM),
             admin: SAFE,
-            stakerAllowset: IAddressSet(asFactory.predictAddress(STAKER_ALLOWSET_SALT, SAFE)),
-            stakerBlockset: IAddressSet(asFactory.predictAddress(STAKER_BLOCKSET_SALT, SAFE)),
+            stakerAllowset: IAddressSet(address(0)),
+            stakerBlockset: IAddressSet(address(0)),
             stakerAccessMode: AccessMode.NONE,
             allocationMechanismAllowset: IAddressSet(
                 asFactory.predictAddress(ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE)
@@ -450,6 +451,32 @@ contract DeployProtocol is Script, BatchScript {
         address deployed = abi.decode(result, (address));
         require(deployed == EXPECTED_STAKER, "Staker address mismatch");
         console.log("RegenStaker:", deployed);
+    }
+
+    /// @notice Tx 7: Assign staker allowset and blockset via admin setters.
+    ///         Batched into a single Safe MultiSend transaction.
+    function phaseB_stakerAccessSets() external isBatch(SAFE) {
+        address asFactory = _addressSetFactoryAddress();
+
+        addToBatch(
+            EXPECTED_STAKER,
+            0,
+            abi.encodeWithSignature(
+                "setStakerAllowset(address)",
+                _predictAddressSet(asFactory, STAKER_ALLOWSET_SALT, SAFE)
+            )
+        );
+
+        addToBatch(
+            EXPECTED_STAKER,
+            0,
+            abi.encodeWithSignature(
+                "setStakerBlockset(address)",
+                _predictAddressSet(asFactory, STAKER_BLOCKSET_SALT, SAFE)
+            )
+        );
+
+        executeBatch(_shouldSend());
     }
 }
 
