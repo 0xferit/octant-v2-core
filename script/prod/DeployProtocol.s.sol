@@ -41,61 +41,18 @@ import { REGEN_STAKER_V1_CREATION_CODE, REGEN_STAKER_WITHOUT_DELEGATION_V1_CREAT
 
 // ═════════════════════════════════════════════════════════════════════════════
 //
-//  FILE-LEVEL CONSTANTS -- shared by DeployProtocol and VerifyProtocolDeployment
+//  FILE-LEVEL CONSTANTS -- protocol parameters (not deployment targets)
 //
 // ═════════════════════════════════════════════════════════════════════════════
 
-// --- Gnosis Safe & Tokens ---
-address constant SAFE = 0x4B55fA101Dfa399af2FCDa83bB9e77bCa0009418;
+// --- Tokens ---
 address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 address constant GLM = 0x7DD9c5Cba05E151C895FDe1CF355C9A1D5DA6429;
-
-// --- Phase A: CREATE2 Deployment Salts (date-based: DDMMYYYY) ---
-bytes32 constant YIELD_SKIMMING_SALT = keccak256("OCTANT_YIELD_SKIMMING_STRATEGY_16022026");
-bytes32 constant YIELD_DONATING_SALT = keccak256("OCTANT_YIELD_DONATING_STRATEGY_16022026");
-bytes32 constant PAYMENT_SPLITTER_FACTORY_SALT = keccak256("PAYMENT_SPLITTER_FACTORY_16022026");
-bytes32 constant LIDO_FACTORY_SALT = keccak256("LIDO_STRATEGY_FACTORY_16022026");
-bytes32 constant MORPHO_FACTORY_SALT = keccak256("MORPHO_COMPOUNDER_FACTORY_16022026");
-bytes32 constant SKY_FACTORY_SALT = keccak256("SKY_COMPOUNDER_FACTORY_16022026");
-bytes32 constant YEARN_V3_FACTORY_SALT = keccak256("YEARN_V3_STRATEGY_FACTORY_16022026");
-bytes32 constant ADDRESS_SET_FACTORY_SALT = keccak256("ADDRESS_SET_FACTORY_16022026");
-bytes32 constant CALC_FACTORY_SALT = keccak256("REGEN_EARNING_POWER_CALCULATOR_FACTORY_16022026");
-bytes32 constant STAKER_FACTORY_SALT = keccak256("REGEN_STAKER_FACTORY_16022026");
-
-// --- Phase B: Instance Deployment Salts ---
-bytes32 constant ALLOCATION_MECHANISM_ALLOWSET_SALT = keccak256("OCTANT_ALLOCATION_MECHANISM_ALLOWSET_V1");
-bytes32 constant CALCULATOR_SALT = keccak256("OCTANT_REGEN_EARNING_POWER_CALCULATOR_V1");
-bytes32 constant STAKER_SALT = keccak256("OCTANT_REGEN_STAKER_WITHOUT_DELEGATION_V1");
-
-// --- Staker Access Control Salts ---
-bytes32 constant STAKER_ALLOWSET_SALT = keccak256("OCTANT_STAKER_ALLOWSET_V1");
-bytes32 constant STAKER_BLOCKSET_SALT = keccak256("OCTANT_STAKER_BLOCKSET_V1");
 
 // --- Staker Configuration ---
 uint256 constant MAX_BUMP_TIP = 0.002 ether;
 uint256 constant MINIMUM_STAKE = 0;
 uint256 constant REWARD_DURATION = 30 days;
-
-// --- Expected Addresses (deterministic, computed via DeployProtocol.computeAllAddresses()) ---
-
-// Phase A: Factories & Implementations
-address constant EXPECTED_YIELD_SKIMMING = 0x573A99d6717273fcC48072F1A9761b337b4877fF;
-address constant EXPECTED_YIELD_DONATING = 0xb7Ac4a08b9e0FAD5DC154e4F4b35b4365B2Fb3cA;
-address constant EXPECTED_PAYMENT_SPLITTER_FACTORY = 0x11551f2b877055b2731E5A25B1C01966C0D5aaA1;
-address constant EXPECTED_LIDO_FACTORY = 0x4732CF067dEcB38B84F64f4Ae61FD83a6D2eBb03;
-address constant EXPECTED_MORPHO_FACTORY = 0xeC9710B9e3404C788AddD567dF52D669942fA5d2;
-address constant EXPECTED_SKY_FACTORY = 0x67E5dc580c5c8702B7E46BA1812C56d304B136D3;
-address constant EXPECTED_YEARN_FACTORY = 0xd5338eb7DFFE2e16cd217e8b0FA3d762024f614C;
-address constant EXPECTED_ADDRESS_SET_FACTORY = 0x94e05a2bEd3a6bD2809cF8Dcb7dc85b57019F714;
-address constant EXPECTED_CALC_FACTORY = 0x5Afd92333b6e5AF40A55455abD435cb2EE876Dba;
-address constant EXPECTED_STAKER_FACTORY = 0x8f15465724bF7a7fF4171257E4f03Df1A586201D;
-
-// Phase B: Instances
-address constant EXPECTED_ALLOWSET = 0x19cD4e88f7F76948e54285b4E47B7d202225ee50;
-address constant EXPECTED_CALCULATOR = 0x66F7b714360866725EF9d5C13EB4761113F3580c;
-address constant EXPECTED_STAKER = 0xD883B716F03EDcC3a007b6B1e5131eE81f04490a;
-address constant EXPECTED_STAKER_ALLOWSET = 0xb0661B32f9B5D0eBAde3fec11DF21FBd12a1e941;
-address constant EXPECTED_STAKER_BLOCKSET = 0xa64E2d8dd4C283F89dCF1Db5414A0c78ae4e85b5;
 
 // ═════════════════════════════════════════════════════════════════════════════
 //
@@ -105,10 +62,13 @@ address constant EXPECTED_STAKER_BLOCKSET = 0xa64E2d8dd4C283F89dCF1Db5414A0c78ae
 
 /// @title DeployProtocol
 /// @notice Reproducible Foundry script encoding the complete Octant v2 protocol
-///         deployment to Ethereum mainnet. All business-logic parameters are
-///         hardcoded as file-level constants. Infrastructure env vars (CHAIN,
-///         WALLET_TYPE, PRIVATE_KEY) remain as env vars since they are
-///         deployment-time concerns.
+///         deployment to Ethereum mainnet. Protocol parameters (tokens, staker
+///         config) are file-level constants. Deployment-target parameters are
+///         resolved at runtime:
+///           - SAFE_ADDRESS (env var, required) -- target Gnosis Safe
+///           - SALT_TIMESTAMP (env var, optional) -- suffix for CREATE2 salts
+///             Auto-generated via `date -u +%H%d%m%Y` if not set.
+///           - Expected addresses computed from salts + safe at runtime.
 ///
 ///         The deployment is structured as 7 Gnosis Safe transactions:
 ///           Phase A (Tx 1-3): 10 factory/implementation contracts via Nick's CREATE2
@@ -119,11 +79,107 @@ address constant EXPECTED_STAKER_BLOCKSET = 0xa64E2d8dd4C283F89dCF1Db5414A0c78ae
 ///
 ///         Replay on a fork (simulation only, default):
 ///           CHAIN=mainnet WALLET_TYPE=local PRIVATE_KEY=0x... \
+///           SAFE_ADDRESS=0x... \
 ///           forge script script/prod/DeployProtocol.s.sol:DeployProtocol \
 ///             --sig "phaseA_batch1()" --rpc-url $FORK_RPC --ffi
 ///
 ///         Set SEND=true to submit Safe transactions to the API (production).
 contract DeployProtocol is Script, BatchScript {
+    // ═════════════════════════════════════════════════════════════════════════
+    //  STATE -- resolved once via _initialize()
+    // ═════════════════════════════════════════════════════════════════════════
+
+    bool internal _initialized;
+    address internal _safe;
+    string internal _saltTimestamp;
+
+    // Phase A salts
+    bytes32 internal _yieldSkimmingSalt;
+    bytes32 internal _yieldDonatingSalt;
+    bytes32 internal _paymentSplitterFactorySalt;
+    bytes32 internal _lidoFactorySalt;
+    bytes32 internal _morphoFactorySalt;
+    bytes32 internal _skyFactorySalt;
+    bytes32 internal _yearnV3FactorySalt;
+    bytes32 internal _addressSetFactorySalt;
+    bytes32 internal _calcFactorySalt;
+    bytes32 internal _stakerFactorySalt;
+
+    // Phase B salts
+    bytes32 internal _allocationMechanismAllowsetSalt;
+    bytes32 internal _calculatorSalt;
+    bytes32 internal _stakerSalt;
+    bytes32 internal _stakerAllowsetSalt;
+    bytes32 internal _stakerBlocksetSalt;
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  INITIALIZATION
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /// @dev Resolves SAFE_ADDRESS and SALT_TIMESTAMP from env, computes all 15
+    ///      salts, and logs the full deployment configuration. Guarded by
+    ///      _initialized to run exactly once.
+    function _initialize() internal {
+        if (_initialized) return;
+        _initialized = true;
+
+        _safe = vm.envAddress("SAFE_ADDRESS");
+
+        string memory defaultTs = "";
+        _saltTimestamp = vm.envOr("SALT_TIMESTAMP", defaultTs);
+        if (bytes(_saltTimestamp).length == 0) {
+            _saltTimestamp = _generateTimestamp();
+        }
+
+        // Phase A salts (date-based prefix)
+        _yieldSkimmingSalt = keccak256(abi.encodePacked("OCTANT_YIELD_SKIMMING_STRATEGY_", _saltTimestamp));
+        _yieldDonatingSalt = keccak256(abi.encodePacked("OCTANT_YIELD_DONATING_STRATEGY_", _saltTimestamp));
+        _paymentSplitterFactorySalt = keccak256(abi.encodePacked("PAYMENT_SPLITTER_FACTORY_", _saltTimestamp));
+        _lidoFactorySalt = keccak256(abi.encodePacked("LIDO_STRATEGY_FACTORY_", _saltTimestamp));
+        _morphoFactorySalt = keccak256(abi.encodePacked("MORPHO_COMPOUNDER_FACTORY_", _saltTimestamp));
+        _skyFactorySalt = keccak256(abi.encodePacked("SKY_COMPOUNDER_FACTORY_", _saltTimestamp));
+        _yearnV3FactorySalt = keccak256(abi.encodePacked("YEARN_V3_STRATEGY_FACTORY_", _saltTimestamp));
+        _addressSetFactorySalt = keccak256(abi.encodePacked("ADDRESS_SET_FACTORY_", _saltTimestamp));
+        _calcFactorySalt = keccak256(abi.encodePacked("REGEN_EARNING_POWER_CALCULATOR_FACTORY_", _saltTimestamp));
+        _stakerFactorySalt = keccak256(abi.encodePacked("REGEN_STAKER_FACTORY_", _saltTimestamp));
+
+        // Phase B salts (instance prefix)
+        _allocationMechanismAllowsetSalt = keccak256(
+            abi.encodePacked("OCTANT_ALLOCATION_MECHANISM_ALLOWSET_", _saltTimestamp)
+        );
+        _calculatorSalt = keccak256(abi.encodePacked("OCTANT_REGEN_EARNING_POWER_CALCULATOR_", _saltTimestamp));
+        _stakerSalt = keccak256(abi.encodePacked("OCTANT_REGEN_STAKER_WITHOUT_DELEGATION_", _saltTimestamp));
+        _stakerAllowsetSalt = keccak256(abi.encodePacked("OCTANT_STAKER_ALLOWSET_", _saltTimestamp));
+        _stakerBlocksetSalt = keccak256(abi.encodePacked("OCTANT_STAKER_BLOCKSET_", _saltTimestamp));
+
+        // Log full configuration for operator review
+        console.log("=== DEPLOYMENT CONFIGURATION ===");
+        console.log("Safe:", _safe);
+        console.log("Salt timestamp:", _saltTimestamp);
+        console.log("");
+        _logPhaseAAddresses();
+        _logPhaseBAddresses();
+        console.log("================================");
+    }
+
+    /// @dev Calls _initialize() and returns _safe. Used as an argument to the
+    ///      isBatch(address) modifier so initialization happens before the
+    ///      modifier body runs.
+    function _initAndGetSafe() internal returns (address) {
+        _initialize();
+        return _safe;
+    }
+
+    /// @dev Generates a timestamp string in HHDDMMYYYY format via FFI.
+    ///      Unique per hour, reproducible within the same hour.
+    function _generateTimestamp() internal returns (string memory) {
+        string[] memory inputs = new string[](3);
+        inputs[0] = "bash";
+        inputs[1] = "-c";
+        inputs[2] = "printf '%s' $(date -u +%H%d%m%Y)";
+        return string(vm.ffi(inputs));
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     //  HELPERS
     // ═════════════════════════════════════════════════════════════════════════
@@ -135,15 +191,15 @@ contract DeployProtocol is Script, BatchScript {
     }
 
     /// @dev Computes the deterministic AddressSetFactory address from Phase A.
-    function _addressSetFactoryAddress() internal pure returns (address) {
-        return _computeCreate2AddressViaFactory(ADDRESS_SET_FACTORY_SALT, type(AddressSetFactory).creationCode);
+    function _addressSetFactoryAddress() internal view returns (address) {
+        return _computeCreate2AddressViaFactory(_addressSetFactorySalt, type(AddressSetFactory).creationCode);
     }
 
     /// @dev Computes the deterministic RegenStakerFactory address from Phase A.
-    function _stakerFactoryAddress() internal pure returns (address) {
+    function _stakerFactoryAddress() internal view returns (address) {
         return
             _computeCreate2AddressViaFactory(
-                STAKER_FACTORY_SALT,
+                _stakerFactorySalt,
                 abi.encodePacked(
                     type(RegenStakerFactory).creationCode,
                     abi.encode(
@@ -155,13 +211,13 @@ contract DeployProtocol is Script, BatchScript {
     }
 
     /// @dev Computes the deterministic RegenEarningPowerCalculator address from Phase B.
-    function _calculatorAddress() internal pure returns (address) {
+    function _calculatorAddress() internal view returns (address) {
         return
             _computeCreate2AddressViaFactory(
-                CALCULATOR_SALT,
+                _calculatorSalt,
                 abi.encodePacked(
                     type(RegenEarningPowerCalculator).creationCode,
-                    abi.encode(SAFE, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE)
+                    abi.encode(_safe, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE)
                 )
             );
     }
@@ -178,7 +234,7 @@ contract DeployProtocol is Script, BatchScript {
 
     /// @dev Computes the deterministic RegenStaker (WITHOUT delegation) address from Phase B.
     ///      Replicates RegenStakerFactory._deployStaker CREATE2 logic using a pre-computed factory address.
-    function _stakerAddress() internal pure returns (address) {
+    function _stakerAddress() internal view returns (address) {
         address asFactory = _addressSetFactoryAddress();
         address sfactory = _stakerFactoryAddress();
 
@@ -188,75 +244,76 @@ contract DeployProtocol is Script, BatchScript {
             IERC20(GLM), // stakeToken
             IEarningPowerCalculator(_calculatorAddress()), // earningPowerCalculator
             MAX_BUMP_TIP, // maxBumpTip
-            SAFE, // admin
+            _safe, // admin
             REWARD_DURATION, // rewardDuration
             MINIMUM_STAKE, // minimumStakeAmount
             IAddressSet(address(0)), // stakerAllowset (assigned post-construction via Tx 7)
             IAddressSet(address(0)), // stakerBlockset (assigned post-construction via Tx 7)
             AccessMode.NONE, // stakerAccessMode
-            IAddressSet(_predictAddressSet(asFactory, ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE)) // allocationMechanismAllowset
+            IAddressSet(_predictAddressSet(asFactory, _allocationMechanismAllowsetSalt, _safe)) // allocationMechanismAllowset
         );
 
         bytes memory fullBytecode = bytes.concat(REGEN_STAKER_WITHOUT_DELEGATION_V1_CREATION_CODE, constructorParams);
         // finalSalt = keccak256(abi.encode(salt, msg.sender)) where msg.sender is the Safe
-        bytes32 finalSalt = keccak256(abi.encode(STAKER_SALT, SAFE));
+        bytes32 finalSalt = keccak256(abi.encode(_stakerSalt, _safe));
 
         bytes32 hash = keccak256(abi.encodePacked(bytes1(0xff), sfactory, finalSalt, keccak256(fullBytecode)));
         return address(uint160(uint256(hash)));
     }
 
-    /// @notice Compute and log all 15 deterministic addresses from pure CREATE2 math.
-    ///         No RPC or on-chain state needed. Used to populate EXPECTED_* constants.
+    /// @notice Compute and log all 15 deterministic addresses from CREATE2 math.
+    ///         Requires SAFE_ADDRESS env var. Uses SALT_TIMESTAMP if set,
+    ///         otherwise auto-generates via FFI.
     ///
-    ///         Usage: forge script script/prod/DeployProtocol.s.sol:DeployProtocol \
-    ///                  --sig "computeAllAddresses()"
-    function computeAllAddresses() external pure {
-        _logPhaseAAddresses();
-        _logPhaseBAddresses();
+    ///         Usage: SAFE_ADDRESS=0x... forge script script/prod/DeployProtocol.s.sol:DeployProtocol \
+    ///                  --sig "computeAllAddresses()" --ffi
+    function computeAllAddresses() external {
+        _initialize();
+        // Addresses already logged by _initialize() via _logPhaseAAddresses/_logPhaseBAddresses
     }
 
-    function _logPhaseAAddresses() internal pure {
+    function _logPhaseAAddresses() internal view {
         console.log(
             "EXPECTED_YIELD_SKIMMING:",
-            _computeCreate2AddressViaFactory(YIELD_SKIMMING_SALT, type(YieldSkimmingTokenizedStrategy).creationCode)
+            _computeCreate2AddressViaFactory(_yieldSkimmingSalt, type(YieldSkimmingTokenizedStrategy).creationCode)
         );
         console.log(
             "EXPECTED_YIELD_DONATING:",
-            _computeCreate2AddressViaFactory(YIELD_DONATING_SALT, type(YieldDonatingTokenizedStrategy).creationCode)
+            _computeCreate2AddressViaFactory(_yieldDonatingSalt, type(YieldDonatingTokenizedStrategy).creationCode)
         );
         console.log(
             "EXPECTED_PAYMENT_SPLITTER_FACTORY:",
-            _computeCreate2AddressViaFactory(PAYMENT_SPLITTER_FACTORY_SALT, type(PaymentSplitterFactory).creationCode)
+            _computeCreate2AddressViaFactory(_paymentSplitterFactorySalt, type(PaymentSplitterFactory).creationCode)
         );
         console.log(
             "EXPECTED_LIDO_FACTORY:",
-            _computeCreate2AddressViaFactory(LIDO_FACTORY_SALT, type(LidoStrategyFactory).creationCode)
+            _computeCreate2AddressViaFactory(_lidoFactorySalt, type(LidoStrategyFactory).creationCode)
         );
         console.log(
             "EXPECTED_MORPHO_FACTORY:",
-            _computeCreate2AddressViaFactory(MORPHO_FACTORY_SALT, type(MorphoCompounderStrategyFactory).creationCode)
+            _computeCreate2AddressViaFactory(_morphoFactorySalt, type(MorphoCompounderStrategyFactory).creationCode)
         );
         console.log(
             "EXPECTED_SKY_FACTORY:",
-            _computeCreate2AddressViaFactory(SKY_FACTORY_SALT, type(SkyCompounderStrategyFactory).creationCode)
+            _computeCreate2AddressViaFactory(_skyFactorySalt, type(SkyCompounderStrategyFactory).creationCode)
         );
         console.log(
             "EXPECTED_YEARN_FACTORY:",
-            _computeCreate2AddressViaFactory(YEARN_V3_FACTORY_SALT, type(YearnV3StrategyFactory).creationCode)
+            _computeCreate2AddressViaFactory(_yearnV3FactorySalt, type(YearnV3StrategyFactory).creationCode)
         );
         console.log("EXPECTED_ADDRESS_SET_FACTORY:", _addressSetFactoryAddress());
         console.log(
             "EXPECTED_CALC_FACTORY:",
-            _computeCreate2AddressViaFactory(CALC_FACTORY_SALT, type(RegenEarningPowerCalculatorFactory).creationCode)
+            _computeCreate2AddressViaFactory(_calcFactorySalt, type(RegenEarningPowerCalculatorFactory).creationCode)
         );
         console.log("EXPECTED_STAKER_FACTORY:", _stakerFactoryAddress());
     }
 
-    function _logPhaseBAddresses() internal pure {
+    function _logPhaseBAddresses() internal view {
         address asFactory = _addressSetFactoryAddress();
-        console.log("EXPECTED_ALLOWSET:", _predictAddressSet(asFactory, ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE));
-        console.log("EXPECTED_STAKER_ALLOWSET:", _predictAddressSet(asFactory, STAKER_ALLOWSET_SALT, SAFE));
-        console.log("EXPECTED_STAKER_BLOCKSET:", _predictAddressSet(asFactory, STAKER_BLOCKSET_SALT, SAFE));
+        console.log("EXPECTED_ALLOWSET:", _predictAddressSet(asFactory, _allocationMechanismAllowsetSalt, _safe));
+        console.log("EXPECTED_STAKER_ALLOWSET:", _predictAddressSet(asFactory, _stakerAllowsetSalt, _safe));
+        console.log("EXPECTED_STAKER_BLOCKSET:", _predictAddressSet(asFactory, _stakerBlocksetSalt, _safe));
         console.log("EXPECTED_CALCULATOR:", _calculatorAddress());
         console.log("EXPECTED_STAKER:", _stakerAddress());
     }
@@ -274,27 +331,45 @@ contract DeployProtocol is Script, BatchScript {
     ///         - PaymentSplitterFactory
     ///         - LidoStrategyFactory
     ///         - MorphoCompounderStrategyFactory
-    function phaseA_batch1() external isBatch(SAFE) {
+    function phaseA_batch1() external isBatch(_initAndGetSafe()) {
         address deployed;
+        address expected;
 
-        deployed = _addCreate2Deployment(YIELD_SKIMMING_SALT, type(YieldSkimmingTokenizedStrategy).creationCode);
-        require(deployed == EXPECTED_YIELD_SKIMMING, "YieldSkimming address mismatch");
+        deployed = _addCreate2Deployment(_yieldSkimmingSalt, type(YieldSkimmingTokenizedStrategy).creationCode);
+        expected = _computeCreate2AddressViaFactory(
+            _yieldSkimmingSalt,
+            type(YieldSkimmingTokenizedStrategy).creationCode
+        );
+        require(deployed == expected, "YieldSkimming address mismatch");
         console.log("YieldSkimmingTokenizedStrategy:", deployed);
 
-        deployed = _addCreate2Deployment(YIELD_DONATING_SALT, type(YieldDonatingTokenizedStrategy).creationCode);
-        require(deployed == EXPECTED_YIELD_DONATING, "YieldDonating address mismatch");
+        deployed = _addCreate2Deployment(_yieldDonatingSalt, type(YieldDonatingTokenizedStrategy).creationCode);
+        expected = _computeCreate2AddressViaFactory(
+            _yieldDonatingSalt,
+            type(YieldDonatingTokenizedStrategy).creationCode
+        );
+        require(deployed == expected, "YieldDonating address mismatch");
         console.log("YieldDonatingTokenizedStrategy:", deployed);
 
-        deployed = _addCreate2Deployment(PAYMENT_SPLITTER_FACTORY_SALT, type(PaymentSplitterFactory).creationCode);
-        require(deployed == EXPECTED_PAYMENT_SPLITTER_FACTORY, "PaymentSplitterFactory address mismatch");
+        deployed = _addCreate2Deployment(_paymentSplitterFactorySalt, type(PaymentSplitterFactory).creationCode);
+        expected = _computeCreate2AddressViaFactory(
+            _paymentSplitterFactorySalt,
+            type(PaymentSplitterFactory).creationCode
+        );
+        require(deployed == expected, "PaymentSplitterFactory address mismatch");
         console.log("PaymentSplitterFactory:", deployed);
 
-        deployed = _addCreate2Deployment(LIDO_FACTORY_SALT, type(LidoStrategyFactory).creationCode);
-        require(deployed == EXPECTED_LIDO_FACTORY, "LidoStrategyFactory address mismatch");
+        deployed = _addCreate2Deployment(_lidoFactorySalt, type(LidoStrategyFactory).creationCode);
+        expected = _computeCreate2AddressViaFactory(_lidoFactorySalt, type(LidoStrategyFactory).creationCode);
+        require(deployed == expected, "LidoStrategyFactory address mismatch");
         console.log("LidoStrategyFactory:", deployed);
 
-        deployed = _addCreate2Deployment(MORPHO_FACTORY_SALT, type(MorphoCompounderStrategyFactory).creationCode);
-        require(deployed == EXPECTED_MORPHO_FACTORY, "MorphoCompounderStrategyFactory address mismatch");
+        deployed = _addCreate2Deployment(_morphoFactorySalt, type(MorphoCompounderStrategyFactory).creationCode);
+        expected = _computeCreate2AddressViaFactory(
+            _morphoFactorySalt,
+            type(MorphoCompounderStrategyFactory).creationCode
+        );
+        require(deployed == expected, "MorphoCompounderStrategyFactory address mismatch");
         console.log("MorphoCompounderStrategyFactory:", deployed);
 
         executeBatch(_shouldSend());
@@ -303,15 +378,18 @@ contract DeployProtocol is Script, BatchScript {
     /// @notice Tx 2: 2 contracts
     ///         - SkyCompounderStrategyFactory
     ///         - YearnV3StrategyFactory
-    function phaseA_batch2() external isBatch(SAFE) {
+    function phaseA_batch2() external isBatch(_initAndGetSafe()) {
         address deployed;
+        address expected;
 
-        deployed = _addCreate2Deployment(SKY_FACTORY_SALT, type(SkyCompounderStrategyFactory).creationCode);
-        require(deployed == EXPECTED_SKY_FACTORY, "SkyFactory address mismatch");
+        deployed = _addCreate2Deployment(_skyFactorySalt, type(SkyCompounderStrategyFactory).creationCode);
+        expected = _computeCreate2AddressViaFactory(_skyFactorySalt, type(SkyCompounderStrategyFactory).creationCode);
+        require(deployed == expected, "SkyFactory address mismatch");
         console.log("SkyCompounderStrategyFactory:", deployed);
 
-        deployed = _addCreate2Deployment(YEARN_V3_FACTORY_SALT, type(YearnV3StrategyFactory).creationCode);
-        require(deployed == EXPECTED_YEARN_FACTORY, "YearnFactory address mismatch");
+        deployed = _addCreate2Deployment(_yearnV3FactorySalt, type(YearnV3StrategyFactory).creationCode);
+        expected = _computeCreate2AddressViaFactory(_yearnV3FactorySalt, type(YearnV3StrategyFactory).creationCode);
+        require(deployed == expected, "YearnFactory address mismatch");
         console.log("YearnV3StrategyFactory:", deployed);
 
         executeBatch(_shouldSend());
@@ -321,19 +399,25 @@ contract DeployProtocol is Script, BatchScript {
     ///         - AddressSetFactory
     ///         - RegenEarningPowerCalculatorFactory
     ///         - RegenStakerFactory (constructor: canonical bytecode hashes)
-    function phaseA_batch3() external isBatch(SAFE) {
+    function phaseA_batch3() external isBatch(_initAndGetSafe()) {
         address deployed;
+        address expected;
 
-        deployed = _addCreate2Deployment(ADDRESS_SET_FACTORY_SALT, type(AddressSetFactory).creationCode);
-        require(deployed == EXPECTED_ADDRESS_SET_FACTORY, "AddressSetFactory address mismatch");
+        deployed = _addCreate2Deployment(_addressSetFactorySalt, type(AddressSetFactory).creationCode);
+        expected = _addressSetFactoryAddress();
+        require(deployed == expected, "AddressSetFactory address mismatch");
         console.log("AddressSetFactory:", deployed);
 
-        deployed = _addCreate2Deployment(CALC_FACTORY_SALT, type(RegenEarningPowerCalculatorFactory).creationCode);
-        require(deployed == EXPECTED_CALC_FACTORY, "CalcFactory address mismatch");
+        deployed = _addCreate2Deployment(_calcFactorySalt, type(RegenEarningPowerCalculatorFactory).creationCode);
+        expected = _computeCreate2AddressViaFactory(
+            _calcFactorySalt,
+            type(RegenEarningPowerCalculatorFactory).creationCode
+        );
+        require(deployed == expected, "CalcFactory address mismatch");
         console.log("RegenEarningPowerCalculatorFactory:", deployed);
 
         deployed = _addCreate2Deployment(
-            STAKER_FACTORY_SALT,
+            _stakerFactorySalt,
             abi.encodePacked(
                 type(RegenStakerFactory).creationCode,
                 abi.encode(
@@ -342,7 +426,8 @@ contract DeployProtocol is Script, BatchScript {
                 )
             )
         );
-        require(deployed == EXPECTED_STAKER_FACTORY, "StakerFactory address mismatch");
+        expected = _stakerFactoryAddress();
+        require(deployed == expected, "StakerFactory address mismatch");
         console.log("RegenStakerFactory:", deployed);
 
         executeBatch(_shouldSend());
@@ -362,38 +447,42 @@ contract DeployProtocol is Script, BatchScript {
     ///         - stakerAllowset
     ///         - stakerBlockset
     ///         Batched into a single Safe MultiSend transaction.
-    function phaseB_addressSets() external isBatch(SAFE) {
+    function phaseB_addressSets() external isBatch(_initAndGetSafe()) {
         address asFactory = _addressSetFactoryAddress();
         address deployed;
+        address expected;
 
         // 1. Deploy allocation mechanism allowset
         bytes memory result = addToBatch(
             asFactory,
             0,
-            abi.encodeWithSignature("deploy(bytes32,address)", ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE)
+            abi.encodeWithSignature("deploy(bytes32,address)", _allocationMechanismAllowsetSalt, _safe)
         );
         deployed = abi.decode(result, (address));
-        require(deployed == EXPECTED_ALLOWSET, "AllowSet address mismatch");
+        expected = _predictAddressSet(asFactory, _allocationMechanismAllowsetSalt, _safe);
+        require(deployed == expected, "AllowSet address mismatch");
         console.log("AllocationMechanismAllowset:", deployed);
 
         // 2. Deploy staker allowset
         result = addToBatch(
             asFactory,
             0,
-            abi.encodeWithSignature("deploy(bytes32,address)", STAKER_ALLOWSET_SALT, SAFE)
+            abi.encodeWithSignature("deploy(bytes32,address)", _stakerAllowsetSalt, _safe)
         );
         deployed = abi.decode(result, (address));
-        require(deployed == EXPECTED_STAKER_ALLOWSET, "StakerAllowset address mismatch");
+        expected = _predictAddressSet(asFactory, _stakerAllowsetSalt, _safe);
+        require(deployed == expected, "StakerAllowset address mismatch");
         console.log("StakerAllowset:", deployed);
 
         // 3. Deploy staker blockset
         result = addToBatch(
             asFactory,
             0,
-            abi.encodeWithSignature("deploy(bytes32,address)", STAKER_BLOCKSET_SALT, SAFE)
+            abi.encodeWithSignature("deploy(bytes32,address)", _stakerBlocksetSalt, _safe)
         );
         deployed = abi.decode(result, (address));
-        require(deployed == EXPECTED_STAKER_BLOCKSET, "StakerBlockset address mismatch");
+        expected = _predictAddressSet(asFactory, _stakerBlocksetSalt, _safe);
+        require(deployed == expected, "StakerBlockset address mismatch");
         console.log("StakerBlockset:", deployed);
 
         executeBatch(_shouldSend());
@@ -403,14 +492,15 @@ contract DeployProtocol is Script, BatchScript {
     ///         Constructor args: owner=Safe, allowset=0, blockset=0, accessMode=NONE
     ///         Batched as a single Safe transaction. Address assertion runs before
     ///         the batch is submitted.
-    function phaseB_calculator() external isBatch(SAFE) {
+    function phaseB_calculator() external isBatch(_initAndGetSafe()) {
         bytes memory creationCode = abi.encodePacked(
             type(RegenEarningPowerCalculator).creationCode,
-            abi.encode(SAFE, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE)
+            abi.encode(_safe, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE)
         );
 
-        address deployed = _addCreate2Deployment(CALCULATOR_SALT, creationCode);
-        require(deployed == EXPECTED_CALCULATOR, "Calculator address mismatch");
+        address deployed = _addCreate2Deployment(_calculatorSalt, creationCode);
+        address expected = _calculatorAddress();
+        require(deployed == expected, "Calculator address mismatch");
         console.log("RegenEarningPowerCalculator:", deployed);
 
         executeBatch(_shouldSend());
@@ -422,19 +512,17 @@ contract DeployProtocol is Script, BatchScript {
     ///         accessMode is set to NONE so the sets are initially inactive.
     ///         Batched as a single Safe transaction. Address assertion runs
     ///         before the batch is submitted.
-    function phaseB_staker() external isBatch(SAFE) {
+    function phaseB_staker() external isBatch(_initAndGetSafe()) {
         AddressSetFactory asFactory = AddressSetFactory(_addressSetFactoryAddress());
 
         RegenStakerFactory.CreateStakerParams memory params = RegenStakerFactory.CreateStakerParams({
             rewardsToken: IERC20(WETH),
             stakeToken: IERC20(GLM),
-            admin: SAFE,
+            admin: _safe,
             stakerAllowset: IAddressSet(address(0)),
             stakerBlockset: IAddressSet(address(0)),
             stakerAccessMode: AccessMode.NONE,
-            allocationMechanismAllowset: IAddressSet(
-                asFactory.predictAddress(ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE)
-            ),
+            allocationMechanismAllowset: IAddressSet(asFactory.predictAddress(_allocationMechanismAllowsetSalt, _safe)),
             earningPowerCalculator: IEarningPowerCalculator(_calculatorAddress()),
             maxBumpTip: MAX_BUMP_TIP,
             minimumStakeAmount: MINIMUM_STAKE,
@@ -444,13 +532,14 @@ contract DeployProtocol is Script, BatchScript {
         bytes memory data = abi.encodeWithSignature(
             "createStakerWithoutDelegation((address,address,address,address,address,uint8,address,address,uint256,uint256,uint256),bytes32,bytes)",
             params,
-            STAKER_SALT,
+            _stakerSalt,
             REGEN_STAKER_WITHOUT_DELEGATION_V1_CREATION_CODE
         );
 
         bytes memory result = addToBatch(_stakerFactoryAddress(), 0, data);
         address deployed = abi.decode(result, (address));
-        require(deployed == EXPECTED_STAKER, "Staker address mismatch");
+        address expected = _stakerAddress();
+        require(deployed == expected, "Staker address mismatch");
         console.log("RegenStaker:", deployed);
 
         executeBatch(_shouldSend());
@@ -459,19 +548,20 @@ contract DeployProtocol is Script, BatchScript {
     /// @notice Tx 7: Assign staker allowset and blockset via admin setters.
     ///         Batched into a single Safe MultiSend transaction.
     ///         Requires Tx 6 (staker deployment) to have been executed on-chain.
-    function phaseB_stakerAccessSets() external isBatch(SAFE) {
-        require(EXPECTED_STAKER.code.length > 0, "Staker not deployed -- run phaseB_staker first");
+    function phaseB_stakerAccessSets() external isBatch(_initAndGetSafe()) {
+        address stakerAddr = _stakerAddress();
+        require(stakerAddr.code.length > 0, "Staker not deployed -- run phaseB_staker first");
 
         address asFactory = _addressSetFactoryAddress();
-        address expectedAllowset = _predictAddressSet(asFactory, STAKER_ALLOWSET_SALT, SAFE);
-        address expectedBlockset = _predictAddressSet(asFactory, STAKER_BLOCKSET_SALT, SAFE);
+        address expectedAllowset = _predictAddressSet(asFactory, _stakerAllowsetSalt, _safe);
+        address expectedBlockset = _predictAddressSet(asFactory, _stakerBlocksetSalt, _safe);
 
-        addToBatch(EXPECTED_STAKER, 0, abi.encodeWithSignature("setStakerAllowset(address)", expectedAllowset));
+        addToBatch(stakerAddr, 0, abi.encodeWithSignature("setStakerAllowset(address)", expectedAllowset));
 
-        addToBatch(EXPECTED_STAKER, 0, abi.encodeWithSignature("setStakerBlockset(address)", expectedBlockset));
+        addToBatch(stakerAddr, 0, abi.encodeWithSignature("setStakerBlockset(address)", expectedBlockset));
 
         // Verify state was set correctly in simulation before submitting
-        RegenStakerWithoutDelegateSurrogateVotes staker = RegenStakerWithoutDelegateSurrogateVotes(EXPECTED_STAKER);
+        RegenStakerWithoutDelegateSurrogateVotes staker = RegenStakerWithoutDelegateSurrogateVotes(stakerAddr);
         require(
             address(staker.stakerAllowset()) == expectedAllowset,
             "stakerAllowset not set correctly after simulation"
@@ -487,26 +577,22 @@ contract DeployProtocol is Script, BatchScript {
 
 // ═════════════════════════════════════════════════════════════════════════════
 //
-//  DEPLOYMENT VERIFICATION TEST
-//
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ═════════════════════════════════════════════════════════════════════════════
-//
 //  SOURCE CODE VERIFICATION (Etherscan & Sourcify)
 //
 // ═════════════════════════════════════════════════════════════════════════════
 
 /// @title VerifyProtocolSourceCode
 /// @notice Verifies all 15 Octant v2 protocol contracts on Etherscan and Sourcify.
-///         Uses deterministic addresses from file-level EXPECTED_* constants and
-///         reuses DeployProtocol address-computation helpers for constructor args.
+///         Uses deterministic addresses computed at runtime from SAFE_ADDRESS and
+///         SALT_TIMESTAMP env vars, reusing DeployProtocol address-computation helpers.
 ///
 ///         Etherscan (requires API key):
-///           ETHERSCAN_API_KEY=... forge script script/prod/DeployProtocol.s.sol:VerifyProtocolSourceCode \
+///           SAFE_ADDRESS=0x... SALT_TIMESTAMP=... ETHERSCAN_API_KEY=... \
+///           forge script script/prod/DeployProtocol.s.sol:VerifyProtocolSourceCode \
 ///             --sig "verifyEtherscan()" --ffi
 ///
 ///         Sourcify (no API key needed):
+///           SAFE_ADDRESS=0x... SALT_TIMESTAMP=... \
 ///           forge script script/prod/DeployProtocol.s.sol:VerifyProtocolSourceCode \
 ///             --sig "verifySourcify()" --ffi
 contract VerifyProtocolSourceCode is DeployProtocol {
@@ -540,11 +626,13 @@ contract VerifyProtocolSourceCode is DeployProtocol {
 
     /// @notice Verify all 15 contracts on Etherscan. Requires ETHERSCAN_API_KEY env var.
     function verifyEtherscan() external {
+        _initialize();
         _verifyAll("etherscan");
     }
 
     /// @notice Verify all 15 contracts on Sourcify. No API key needed.
     function verifySourcify() external {
+        _initialize();
         _verifyAll("sourcify");
     }
 
@@ -557,71 +645,132 @@ contract VerifyProtocolSourceCode is DeployProtocol {
         console.log("Verifier:", verifier);
         console.log("");
 
-        // ── Phase A: No constructor args (9 contracts) ───────────────────
+        _verifyPhaseANoArgs(verifier);
+        _verifyPhaseAWithArgs(verifier);
+        _verifyPhaseBNoArgs(verifier);
+        _verifyPhaseBWithArgs(verifier);
 
-        _verifyNoArgs(EXPECTED_YIELD_SKIMMING, YIELD_SKIMMING_PATH, "YieldSkimmingTokenizedStrategy", verifier);
-        _verifyNoArgs(EXPECTED_YIELD_DONATING, YIELD_DONATING_PATH, "YieldDonatingTokenizedStrategy", verifier);
+        console.log("=== VERIFICATION COMPLETE ===");
+    }
+
+    function _verifyPhaseANoArgs(string memory verifier) internal {
         _verifyNoArgs(
-            EXPECTED_PAYMENT_SPLITTER_FACTORY,
+            _computeCreate2AddressViaFactory(_yieldSkimmingSalt, type(YieldSkimmingTokenizedStrategy).creationCode),
+            YIELD_SKIMMING_PATH,
+            "YieldSkimmingTokenizedStrategy",
+            verifier
+        );
+        _verifyNoArgs(
+            _computeCreate2AddressViaFactory(_yieldDonatingSalt, type(YieldDonatingTokenizedStrategy).creationCode),
+            YIELD_DONATING_PATH,
+            "YieldDonatingTokenizedStrategy",
+            verifier
+        );
+        _verifyNoArgs(
+            _computeCreate2AddressViaFactory(_paymentSplitterFactorySalt, type(PaymentSplitterFactory).creationCode),
             PAYMENT_SPLITTER_FACTORY_PATH,
             "PaymentSplitterFactory",
             verifier
         );
-        _verifyNoArgs(EXPECTED_LIDO_FACTORY, LIDO_FACTORY_PATH, "LidoStrategyFactory", verifier);
-        _verifyNoArgs(EXPECTED_MORPHO_FACTORY, MORPHO_FACTORY_PATH, "MorphoCompounderStrategyFactory", verifier);
-        _verifyNoArgs(EXPECTED_SKY_FACTORY, SKY_FACTORY_PATH, "SkyCompounderStrategyFactory", verifier);
-        _verifyNoArgs(EXPECTED_YEARN_FACTORY, YEARN_FACTORY_PATH, "YearnV3StrategyFactory", verifier);
-        _verifyNoArgs(EXPECTED_ADDRESS_SET_FACTORY, ADDRESS_SET_FACTORY_PATH, "AddressSetFactory", verifier);
-        _verifyNoArgs(EXPECTED_CALC_FACTORY, CALC_FACTORY_PATH, "RegenEarningPowerCalculatorFactory", verifier);
+        _verifyNoArgs(
+            _computeCreate2AddressViaFactory(_lidoFactorySalt, type(LidoStrategyFactory).creationCode),
+            LIDO_FACTORY_PATH,
+            "LidoStrategyFactory",
+            verifier
+        );
+        _verifyNoArgs(
+            _computeCreate2AddressViaFactory(_morphoFactorySalt, type(MorphoCompounderStrategyFactory).creationCode),
+            MORPHO_FACTORY_PATH,
+            "MorphoCompounderStrategyFactory",
+            verifier
+        );
+        _verifyNoArgs(
+            _computeCreate2AddressViaFactory(_skyFactorySalt, type(SkyCompounderStrategyFactory).creationCode),
+            SKY_FACTORY_PATH,
+            "SkyCompounderStrategyFactory",
+            verifier
+        );
+        _verifyNoArgs(
+            _computeCreate2AddressViaFactory(_yearnV3FactorySalt, type(YearnV3StrategyFactory).creationCode),
+            YEARN_FACTORY_PATH,
+            "YearnV3StrategyFactory",
+            verifier
+        );
+        _verifyNoArgs(_addressSetFactoryAddress(), ADDRESS_SET_FACTORY_PATH, "AddressSetFactory", verifier);
+        _verifyNoArgs(
+            _computeCreate2AddressViaFactory(_calcFactorySalt, type(RegenEarningPowerCalculatorFactory).creationCode),
+            CALC_FACTORY_PATH,
+            "RegenEarningPowerCalculatorFactory",
+            verifier
+        );
+    }
 
-        // ── Phase A: With constructor args (1 contract) ──────────────────
-
+    function _verifyPhaseAWithArgs(string memory verifier) internal {
         bytes memory stakerFactoryArgs = abi.encode(
             keccak256(REGEN_STAKER_V1_CREATION_CODE),
             keccak256(REGEN_STAKER_WITHOUT_DELEGATION_V1_CREATION_CODE)
         );
         _verifyWithArgs(
-            EXPECTED_STAKER_FACTORY,
+            _stakerFactoryAddress(),
             STAKER_FACTORY_PATH,
             "RegenStakerFactory",
             stakerFactoryArgs,
             verifier
         );
+    }
 
-        // ── Phase B: No constructor args (3 AddressSets) ─────────────────
+    function _verifyPhaseBNoArgs(string memory verifier) internal {
+        address asFactory = _addressSetFactoryAddress();
+        _verifyNoArgs(
+            _predictAddressSet(asFactory, _allocationMechanismAllowsetSalt, _safe),
+            ADDRESS_SET_PATH,
+            "AddressSet (allocationMechanism)",
+            verifier
+        );
+        _verifyNoArgs(
+            _predictAddressSet(asFactory, _stakerAllowsetSalt, _safe),
+            ADDRESS_SET_PATH,
+            "AddressSet (stakerAllowset)",
+            verifier
+        );
+        _verifyNoArgs(
+            _predictAddressSet(asFactory, _stakerBlocksetSalt, _safe),
+            ADDRESS_SET_PATH,
+            "AddressSet (stakerBlockset)",
+            verifier
+        );
+    }
 
-        _verifyNoArgs(EXPECTED_ALLOWSET, ADDRESS_SET_PATH, "AddressSet (allocationMechanism)", verifier);
-        _verifyNoArgs(EXPECTED_STAKER_ALLOWSET, ADDRESS_SET_PATH, "AddressSet (stakerAllowset)", verifier);
-        _verifyNoArgs(EXPECTED_STAKER_BLOCKSET, ADDRESS_SET_PATH, "AddressSet (stakerBlockset)", verifier);
-
-        // ── Phase B: With constructor args (2 contracts) ─────────────────
-
+    function _verifyPhaseBWithArgs(string memory verifier) internal {
         bytes memory calculatorArgs = abi.encode(
-            SAFE,
+            _safe,
             IAddressSet(address(0)),
             IAddressSet(address(0)),
             AccessMode.NONE
         );
-        _verifyWithArgs(EXPECTED_CALCULATOR, CALCULATOR_PATH, "RegenEarningPowerCalculator", calculatorArgs, verifier);
+        _verifyWithArgs(_calculatorAddress(), CALCULATOR_PATH, "RegenEarningPowerCalculator", calculatorArgs, verifier);
 
-        // Reuse DeployProtocol._stakerAddress() constructor param encoding
         address asFactory = _addressSetFactoryAddress();
         bytes memory stakerArgs = abi.encode(
             IERC20(WETH),
             IERC20(GLM),
             IEarningPowerCalculator(_calculatorAddress()),
             MAX_BUMP_TIP,
-            SAFE,
+            _safe,
             REWARD_DURATION,
             MINIMUM_STAKE,
             IAddressSet(address(0)),
             IAddressSet(address(0)),
             AccessMode.NONE,
-            IAddressSet(_predictAddressSet(asFactory, ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE))
+            IAddressSet(_predictAddressSet(asFactory, _allocationMechanismAllowsetSalt, _safe))
         );
-        _verifyWithArgs(EXPECTED_STAKER, STAKER_PATH, "RegenStakerWithoutDelegateSurrogateVotes", stakerArgs, verifier);
-
-        console.log("=== VERIFICATION COMPLETE ===");
+        _verifyWithArgs(
+            _stakerAddress(),
+            STAKER_PATH,
+            "RegenStakerWithoutDelegateSurrogateVotes",
+            stakerArgs,
+            verifier
+        );
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -713,31 +862,47 @@ contract VerifyProtocolSourceCode is DeployProtocol {
 ///         deployed and functionally operational. Covers all 10 Phase A
 ///         factory/implementation contracts, all 5 Phase B instance contracts.
 ///
+///         All addresses are read from env vars with production defaults, so the
+///         test works both for production verification (run with no env vars) and
+///         testbed verification (override via env).
+///
 ///         Run against Ethereum mainnet fork:
 ///           forge test --match-contract VerifyProtocolDeployment --fork-url <mainnet-rpc>
+///
+///         Run against testbed deployment:
+///           SAFE_ADDRESS=0x... SALT_TIMESTAMP=... \
+///           EXPECTED_YIELD_SKIMMING=0x... EXPECTED_YIELD_DONATING=0x... ... \
+///           forge test --match-contract VerifyProtocolDeployment --fork-url <mainnet-rpc>
 contract VerifyProtocolDeployment is Test {
-    // --- Typed bindings for deployed contracts ---
+    // --- State (set in setUp from env vars with production defaults) ---
+
+    address internal _safe;
 
     // Phase A
-    PaymentSplitterFactory constant paymentSplitterFactory = PaymentSplitterFactory(EXPECTED_PAYMENT_SPLITTER_FACTORY);
-    LidoStrategyFactory constant lidoStrategyFactory = LidoStrategyFactory(EXPECTED_LIDO_FACTORY);
-    MorphoCompounderStrategyFactory constant morphoFactory = MorphoCompounderStrategyFactory(EXPECTED_MORPHO_FACTORY);
-    SkyCompounderStrategyFactory constant skyFactory = SkyCompounderStrategyFactory(EXPECTED_SKY_FACTORY);
-    YearnV3StrategyFactory constant yearnFactory = YearnV3StrategyFactory(EXPECTED_YEARN_FACTORY);
-    AddressSetFactory constant addressSetFactory = AddressSetFactory(EXPECTED_ADDRESS_SET_FACTORY);
-    RegenEarningPowerCalculatorFactory constant calculatorFactory =
-        RegenEarningPowerCalculatorFactory(EXPECTED_CALC_FACTORY);
-    RegenStakerFactory constant regenStakerFactory = RegenStakerFactory(EXPECTED_STAKER_FACTORY);
+    address internal _yieldSkimming;
+    address internal _yieldDonating;
+    PaymentSplitterFactory internal paymentSplitterFactory;
+    LidoStrategyFactory internal lidoStrategyFactory;
+    MorphoCompounderStrategyFactory internal morphoFactory;
+    SkyCompounderStrategyFactory internal skyFactory;
+    YearnV3StrategyFactory internal yearnFactory;
+    AddressSetFactory internal addressSetFactory;
+    RegenEarningPowerCalculatorFactory internal calculatorFactory;
+    RegenStakerFactory internal regenStakerFactory;
 
     // Phase B
-    AddressSet constant allowSet = AddressSet(EXPECTED_ALLOWSET);
-    RegenEarningPowerCalculator constant calculator = RegenEarningPowerCalculator(EXPECTED_CALCULATOR);
-    RegenStakerWithoutDelegateSurrogateVotes constant staker =
-        RegenStakerWithoutDelegateSurrogateVotes(EXPECTED_STAKER);
+    AddressSet internal allowSet;
+    RegenEarningPowerCalculator internal calculator;
+    RegenStakerWithoutDelegateSurrogateVotes internal staker;
 
     // Phase C
-    AddressSet constant stakerAllowset = AddressSet(EXPECTED_STAKER_ALLOWSET);
-    AddressSet constant stakerBlockset = AddressSet(EXPECTED_STAKER_BLOCKSET);
+    AddressSet internal stakerAllowset;
+    AddressSet internal stakerBlockset;
+
+    // Salts (for determinism checks)
+    bytes32 internal _allocationMechanismAllowsetSalt;
+    bytes32 internal _stakerAllowsetSalt;
+    bytes32 internal _stakerBlocksetSalt;
 
     // --- All deployed addresses for code-existence check ---
     address[] internal allContracts;
@@ -745,8 +910,62 @@ contract VerifyProtocolDeployment is Test {
     address internal testUser = makeAddr("testUser");
 
     function setUp() public {
-        allContracts.push(EXPECTED_YIELD_SKIMMING);
-        allContracts.push(EXPECTED_YIELD_DONATING);
+        // Deployment target
+        _safe = vm.envOr("SAFE_ADDRESS", address(0x4B55fA101Dfa399af2FCDa83bB9e77bCa0009418));
+
+        // Compute salts from timestamp (default "V1" matches production Phase B salts)
+        string memory saltTimestamp = vm.envOr("SALT_TIMESTAMP", string("V1"));
+        _allocationMechanismAllowsetSalt = keccak256(
+            abi.encodePacked("OCTANT_ALLOCATION_MECHANISM_ALLOWSET_", saltTimestamp)
+        );
+        _stakerAllowsetSalt = keccak256(abi.encodePacked("OCTANT_STAKER_ALLOWSET_", saltTimestamp));
+        _stakerBlocksetSalt = keccak256(abi.encodePacked("OCTANT_STAKER_BLOCKSET_", saltTimestamp));
+
+        // Phase A addresses
+        _yieldSkimming = vm.envOr("EXPECTED_YIELD_SKIMMING", address(0x573A99d6717273fcC48072F1A9761b337b4877fF));
+        _yieldDonating = vm.envOr("EXPECTED_YIELD_DONATING", address(0xb7Ac4a08b9e0FAD5DC154e4F4b35b4365B2Fb3cA));
+        paymentSplitterFactory = PaymentSplitterFactory(
+            vm.envOr("EXPECTED_PAYMENT_SPLITTER_FACTORY", address(0x11551f2b877055b2731E5A25B1C01966C0D5aaA1))
+        );
+        lidoStrategyFactory = LidoStrategyFactory(
+            vm.envOr("EXPECTED_LIDO_FACTORY", address(0x4732CF067dEcB38B84F64f4Ae61FD83a6D2eBb03))
+        );
+        morphoFactory = MorphoCompounderStrategyFactory(
+            vm.envOr("EXPECTED_MORPHO_FACTORY", address(0xeC9710B9e3404C788AddD567dF52D669942fA5d2))
+        );
+        skyFactory = SkyCompounderStrategyFactory(
+            vm.envOr("EXPECTED_SKY_FACTORY", address(0x67E5dc580c5c8702B7E46BA1812C56d304B136D3))
+        );
+        yearnFactory = YearnV3StrategyFactory(
+            vm.envOr("EXPECTED_YEARN_FACTORY", address(0xd5338eb7DFFE2e16cd217e8b0FA3d762024f614C))
+        );
+        addressSetFactory = AddressSetFactory(
+            vm.envOr("EXPECTED_ADDRESS_SET_FACTORY", address(0x94e05a2bEd3a6bD2809cF8Dcb7dc85b57019F714))
+        );
+        calculatorFactory = RegenEarningPowerCalculatorFactory(
+            vm.envOr("EXPECTED_CALC_FACTORY", address(0x5Afd92333b6e5AF40A55455abD435cb2EE876Dba))
+        );
+        regenStakerFactory = RegenStakerFactory(
+            vm.envOr("EXPECTED_STAKER_FACTORY", address(0x8f15465724bF7a7fF4171257E4f03Df1A586201D))
+        );
+
+        // Phase B addresses
+        allowSet = AddressSet(vm.envOr("EXPECTED_ALLOWSET", address(0x19cD4e88f7F76948e54285b4E47B7d202225ee50)));
+        calculator = RegenEarningPowerCalculator(
+            vm.envOr("EXPECTED_CALCULATOR", address(0x66F7b714360866725EF9d5C13EB4761113F3580c))
+        );
+        staker = RegenStakerWithoutDelegateSurrogateVotes(
+            vm.envOr("EXPECTED_STAKER", address(0xD883B716F03EDcC3a007b6B1e5131eE81f04490a))
+        );
+        stakerAllowset = AddressSet(
+            vm.envOr("EXPECTED_STAKER_ALLOWSET", address(0xb0661B32f9B5D0eBAde3fec11DF21FBd12a1e941))
+        );
+        stakerBlockset = AddressSet(
+            vm.envOr("EXPECTED_STAKER_BLOCKSET", address(0xa64E2d8dd4C283F89dCF1Db5414A0c78ae4e85b5))
+        );
+
+        allContracts.push(_yieldSkimming);
+        allContracts.push(_yieldDonating);
         allContracts.push(address(paymentSplitterFactory));
         allContracts.push(address(lidoStrategyFactory));
         allContracts.push(address(morphoFactory));
@@ -810,7 +1029,7 @@ contract VerifyProtocolDeployment is Test {
             address(5),
             address(6),
             false,
-            EXPECTED_YIELD_DONATING,
+            _yieldDonating,
             address(7)
         );
 
@@ -846,7 +1065,7 @@ contract VerifyProtocolDeployment is Test {
     // -----------------------------------------------------------------------
 
     function test_allowSetOwnership() public view {
-        assertEq(allowSet.owner(), SAFE, "AllowSet: owner is not Safe");
+        assertEq(allowSet.owner(), _safe, "AllowSet: owner is not Safe");
         assertEq(allowSet.length(), 0, "AllowSet: should be empty on fresh deploy");
     }
 
@@ -857,12 +1076,12 @@ contract VerifyProtocolDeployment is Test {
     function test_allowSetFunctionality() public {
         address testAddr = makeAddr("allowSetTest");
 
-        vm.prank(SAFE);
+        vm.prank(_safe);
         allowSet.add(testAddr);
         assertTrue(allowSet.contains(testAddr), "AllowSet: address not found after add");
         assertEq(allowSet.length(), 1, "AllowSet: length should be 1 after add");
 
-        vm.prank(SAFE);
+        vm.prank(_safe);
         allowSet.remove(testAddr);
         assertFalse(allowSet.contains(testAddr), "AllowSet: address found after remove");
         assertEq(allowSet.length(), 0, "AllowSet: length should be 0 after remove");
@@ -878,19 +1097,19 @@ contract VerifyProtocolDeployment is Test {
 
     function test_addressSetFactoryDeterminism() public view {
         assertEq(
-            addressSetFactory.predictAddress(ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE),
+            addressSetFactory.predictAddress(_allocationMechanismAllowsetSalt, _safe),
             address(allowSet),
             "AddressSetFactory: prediction mismatch for allocationMechanismAllowset"
         );
 
         assertEq(
-            addressSetFactory.predictAddress(STAKER_ALLOWSET_SALT, SAFE),
+            addressSetFactory.predictAddress(_stakerAllowsetSalt, _safe),
             address(stakerAllowset),
             "AddressSetFactory: prediction mismatch for stakerAllowset"
         );
 
         assertEq(
-            addressSetFactory.predictAddress(STAKER_BLOCKSET_SALT, SAFE),
+            addressSetFactory.predictAddress(_stakerBlocksetSalt, _safe),
             address(stakerBlockset),
             "AddressSetFactory: prediction mismatch for stakerBlockset"
         );
@@ -905,9 +1124,9 @@ contract VerifyProtocolDeployment is Test {
     // -----------------------------------------------------------------------
 
     function test_stakerAddressSetsOwnership() public view {
-        assertEq(stakerAllowset.owner(), SAFE, "stakerAllowset: owner is not Safe");
+        assertEq(stakerAllowset.owner(), _safe, "stakerAllowset: owner is not Safe");
         assertEq(stakerAllowset.length(), 0, "stakerAllowset: should be empty on fresh deploy");
-        assertEq(stakerBlockset.owner(), SAFE, "stakerBlockset: owner is not Safe");
+        assertEq(stakerBlockset.owner(), _safe, "stakerBlockset: owner is not Safe");
         assertEq(stakerBlockset.length(), 0, "stakerBlockset: should be empty on fresh deploy");
     }
 
@@ -916,7 +1135,7 @@ contract VerifyProtocolDeployment is Test {
     // -----------------------------------------------------------------------
 
     function test_calculatorParameters() public view {
-        assertEq(calculator.owner(), SAFE, "Calculator: owner is not Safe");
+        assertEq(calculator.owner(), _safe, "Calculator: owner is not Safe");
         assertTrue(calculator.accessMode() == AccessMode.NONE, "Calculator: accessMode should be NONE");
         assertEq(address(calculator.allowset()), address(0), "Calculator: allowset should be zero");
         assertEq(address(calculator.blockset()), address(0), "Calculator: blockset should be zero");
@@ -949,7 +1168,7 @@ contract VerifyProtocolDeployment is Test {
     function test_stakerParameters() public view {
         assertEq(address(staker.REWARD_TOKEN()), WETH, "Staker: wrong REWARD_TOKEN");
         assertEq(address(staker.STAKE_TOKEN()), GLM, "Staker: wrong STAKE_TOKEN");
-        assertEq(staker.admin(), SAFE, "Staker: admin is not Safe");
+        assertEq(staker.admin(), _safe, "Staker: admin is not Safe");
         assertEq(staker.maxBumpTip(), MAX_BUMP_TIP, "Staker: wrong maxBumpTip");
         assertEq(staker.rewardDuration(), REWARD_DURATION, "Staker: wrong rewardDuration");
         assertEq(staker.minimumStakeAmount(), MINIMUM_STAKE, "Staker: minimumStakeAmount should be 0");
