@@ -170,13 +170,15 @@ contract DeployProtocol is Script, BatchScript {
         return _safe;
     }
 
-    /// @dev Generates a timestamp string in HHDDMMYYYY format via FFI.
-    ///      Unique per hour, reproducible within the same hour.
+    /// @dev Generates a timestamp string in HH_DDMMYYYY format via FFI.
+    ///      The underscore prevents Foundry's vm.ffi from hex-decoding
+    ///      all-numeric output. Unique per hour, reproducible within the
+    ///      same hour.
     function _generateTimestamp() internal returns (string memory) {
         string[] memory inputs = new string[](3);
         inputs[0] = "bash";
         inputs[1] = "-c";
-        inputs[2] = "printf '%s' $(date -u +%H%d%m%Y)";
+        inputs[2] = "printf '%s' $(date -u +'%H_%d%m%Y')";
         return string(vm.ffi(inputs));
     }
 
