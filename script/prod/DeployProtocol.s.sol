@@ -401,27 +401,28 @@ contract DeployProtocol is Script, BatchScript {
 
     /// @notice Tx 5: Deploy RegenEarningPowerCalculator via Nick's CREATE2 factory
     ///         Constructor args: owner=Safe, allowset=0, blockset=0, accessMode=NONE
-    ///         Single Safe transaction (not MultiSend).
+    ///         Batched as a single Safe transaction. Address assertion runs before
+    ///         the batch is submitted.
     function phaseB_calculator() external isBatch(SAFE) {
         bytes memory creationCode = abi.encodePacked(
             type(RegenEarningPowerCalculator).creationCode,
             abi.encode(SAFE, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE)
         );
-        bytes memory deployData = abi.encodePacked(CALCULATOR_SALT, creationCode);
 
-        bytes memory result = executeTransaction(CREATE2_FACTORY, 0, deployData, Operation.CALL, _shouldSend());
-        address deployed = _decodeCreate2DeployerResult(result);
+        address deployed = _addCreate2Deployment(CALCULATOR_SALT, creationCode);
         require(deployed == EXPECTED_CALCULATOR, "Calculator address mismatch");
         console.log("RegenEarningPowerCalculator:", deployed);
+
+        executeBatch(_shouldSend());
     }
 
     /// @notice Tx 6: Deploy RegenStaker (WITHOUT delegation) via RegenStakerFactory
     ///         Staker is constructed with address(0) for stakerAllowset and
     ///         stakerBlockset. These are assigned post-construction in Tx 7.
     ///         accessMode is set to NONE so the sets are initially inactive.
-    ///         Single Safe transaction (not MultiSend).
+    ///         Batched as a single Safe transaction. Address assertion runs
+    ///         before the batch is submitted.
     function phaseB_staker() external isBatch(SAFE) {
-        // Compute deterministic addresses for staker access control sets
         AddressSetFactory asFactory = AddressSetFactory(_addressSetFactoryAddress());
 
         RegenStakerFactory.CreateStakerParams memory params = RegenStakerFactory.CreateStakerParams({
@@ -447,33 +448,37 @@ contract DeployProtocol is Script, BatchScript {
             REGEN_STAKER_WITHOUT_DELEGATION_V1_CREATION_CODE
         );
 
-        bytes memory result = executeTransaction(_stakerFactoryAddress(), 0, data, Operation.CALL, _shouldSend());
+        bytes memory result = addToBatch(_stakerFactoryAddress(), 0, data);
         address deployed = abi.decode(result, (address));
         require(deployed == EXPECTED_STAKER, "Staker address mismatch");
         console.log("RegenStaker:", deployed);
+
+        executeBatch(_shouldSend());
     }
 
     /// @notice Tx 7: Assign staker allowset and blockset via admin setters.
     ///         Batched into a single Safe MultiSend transaction.
+    ///         Requires Tx 6 (staker deployment) to have been executed on-chain.
     function phaseB_stakerAccessSets() external isBatch(SAFE) {
+        require(EXPECTED_STAKER.code.length > 0, "Staker not deployed -- run phaseB_staker first");
+
         address asFactory = _addressSetFactoryAddress();
+        address expectedAllowset = _predictAddressSet(asFactory, STAKER_ALLOWSET_SALT, SAFE);
+        address expectedBlockset = _predictAddressSet(asFactory, STAKER_BLOCKSET_SALT, SAFE);
 
-        addToBatch(
-            EXPECTED_STAKER,
-            0,
-            abi.encodeWithSignature(
-                "setStakerAllowset(address)",
-                _predictAddressSet(asFactory, STAKER_ALLOWSET_SALT, SAFE)
-            )
+        addToBatch(EXPECTED_STAKER, 0, abi.encodeWithSignature("setStakerAllowset(address)", expectedAllowset));
+
+        addToBatch(EXPECTED_STAKER, 0, abi.encodeWithSignature("setStakerBlockset(address)", expectedBlockset));
+
+        // Verify state was set correctly in simulation before submitting
+        RegenStakerWithoutDelegateSurrogateVotes staker = RegenStakerWithoutDelegateSurrogateVotes(EXPECTED_STAKER);
+        require(
+            address(staker.stakerAllowset()) == expectedAllowset,
+            "stakerAllowset not set correctly after simulation"
         );
-
-        addToBatch(
-            EXPECTED_STAKER,
-            0,
-            abi.encodeWithSignature(
-                "setStakerBlockset(address)",
-                _predictAddressSet(asFactory, STAKER_BLOCKSET_SALT, SAFE)
-            )
+        require(
+            address(staker.stakerBlockset()) == expectedBlockset,
+            "stakerBlockset not set correctly after simulation"
         );
 
         executeBatch(_shouldSend());
