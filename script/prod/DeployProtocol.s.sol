@@ -491,6 +491,223 @@ contract DeployProtocol is Script, BatchScript {
 //
 // ═════════════════════════════════════════════════════════════════════════════
 
+// ═════════════════════════════════════════════════════════════════════════════
+//
+//  SOURCE CODE VERIFICATION (Etherscan & Sourcify)
+//
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// @title VerifyProtocolSourceCode
+/// @notice Verifies all 15 Octant v2 protocol contracts on Etherscan and Sourcify.
+///         Uses deterministic addresses from file-level EXPECTED_* constants and
+///         reuses DeployProtocol address-computation helpers for constructor args.
+///
+///         Etherscan (requires API key):
+///           ETHERSCAN_API_KEY=... forge script script/prod/DeployProtocol.s.sol:VerifyProtocolSourceCode \
+///             --sig "verifyEtherscan()" --ffi
+///
+///         Sourcify (no API key needed):
+///           forge script script/prod/DeployProtocol.s.sol:VerifyProtocolSourceCode \
+///             --sig "verifySourcify()" --ffi
+contract VerifyProtocolSourceCode is DeployProtocol {
+    // ═════════════════════════════════════════════════════════════════════════
+    //  CONTRACT SOURCE PATHS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    string constant YIELD_SKIMMING_PATH =
+        "src/strategies/yieldSkimming/YieldSkimmingTokenizedStrategy.sol:YieldSkimmingTokenizedStrategy";
+    string constant YIELD_DONATING_PATH =
+        "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol:YieldDonatingTokenizedStrategy";
+    string constant PAYMENT_SPLITTER_FACTORY_PATH = "src/factories/PaymentSplitterFactory.sol:PaymentSplitterFactory";
+    string constant LIDO_FACTORY_PATH = "src/factories/LidoStrategyFactory.sol:LidoStrategyFactory";
+    string constant MORPHO_FACTORY_PATH =
+        "src/factories/MorphoCompounderStrategyFactory.sol:MorphoCompounderStrategyFactory";
+    string constant SKY_FACTORY_PATH = "src/factories/SkyCompounderStrategyFactory.sol:SkyCompounderStrategyFactory";
+    string constant YEARN_FACTORY_PATH =
+        "src/factories/yieldDonating/YearnV3StrategyFactory.sol:YearnV3StrategyFactory";
+    string constant ADDRESS_SET_FACTORY_PATH = "src/factories/AddressSetFactory.sol:AddressSetFactory";
+    string constant CALC_FACTORY_PATH =
+        "src/factories/RegenEarningPowerCalculatorFactory.sol:RegenEarningPowerCalculatorFactory";
+    string constant STAKER_FACTORY_PATH = "src/factories/RegenStakerFactory.sol:RegenStakerFactory";
+    string constant ADDRESS_SET_PATH = "src/utils/AddressSet.sol:AddressSet";
+    string constant CALCULATOR_PATH = "src/regen/RegenEarningPowerCalculator.sol:RegenEarningPowerCalculator";
+    string constant STAKER_PATH =
+        "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol:RegenStakerWithoutDelegateSurrogateVotes";
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  ENTRY POINTS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /// @notice Verify all 15 contracts on Etherscan. Requires ETHERSCAN_API_KEY env var.
+    function verifyEtherscan() external {
+        _verifyAll("etherscan");
+    }
+
+    /// @notice Verify all 15 contracts on Sourcify. No API key needed.
+    function verifySourcify() external {
+        _verifyAll("sourcify");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  INTERNAL: ORCHESTRATION
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function _verifyAll(string memory verifier) internal {
+        console.log("=== VERIFYING ALL 15 PROTOCOL CONTRACTS ===");
+        console.log("Verifier:", verifier);
+        console.log("");
+
+        // ── Phase A: No constructor args (9 contracts) ───────────────────
+
+        _verifyNoArgs(EXPECTED_YIELD_SKIMMING, YIELD_SKIMMING_PATH, "YieldSkimmingTokenizedStrategy", verifier);
+        _verifyNoArgs(EXPECTED_YIELD_DONATING, YIELD_DONATING_PATH, "YieldDonatingTokenizedStrategy", verifier);
+        _verifyNoArgs(
+            EXPECTED_PAYMENT_SPLITTER_FACTORY,
+            PAYMENT_SPLITTER_FACTORY_PATH,
+            "PaymentSplitterFactory",
+            verifier
+        );
+        _verifyNoArgs(EXPECTED_LIDO_FACTORY, LIDO_FACTORY_PATH, "LidoStrategyFactory", verifier);
+        _verifyNoArgs(EXPECTED_MORPHO_FACTORY, MORPHO_FACTORY_PATH, "MorphoCompounderStrategyFactory", verifier);
+        _verifyNoArgs(EXPECTED_SKY_FACTORY, SKY_FACTORY_PATH, "SkyCompounderStrategyFactory", verifier);
+        _verifyNoArgs(EXPECTED_YEARN_FACTORY, YEARN_FACTORY_PATH, "YearnV3StrategyFactory", verifier);
+        _verifyNoArgs(EXPECTED_ADDRESS_SET_FACTORY, ADDRESS_SET_FACTORY_PATH, "AddressSetFactory", verifier);
+        _verifyNoArgs(EXPECTED_CALC_FACTORY, CALC_FACTORY_PATH, "RegenEarningPowerCalculatorFactory", verifier);
+
+        // ── Phase A: With constructor args (1 contract) ──────────────────
+
+        bytes memory stakerFactoryArgs = abi.encode(
+            keccak256(REGEN_STAKER_V1_CREATION_CODE),
+            keccak256(REGEN_STAKER_WITHOUT_DELEGATION_V1_CREATION_CODE)
+        );
+        _verifyWithArgs(
+            EXPECTED_STAKER_FACTORY,
+            STAKER_FACTORY_PATH,
+            "RegenStakerFactory",
+            stakerFactoryArgs,
+            verifier
+        );
+
+        // ── Phase B: No constructor args (3 AddressSets) ─────────────────
+
+        _verifyNoArgs(EXPECTED_ALLOWSET, ADDRESS_SET_PATH, "AddressSet (allocationMechanism)", verifier);
+        _verifyNoArgs(EXPECTED_STAKER_ALLOWSET, ADDRESS_SET_PATH, "AddressSet (stakerAllowset)", verifier);
+        _verifyNoArgs(EXPECTED_STAKER_BLOCKSET, ADDRESS_SET_PATH, "AddressSet (stakerBlockset)", verifier);
+
+        // ── Phase B: With constructor args (2 contracts) ─────────────────
+
+        bytes memory calculatorArgs = abi.encode(
+            SAFE,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE
+        );
+        _verifyWithArgs(EXPECTED_CALCULATOR, CALCULATOR_PATH, "RegenEarningPowerCalculator", calculatorArgs, verifier);
+
+        // Reuse DeployProtocol._stakerAddress() constructor param encoding
+        address asFactory = _addressSetFactoryAddress();
+        bytes memory stakerArgs = abi.encode(
+            IERC20(WETH),
+            IERC20(GLM),
+            IEarningPowerCalculator(_calculatorAddress()),
+            MAX_BUMP_TIP,
+            SAFE,
+            REWARD_DURATION,
+            MINIMUM_STAKE,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE,
+            IAddressSet(_predictAddressSet(asFactory, ALLOCATION_MECHANISM_ALLOWSET_SALT, SAFE))
+        );
+        _verifyWithArgs(EXPECTED_STAKER, STAKER_PATH, "RegenStakerWithoutDelegateSurrogateVotes", stakerArgs, verifier);
+
+        console.log("=== VERIFICATION COMPLETE ===");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  INTERNAL: FFI VERIFICATION
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /// @dev Verify a contract with no constructor args via forge verify-contract.
+    function _verifyNoArgs(
+        address contractAddress,
+        string memory contractPath,
+        string memory displayName,
+        string memory verifier
+    ) internal {
+        console.log("Verifying", displayName, "at", contractAddress);
+
+        string[] memory inputs = new string[](9);
+        inputs[0] = "forge";
+        inputs[1] = "verify-contract";
+        inputs[2] = vm.toString(contractAddress);
+        inputs[3] = contractPath;
+        inputs[4] = "--verifier";
+        inputs[5] = verifier;
+        inputs[6] = "--chain";
+        inputs[7] = "1";
+        inputs[8] = "--watch";
+
+        try vm.ffi(inputs) returns (bytes memory result) {
+            console.log("  [SUCCESS]", displayName);
+            console.log("   ", string(result));
+        } catch (bytes memory error) {
+            console.log("  [FAILED]", displayName);
+            console.log("   ", string(error));
+        }
+
+        console.log("");
+    }
+
+    /// @dev Verify a contract with constructor args via forge verify-contract.
+    ///      For Sourcify, constructor args are extracted from the creation tx automatically,
+    ///      so we skip the --constructor-args flag.
+    function _verifyWithArgs(
+        address contractAddress,
+        string memory contractPath,
+        string memory displayName,
+        bytes memory constructorArgs,
+        string memory verifier
+    ) internal {
+        console.log("Verifying", displayName, "at", contractAddress);
+
+        bool isEtherscan = keccak256(bytes(verifier)) == keccak256(bytes("etherscan"));
+
+        uint256 inputCount = isEtherscan ? 11 : 9;
+        string[] memory inputs = new string[](inputCount);
+        inputs[0] = "forge";
+        inputs[1] = "verify-contract";
+        inputs[2] = vm.toString(contractAddress);
+        inputs[3] = contractPath;
+        inputs[4] = "--verifier";
+        inputs[5] = verifier;
+        inputs[6] = "--chain";
+        inputs[7] = "1";
+        inputs[8] = "--watch";
+
+        if (isEtherscan) {
+            inputs[9] = "--constructor-args";
+            inputs[10] = vm.toString(constructorArgs);
+        }
+
+        try vm.ffi(inputs) returns (bytes memory result) {
+            console.log("  [SUCCESS]", displayName);
+            console.log("   ", string(result));
+        } catch (bytes memory error) {
+            console.log("  [FAILED]", displayName);
+            console.log("   ", string(error));
+        }
+
+        console.log("");
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//
+//  DEPLOYMENT VERIFICATION TEST
+//
+// ═════════════════════════════════════════════════════════════════════════════
+
 /// @title VerifyProtocolDeployment
 /// @notice Fork test that validates all deployed mainnet contracts are correctly
 ///         deployed and functionally operational. Covers all 10 Phase A
