@@ -289,6 +289,32 @@ contract SwappingYieldForwarderTest is Test {
         assertEq(targetAsset.balanceOf(receiver), 0, "Receiver gets nothing on loss");
     }
 
+    /// @notice Covers the `if (assetsIn == 0) return 0` branch in reportSwapAndForward.
+    ///         shares > 0 but redeem returns 0 assets (e.g., extreme rounding in strategy).
+    function test_reportSwapAndForward_sharesExistButRedeemReturnsZero() public {
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
+        vm.prank(address(forwarder));
+        strategy.report();
+
+        _simulateProfit(10e18);
+
+        // Mock strategy.report() to do nothing special (shares already get minted)
+        // Mock strategy.redeem() to return 0 assets (extreme edge case)
+        vm.mockCall(
+            address(strategy),
+            abi.encodeWithSelector(bytes4(keccak256("redeem(uint256,address,address,uint256)"))),
+            abi.encode(uint256(0))
+        );
+
+        vm.prank(keeperEOA);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+
+        assertEq(assetsOut, 0, "Should return 0 when redeem returns 0 assets");
+        assertEq(targetAsset.balanceOf(receiver), 0, "Receiver gets nothing");
+
+        vm.clearMockedCalls();
+    }
+
     // ═══════════════════════════════════════════════════════════
     // FUZZ TESTS
     // ═══════════════════════════════════════════════════════════
