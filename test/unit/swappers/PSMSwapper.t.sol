@@ -94,7 +94,7 @@ contract PSMSwapperTest is Test {
 
         uint256 amountOut = s.swap(address(gem), address(dai), amountIn, 0, receiver);
 
-        assertEq(amountOut, amountIn * WAD / WAD, "SELL_GEM: output should match 1:1");
+        assertEq(amountOut, (amountIn * WAD) / WAD, "SELL_GEM: output should match 1:1");
         assertEq(dai.balanceOf(receiver), amountOut, "Receiver should have DAI");
     }
 
@@ -116,7 +116,7 @@ contract PSMSwapperTest is Test {
         uint256 amountOut = s.swap(address(dai), address(gem), amountIn, 0, receiver);
 
         // gemAmt = amountIn * WAD / (CONVERSION_FACTOR * (WAD + 0)) = 1000e18 / 1e12 = 1000e6
-        uint256 expectedGemAmt = amountIn * WAD / (CONVERSION_FACTOR * WAD);
+        uint256 expectedGemAmt = (amountIn * WAD) / (CONVERSION_FACTOR * WAD);
         assertEq(amountOut, expectedGemAmt, "BUY_GEM: output should match fee-adjusted amount");
         assertEq(gem.balanceOf(receiver), amountOut, "Receiver should have gem");
     }
@@ -201,6 +201,26 @@ contract PSMSwapperTest is Test {
         uint256 tooHigh = 2000e6;
         vm.expectRevert(abi.encodeWithSelector(PSMSwapper.InsufficientOutput.selector, tooHigh, 1000e6));
         s.swap(address(dai), address(gem), amountIn, tooHigh, receiver);
+    }
+
+    function test_swap_buyGem_revertsOnZeroGemAmt() public {
+        MockPSM mockPSM = new MockPSM(address(dai), address(gem));
+        mockPSM.setTout(0);
+
+        PSMSwapper s = new PSMSwapper(
+            address(mockPSM),
+            PSMSwapper.Route.BUY_GEM,
+            address(dai),
+            address(gem),
+            CONVERSION_FACTOR
+        );
+
+        // amountIn too small: 999 wei of DAI with 1e12 conversion = gemAmt truncates to 0
+        uint256 tinyAmount = CONVERSION_FACTOR - 1;
+        dai.mint(address(s), tinyAmount);
+
+        vm.expectRevert(abi.encodeWithSelector(PSMSwapper.InsufficientOutput.selector, 1, 0));
+        s.swap(address(dai), address(gem), tinyAmount, 0, receiver);
     }
 
     function test_swap_daiToUsds_insufficientOutput() public {

@@ -126,7 +126,7 @@ contract SwappingYieldForwarder is YieldForwarder {
         address strategy,
         uint256 maxLoss,
         uint256 minAmountOut
-    ) external returns (uint256 assetsOut) {
+    ) external nonReentrant returns (uint256 assetsOut) {
         if (msg.sender != keeper) revert OnlyKeeper();
 
         IReportable(strategy).report();

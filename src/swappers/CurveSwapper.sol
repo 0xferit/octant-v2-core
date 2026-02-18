@@ -56,6 +56,9 @@ contract CurveSwapper is ISwapper {
     /// @notice Thrown when a token address is zero or does not match the configured pair
     error InvalidToken();
 
+    /// @notice Thrown when pool indices are identical
+    error InvalidIndices();
+
     // ============================================
     // STATE
     // ============================================
@@ -88,6 +91,7 @@ contract CurveSwapper is ISwapper {
     constructor(address _pool, int128 _indexIn, int128 _indexOut, address _tokenIn, address _tokenOut) {
         if (_pool == address(0)) revert InvalidPool();
         if (_tokenIn == address(0) || _tokenOut == address(0)) revert InvalidToken();
+        if (_indexIn == _indexOut) revert InvalidIndices();
         pool = _pool;
         indexIn = _indexIn;
         indexOut = _indexOut;
@@ -116,6 +120,8 @@ contract CurveSwapper is ISwapper {
         uint256 balBefore = IERC20(tokenOut).balanceOf(address(this));
         ICurvePool(pool).exchange(indexIn, indexOut, amountIn, minAmountOut);
         amountOut = IERC20(tokenOut).balanceOf(address(this)) - balBefore;
+
+        IERC20(tokenIn).forceApprove(pool, 0);
 
         IERC20(tokenOut).safeTransfer(receiver, amountOut);
     }

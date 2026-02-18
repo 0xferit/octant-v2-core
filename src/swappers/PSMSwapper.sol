@@ -146,6 +146,8 @@ contract PSMSwapper is ISwapper {
         IPSM(protocol).sellGem(address(this), amountIn);
         amountOut = IERC20(tokenOut).balanceOf(address(this)) - balBefore;
 
+        IERC20(tokenIn).forceApprove(protocol, 0);
+
         IERC20(tokenOut).safeTransfer(receiver, amountOut);
     }
 
@@ -156,6 +158,7 @@ contract PSMSwapper is ISwapper {
     function _buyGem(uint256 amountIn, address receiver) internal returns (uint256 amountOut) {
         uint256 tout = IPSM(protocol).tout();
         uint256 gemAmt = (amountIn * WAD) / (conversionFactor * (WAD + tout));
+        if (gemAmt == 0) revert InsufficientOutput(1, 0);
 
         IERC20(tokenIn).forceApprove(protocol, amountIn);
 

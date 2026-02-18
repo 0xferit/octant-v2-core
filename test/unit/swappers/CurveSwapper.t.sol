@@ -55,6 +55,11 @@ contract CurveSwapperTest is Test {
         new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenIn), address(0));
     }
 
+    function test_constructor_revertsOnSameIndices() public {
+        vm.expectRevert(CurveSwapper.InvalidIndices.selector);
+        new CurveSwapper(address(pool), INDEX_IN, INDEX_IN, address(tokenIn), address(tokenOut));
+    }
+
     // ═══════════════════════════════════════════════════════════
     // SWAP — TOKEN MISMATCH
     // ═══════════════════════════════════════════════════════════

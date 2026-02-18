@@ -94,8 +94,7 @@ contract UniswapV3SwapperAdapterTest is Test {
 
     function test_swap_singleHop_tokenOutIsBase() public {
         // base != 0, tokenOut == base => single-hop with fee
-        UniswapV3SwapperAdapter s =
-            new UniswapV3SwapperAdapter(address(router), FEE, address(baseToken), FEE_OUT);
+        UniswapV3SwapperAdapter s = new UniswapV3SwapperAdapter(address(router), FEE, address(baseToken), FEE_OUT);
 
         uint256 amountIn = 500e18;
         tokenA.mint(address(s), amountIn);
@@ -115,8 +114,7 @@ contract UniswapV3SwapperAdapterTest is Test {
 
     function test_swap_singleHop_tokenInIsBase() public {
         // base != 0, tokenIn == base => single-hop with feeOut
-        UniswapV3SwapperAdapter s =
-            new UniswapV3SwapperAdapter(address(router), FEE, address(baseToken), FEE_OUT);
+        UniswapV3SwapperAdapter s = new UniswapV3SwapperAdapter(address(router), FEE, address(baseToken), FEE_OUT);
 
         uint256 amountIn = 500e18;
         baseToken.mint(address(s), amountIn);
@@ -135,8 +133,7 @@ contract UniswapV3SwapperAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════
 
     function test_swap_multiHop() public {
-        UniswapV3SwapperAdapter s =
-            new UniswapV3SwapperAdapter(address(router), FEE, address(baseToken), FEE_OUT);
+        UniswapV3SwapperAdapter s = new UniswapV3SwapperAdapter(address(router), FEE, address(baseToken), FEE_OUT);
 
         uint256 amountIn = 1000e18;
         tokenA.mint(address(s), amountIn);
@@ -163,9 +160,7 @@ contract MockUniRouter {
         outputToken = _token;
     }
 
-    function exactInputSingle(
-        ISwapRouter.ExactInputSingleParams calldata params
-    ) external returns (uint256 amountOut) {
+    function exactInputSingle(ISwapRouter.ExactInputSingleParams calldata params) external returns (uint256 amountOut) {
         lastFee = params.fee;
         lastWasMultiHop = false;
         amountOut = params.amountIn;
