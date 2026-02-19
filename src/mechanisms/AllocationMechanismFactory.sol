@@ -3,7 +3,10 @@ pragma solidity ^0.8.20;
 
 import { TokenizedAllocationMechanism } from "./TokenizedAllocationMechanism.sol";
 import { QuadraticVotingMechanism } from "./mechanism/QuadraticVotingMechanism.sol";
+import { OctantQFMechanism } from "./mechanism/OctantQFMechanism.sol";
 import { AllocationConfig } from "./BaseAllocationMechanism.sol";
+import { IAddressSet } from "src/utils/IAddressSet.sol";
+import { AccessMode } from "src/constants.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
 
@@ -205,6 +208,135 @@ contract AllocationMechanismFactory {
         emit AllocationMechanismDeployed(mechanism, address(_config.asset), _config.name, _config.symbol, msg.sender);
 
         return mechanism;
+    }
+
+    /**
+     * @notice Predict the deployment address of an OctantQFMechanism
+     * @dev Uses CREATE2 address computation with same salt generation as deployment
+     *      Address prediction is deterministic and guaranteed to match deployment
+     * @param _config Configuration struct containing all mechanism parameters
+     * @param _alphaNumerator Alpha numerator for ProperQF weighting
+     * @param _alphaDenominator Alpha denominator for ProperQF weighting
+     * @param _allowset Allowset contract used in ALLOWSET mode
+     * @param _blockset Blockset contract used in BLOCKSET mode
+     * @param _accessMode Initial access mode (NONE, ALLOWSET, BLOCKSET)
+     * @param deployer Address that will deploy the mechanism (used in salt)
+     * @return predicted Deterministic CREATE2 address where mechanism will be deployed
+     */
+    function predictOctantQFMechanismAddress(
+        AllocationConfig memory _config,
+        uint256 _alphaNumerator,
+        uint256 _alphaDenominator,
+        IAddressSet _allowset,
+        IAddressSet _blockset,
+        AccessMode _accessMode,
+        address deployer
+    ) public view returns (address predicted) {
+        _config.owner = deployer;
+        bytes32 salt = _octantQFSalt(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode, deployer);
+        bytes memory bytecode = _octantQFBytecode(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode);
+        return Create2.computeAddress(salt, keccak256(bytecode));
+    }
+
+    /**
+     * @notice Deploy a new OctantQFMechanism with deterministic address
+     * @dev Uses CREATE2 for deterministic deployment address
+     *      Reverts if mechanism with same parameters already exists
+     *
+     *      DEPLOYMENT STEPS:
+     *      1. Set msg.sender as mechanism owner
+     *      2. Generate deterministic salt from all parameters
+     *      3. Compute expected address via CREATE2
+     *      4. Check for existing deployment (revert if exists)
+     *      5. Deploy via CREATE2
+     *      6. Track in registry
+     *      7. Emit deployment event
+     * @param _config Configuration struct containing mechanism parameters
+     * @param _alphaNumerator Alpha numerator for ProperQF weighting
+     * @param _alphaDenominator Alpha denominator for ProperQF weighting
+     * @param _allowset Allowset contract used in ALLOWSET mode (address(0) if unused)
+     * @param _blockset Blockset contract used in BLOCKSET mode (address(0) if unused)
+     * @param _accessMode Initial access mode (NONE, ALLOWSET, or BLOCKSET)
+     * @return mechanism Address of the deployed OctantQFMechanism contract
+     * @custom:security Caller becomes mechanism owner with admin privileges
+     * @custom:security CREATE2 ensures same parameters always deploy to same address
+     */
+    function deployOctantQFMechanism(
+        AllocationConfig memory _config,
+        uint256 _alphaNumerator,
+        uint256 _alphaDenominator,
+        IAddressSet _allowset,
+        IAddressSet _blockset,
+        AccessMode _accessMode
+    ) external returns (address mechanism) {
+        _config.owner = msg.sender;
+
+        bytes32 salt = _octantQFSalt(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode, msg.sender);
+        bytes memory bytecode = _octantQFBytecode(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode);
+
+        address predictedAddress = Create2.computeAddress(salt, keccak256(bytecode));
+
+        if (predictedAddress.code.length > 0) {
+            revert MechanismAlreadyExists(predictedAddress);
+        }
+
+        mechanism = Create2.deploy(0, salt, bytecode);
+
+        deployedMechanisms.push(mechanism);
+        isMechanism[mechanism] = true;
+
+        emit AllocationMechanismDeployed(mechanism, address(_config.asset), _config.name, _config.symbol, msg.sender);
+
+        return mechanism;
+    }
+
+    // ============================================
+    // INTERNAL HELPERS
+    // ============================================
+
+    function _octantQFSalt(
+        AllocationConfig memory _config,
+        uint256 _alphaNumerator,
+        uint256 _alphaDenominator,
+        IAddressSet _allowset,
+        IAddressSet _blockset,
+        AccessMode _accessMode,
+        address deployer
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                tokenizedAllocationImplementation,
+                _config,
+                _alphaNumerator,
+                _alphaDenominator,
+                _allowset,
+                _blockset,
+                _accessMode,
+                deployer
+            )
+        );
+    }
+
+    function _octantQFBytecode(
+        AllocationConfig memory _config,
+        uint256 _alphaNumerator,
+        uint256 _alphaDenominator,
+        IAddressSet _allowset,
+        IAddressSet _blockset,
+        AccessMode _accessMode
+    ) internal view returns (bytes memory) {
+        return abi.encodePacked(
+            type(OctantQFMechanism).creationCode,
+            abi.encode(
+                tokenizedAllocationImplementation,
+                _config,
+                _alphaNumerator,
+                _alphaDenominator,
+                _allowset,
+                _blockset,
+                _accessMode
+            )
+        );
     }
 
     // ============================================
