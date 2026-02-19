@@ -233,8 +233,23 @@ contract AllocationMechanismFactory {
         address deployer
     ) public view returns (address predicted) {
         _config.owner = deployer;
-        bytes32 salt = _octantQFSalt(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode, deployer);
-        bytes memory bytecode = _octantQFBytecode(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode);
+        bytes32 salt = _octantQFSalt(
+            _config,
+            _alphaNumerator,
+            _alphaDenominator,
+            _allowset,
+            _blockset,
+            _accessMode,
+            deployer
+        );
+        bytes memory bytecode = _octantQFBytecode(
+            _config,
+            _alphaNumerator,
+            _alphaDenominator,
+            _allowset,
+            _blockset,
+            _accessMode
+        );
         return Create2.computeAddress(salt, keccak256(bytecode));
     }
 
@@ -271,8 +286,23 @@ contract AllocationMechanismFactory {
     ) external returns (address mechanism) {
         _config.owner = msg.sender;
 
-        bytes32 salt = _octantQFSalt(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode, msg.sender);
-        bytes memory bytecode = _octantQFBytecode(_config, _alphaNumerator, _alphaDenominator, _allowset, _blockset, _accessMode);
+        bytes32 salt = _octantQFSalt(
+            _config,
+            _alphaNumerator,
+            _alphaDenominator,
+            _allowset,
+            _blockset,
+            _accessMode,
+            msg.sender
+        );
+        bytes memory bytecode = _octantQFBytecode(
+            _config,
+            _alphaNumerator,
+            _alphaDenominator,
+            _allowset,
+            _blockset,
+            _accessMode
+        );
 
         address predictedAddress = Create2.computeAddress(salt, keccak256(bytecode));
 
@@ -303,18 +333,19 @@ contract AllocationMechanismFactory {
         AccessMode _accessMode,
         address deployer
     ) internal view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                tokenizedAllocationImplementation,
-                _config,
-                _alphaNumerator,
-                _alphaDenominator,
-                _allowset,
-                _blockset,
-                _accessMode,
-                deployer
-            )
-        );
+        return
+            keccak256(
+                abi.encode(
+                    tokenizedAllocationImplementation,
+                    _config,
+                    _alphaNumerator,
+                    _alphaDenominator,
+                    _allowset,
+                    _blockset,
+                    _accessMode,
+                    deployer
+                )
+            );
     }
 
     function _octantQFBytecode(
@@ -325,18 +356,19 @@ contract AllocationMechanismFactory {
         IAddressSet _blockset,
         AccessMode _accessMode
     ) internal view returns (bytes memory) {
-        return abi.encodePacked(
-            type(OctantQFMechanism).creationCode,
-            abi.encode(
-                tokenizedAllocationImplementation,
-                _config,
-                _alphaNumerator,
-                _alphaDenominator,
-                _allowset,
-                _blockset,
-                _accessMode
-            )
-        );
+        return
+            abi.encodePacked(
+                type(OctantQFMechanism).creationCode,
+                abi.encode(
+                    tokenizedAllocationImplementation,
+                    _config,
+                    _alphaNumerator,
+                    _alphaDenominator,
+                    _allowset,
+                    _blockset,
+                    _accessMode
+                )
+            );
     }
 
     // ============================================
