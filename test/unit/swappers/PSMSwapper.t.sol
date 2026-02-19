@@ -157,7 +157,8 @@ contract PSMSwapperTest is Test {
         uint256 amountIn = 1000e18;
         dai.mint(address(s), amountIn);
 
-        uint256 amountOut = s.swap(address(dai), address(usds), amountIn, 0, receiver);
+        // minAmountOut = amountIn: 1:1 conversion, exact output enforced internally
+        uint256 amountOut = s.swap(address(dai), address(usds), amountIn, amountIn, receiver);
 
         assertEq(amountOut, amountIn, "DAI_TO_USDS: should be 1:1");
         assertEq(usds.balanceOf(receiver), amountIn, "Receiver should have USDS");
@@ -176,7 +177,8 @@ contract PSMSwapperTest is Test {
         uint256 amountIn = 1000e18;
         usds.mint(address(s), amountIn);
 
-        uint256 amountOut = s.swap(address(usds), address(dai), amountIn, 0, receiver);
+        // minAmountOut = amountIn: 1:1 conversion, exact output enforced internally
+        uint256 amountOut = s.swap(address(usds), address(dai), amountIn, amountIn, receiver);
 
         assertEq(amountOut, amountIn, "USDS_TO_DAI: should be 1:1");
         assertEq(dai.balanceOf(receiver), amountIn, "Receiver should have DAI");
@@ -223,7 +225,7 @@ contract PSMSwapperTest is Test {
         s.swap(address(dai), address(gem), tinyAmount, 0, receiver);
     }
 
-    function test_swap_daiToUsds_insufficientOutput() public {
+    function test_swap_daiToUsds_ignoresCallerMinAmountOut() public {
         MockExchange mockExchange = new MockExchange(address(dai), address(usds));
         PSMSwapper s = new PSMSwapper(
             address(mockExchange),
@@ -236,9 +238,71 @@ contract PSMSwapperTest is Test {
         uint256 amountIn = 1000e18;
         dai.mint(address(s), amountIn);
 
-        uint256 tooHigh = 2000e18;
-        vm.expectRevert(abi.encodeWithSelector(PSMSwapper.InsufficientOutput.selector, tooHigh, amountIn));
-        s.swap(address(dai), address(usds), amountIn, tooHigh, receiver);
+        // Caller passes 0 as minAmountOut, but contract enforces amountIn internally
+        uint256 amountOut = s.swap(address(dai), address(usds), amountIn, 0, receiver);
+        assertEq(amountOut, amountIn, "1:1 enforced regardless of caller minAmountOut");
+    }
+
+    function test_swap_usdsToDai_ignoresCallerMinAmountOut() public {
+        MockExchange mockExchange = new MockExchange(address(usds), address(dai));
+        PSMSwapper s = new PSMSwapper(
+            address(mockExchange),
+            PSMSwapper.Route.USDS_TO_DAI,
+            address(usds),
+            address(dai),
+            0
+        );
+
+        uint256 amountIn = 1000e18;
+        usds.mint(address(s), amountIn);
+
+        // Caller passes 0 as minAmountOut, but contract enforces amountIn internally
+        uint256 amountOut = s.swap(address(usds), address(dai), amountIn, 0, receiver);
+        assertEq(amountOut, amountIn, "1:1 enforced regardless of caller minAmountOut");
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SWAP — NON-1:1 CONVERSION REVERT
+    // ═══════════════════════════════════════════════════════════
+
+    function test_swap_daiToUsds_revertsOnNonOneToOne() public {
+        MockExchange mockExchange = new MockExchange(address(dai), address(usds));
+        mockExchange.setSkim(1); // converter returns 1 wei less than expected
+        PSMSwapper s = new PSMSwapper(
+            address(mockExchange),
+            PSMSwapper.Route.DAI_TO_USDS,
+            address(dai),
+            address(usds),
+            0
+        );
+
+        uint256 amountIn = 1000e18;
+        dai.mint(address(s), amountIn);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PSMSwapper.NonOneToOneConversion.selector, amountIn, amountIn - 1)
+        );
+        s.swap(address(dai), address(usds), amountIn, 0, receiver);
+    }
+
+    function test_swap_usdsToDai_revertsOnNonOneToOne() public {
+        MockExchange mockExchange = new MockExchange(address(usds), address(dai));
+        mockExchange.setSkim(1); // converter returns 1 wei less than expected
+        PSMSwapper s = new PSMSwapper(
+            address(mockExchange),
+            PSMSwapper.Route.USDS_TO_DAI,
+            address(usds),
+            address(dai),
+            0
+        );
+
+        uint256 amountIn = 1000e18;
+        usds.mint(address(s), amountIn);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PSMSwapper.NonOneToOneConversion.selector, amountIn, amountIn - 1)
+        );
+        s.swap(address(usds), address(dai), amountIn, 0, receiver);
     }
 }
 
@@ -280,25 +344,30 @@ contract MockPSM {
     }
 }
 
-/// @dev Mock DaiUsds Exchange that simulates 1:1 conversion
+/// @dev Mock DaiUsds Exchange that simulates 1:1 conversion (with optional skim for testing)
 contract MockExchange {
     ERC20Mock public tokenIn;
     ERC20Mock public tokenOut;
+    uint256 public skim; // amount to withhold from output (0 = perfect 1:1)
 
     constructor(address _tokenIn, address _tokenOut) {
         tokenIn = ERC20Mock(_tokenIn);
         tokenOut = ERC20Mock(_tokenOut);
     }
 
+    function setSkim(uint256 _skim) external {
+        skim = _skim;
+    }
+
     /// @dev DAI -> USDS: pull DAI from caller, mint USDS to usr
     function daiToUsds(address usr, uint256 wad) external {
         tokenIn.transferFrom(msg.sender, address(this), wad);
-        tokenOut.mint(usr, wad);
+        tokenOut.mint(usr, wad - skim);
     }
 
     /// @dev USDS -> DAI: pull USDS from caller, mint DAI to usr
     function usdsToDai(address usr, uint256 wad) external {
         tokenIn.transferFrom(msg.sender, address(this), wad);
-        tokenOut.mint(usr, wad);
+        tokenOut.mint(usr, wad - skim);
     }
 }

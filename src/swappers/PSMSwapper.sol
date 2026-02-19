@@ -84,6 +84,11 @@ contract PSMSwapper is ISwapper {
     /// @param actual Amount actually received
     error InsufficientOutput(uint256 expected, uint256 actual);
 
+    /// @notice Thrown when a 1:1 DaiUsds conversion does not produce exact output
+    /// @param expected The input amount (expected output for 1:1)
+    /// @param actual Amount actually received
+    error NonOneToOneConversion(uint256 expected, uint256 actual);
+
     // ============================================
     // CONSTRUCTOR
     // ============================================
@@ -125,8 +130,10 @@ contract PSMSwapper is ISwapper {
             amountOut = _buyGem(amountIn, receiver);
         } else if (route == Route.DAI_TO_USDS) {
             amountOut = _daiToUsds(amountIn, receiver);
+            minAmountOut = amountIn; // 1:1 converter, enforce exact output
         } else {
             amountOut = _usdsToDai(amountIn, receiver);
+            minAmountOut = amountIn; // 1:1 converter, enforce exact output
         }
 
         if (amountOut < minAmountOut) revert InsufficientOutput(minAmountOut, amountOut);
@@ -174,17 +181,23 @@ contract PSMSwapper is ISwapper {
 
     /// @dev Convert DAI to USDS via DaiUsds converter (always 1:1, permanently fee-free).
     ///      Output is sent directly to receiver by the converter contract.
-    function _daiToUsds(uint256 amountIn, address receiver) internal returns (uint256) {
+    ///      Reverts if the actual output does not match amountIn exactly.
+    function _daiToUsds(uint256 amountIn, address receiver) internal returns (uint256 amountOut) {
         IERC20(tokenIn).forceApprove(protocol, amountIn);
+        uint256 balBefore = IERC20(tokenOut).balanceOf(receiver);
         IExchange(protocol).daiToUsds(receiver, amountIn);
-        return amountIn;
+        amountOut = IERC20(tokenOut).balanceOf(receiver) - balBefore;
+        if (amountOut != amountIn) revert NonOneToOneConversion(amountIn, amountOut);
     }
 
     /// @dev Convert USDS to DAI via DaiUsds converter (always 1:1, permanently fee-free).
     ///      Output is sent directly to receiver by the converter contract.
-    function _usdsToDai(uint256 amountIn, address receiver) internal returns (uint256) {
+    ///      Reverts if the actual output does not match amountIn exactly.
+    function _usdsToDai(uint256 amountIn, address receiver) internal returns (uint256 amountOut) {
         IERC20(tokenIn).forceApprove(protocol, amountIn);
+        uint256 balBefore = IERC20(tokenOut).balanceOf(receiver);
         IExchange(protocol).usdsToDai(receiver, amountIn);
-        return amountIn;
+        amountOut = IERC20(tokenOut).balanceOf(receiver) - balBefore;
+        if (amountOut != amountIn) revert NonOneToOneConversion(amountIn, amountOut);
     }
 }
