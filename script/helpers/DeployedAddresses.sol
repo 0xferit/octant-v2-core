@@ -107,7 +107,7 @@ contract DeployedAddresses is Script {
                 skyCompounderStrategyFactory: address(0),
                 morphoCompounderStrategyFactory: address(0),
                 regenStakerFactory: address(0),
-                allocationMechanismFactory: 0x4fc209fbc5efe0549cdb878f206942a91bbc17d2,
+                allocationMechanismFactory: 0x4fc209Fbc5eFE0549cdB878f206942a91bBC17d2,
                 yieldDonatingTokenizedStrategy: address(0),
                 yearnV3StrategyFactory: address(0),
                 lidoStrategyFactory: address(0),
