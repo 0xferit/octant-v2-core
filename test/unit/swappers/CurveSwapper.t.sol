@@ -19,7 +19,7 @@ contract CurveSwapperTest is Test {
     function setUp() public {
         tokenIn = new ERC20Mock();
         tokenOut = new ERC20Mock();
-        pool = new MockCurvePool(address(tokenIn), address(tokenOut));
+        pool = new MockCurvePool(address(tokenIn), address(tokenOut), INDEX_IN, INDEX_OUT);
 
         vm.label(address(tokenIn), "TokenIn");
         vm.label(address(tokenOut), "TokenOut");
@@ -58,6 +58,24 @@ contract CurveSwapperTest is Test {
     function test_constructor_revertsOnSameIndices() public {
         vm.expectRevert(CurveSwapper.InvalidIndices.selector);
         new CurveSwapper(address(pool), INDEX_IN, INDEX_IN, address(tokenIn), address(tokenOut));
+    }
+
+    function test_constructor_revertsOnTokenInIndexMismatch() public {
+        // pool.coins(INDEX_IN) = tokenIn, but we pass tokenOut as _tokenIn
+        vm.expectRevert(CurveSwapper.TokenIndexMismatch.selector);
+        new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenOut), address(tokenOut));
+    }
+
+    function test_constructor_revertsOnTokenOutIndexMismatch() public {
+        // pool.coins(INDEX_OUT) = tokenOut, but we pass tokenIn as _tokenOut
+        vm.expectRevert(CurveSwapper.TokenIndexMismatch.selector);
+        new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenIn), address(tokenIn));
+    }
+
+    function test_constructor_revertsOnSwappedIndices() public {
+        // Correct tokens but swapped indices (INDEX_OUT for tokenIn, INDEX_IN for tokenOut)
+        vm.expectRevert(CurveSwapper.TokenIndexMismatch.selector);
+        new CurveSwapper(address(pool), INDEX_OUT, INDEX_IN, address(tokenIn), address(tokenOut));
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -126,13 +144,16 @@ contract CurveSwapperTest is Test {
 // ═══════════════════════════════════════════════════════════
 
 contract MockCurvePool {
+    mapping(uint256 => address) public coins;
     ERC20Mock public tokenIn;
     ERC20Mock public tokenOut;
     uint256 public slippagePct = 100; // 100 = no slippage
 
-    constructor(address _tokenIn, address _tokenOut) {
+    constructor(address _tokenIn, address _tokenOut, int128 _indexIn, int128 _indexOut) {
         tokenIn = ERC20Mock(_tokenIn);
         tokenOut = ERC20Mock(_tokenOut);
+        coins[uint256(int256(_indexIn))] = _tokenIn;
+        coins[uint256(int256(_indexOut))] = _tokenOut;
     }
 
     function setSlippage(uint256 _pct) external {

@@ -10,6 +10,10 @@ import { ISwapper } from "../core/interfaces/ISwapper.sol";
 ///      Uses non-returning variant for compatibility with legacy pools (e.g., 3Pool)
 ///      that do not return the output amount. Balance measurement is used instead.
 interface ICurvePool {
+    /// @notice Returns the token address at the given index in the pool
+    /// @param index Index of the token in the pool's coins array
+    function coins(uint256 index) external view returns (address);
+
     /// @notice Exchange tokens within the pool
     /// @param i Index of the input token in the pool
     /// @param j Index of the output token in the pool
@@ -59,6 +63,9 @@ contract CurveSwapper is ISwapper {
     /// @notice Thrown when pool indices are identical
     error InvalidIndices();
 
+    /// @notice Thrown when a token address does not match the pool's coins at the given index
+    error TokenIndexMismatch();
+
     // ============================================
     // STATE
     // ============================================
@@ -92,6 +99,8 @@ contract CurveSwapper is ISwapper {
         if (_pool == address(0)) revert InvalidPool();
         if (_tokenIn == address(0) || _tokenOut == address(0)) revert InvalidToken();
         if (_indexIn == _indexOut) revert InvalidIndices();
+        if (ICurvePool(_pool).coins(uint256(int256(_indexIn))) != _tokenIn) revert TokenIndexMismatch();
+        if (ICurvePool(_pool).coins(uint256(int256(_indexOut))) != _tokenOut) revert TokenIndexMismatch();
         pool = _pool;
         indexIn = _indexIn;
         indexOut = _indexOut;

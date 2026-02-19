@@ -101,6 +101,27 @@ contract CurveSwapperIntegrationTest is BaseSwapperIntegrationTest {
         assertGt(ERC20(USDT).balanceOf(receiver), 0, "Receiver should have USDT");
     }
 
+    /// @notice Constructor reverts when tokenIn does not match pool.coins(indexIn)
+    function test_constructor_revertsOnTokenInIndexMismatch() public {
+        // INDEX_USDC=1 maps to USDC in 3Pool, but we pass USDT as tokenIn
+        vm.expectRevert(CurveSwapper.TokenIndexMismatch.selector);
+        new CurveSwapper(CURVE_3POOL, INDEX_USDC, INDEX_USDT, USDT, USDT);
+    }
+
+    /// @notice Constructor reverts when tokenOut does not match pool.coins(indexOut)
+    function test_constructor_revertsOnTokenOutIndexMismatch() public {
+        // INDEX_USDT=2 maps to USDT in 3Pool, but we pass USDC as tokenOut
+        vm.expectRevert(CurveSwapper.TokenIndexMismatch.selector);
+        new CurveSwapper(CURVE_3POOL, INDEX_USDC, INDEX_USDT, MorphoTestConfig.USDC, MorphoTestConfig.USDC);
+    }
+
+    /// @notice Constructor reverts when indices are swapped relative to tokens
+    function test_constructor_revertsOnSwappedIndices() public {
+        // Tokens are correct but indices are flipped
+        vm.expectRevert(CurveSwapper.TokenIndexMismatch.selector);
+        new CurveSwapper(CURVE_3POOL, INDEX_USDT, INDEX_USDC, MorphoTestConfig.USDC, USDT);
+    }
+
     /// @notice Verify swapper immutables are correctly set
     function test_curveSwapper_config() public view {
         assertEq(curveSwapper.pool(), CURVE_3POOL);
