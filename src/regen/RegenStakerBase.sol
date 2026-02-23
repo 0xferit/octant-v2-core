@@ -33,6 +33,7 @@ import { NotInAllowset } from "src/errors.sol";
 /// @notice Provides shared functionality including:
 ///         - Variable reward duration (7-3000 days, configurable by admin)
 ///         - Earning power management with external bumping incentivized by tips (up to maxBumpTip)
+///         - Earning power calculator updates (blocked during active reward periods for governance protection)
 ///         - Adjustable minimum stake amount (existing deposits grandfathered with restrictions)
 ///         - Access control for stakers and allocation mechanisms
 ///         - Reward compounding (when REWARD_TOKEN == STAKE_TOKEN)
@@ -85,6 +86,10 @@ import { NotInAllowset } from "src/errors.sol";
 /// @dev Integer division causes ~1 wei precision loss, negligible due to SCALE_FACTOR (1e36).
 /// @dev This base is abstract, with variants implementing token-specific behaviors (e.g., delegation surrogates).
 /// @dev Earning power updates are required after balance changes; some are automatic, others via bumpEarningPower.
+///
+/// @dev ACCESS CONTROL:
+///      - admin: Admin operations (protocol parameters, pause, access control) from base Staker
+///      - rewardManager: Can manage reward notifiers (operational role, separation of duties)
 abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, StakerPermitAndStake, StakerOnBehalf {
     using SafeCast for uint256;
 
@@ -135,13 +140,22 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
 
     /// @notice Error thrown when attempting to change earning power calculator during active reward
     error CannotChangeEarningPowerCalculatorDuringActiveReward();
-
     error ZeroOperation();
     error NoOperation();
     error DisablingAllocationMechanismAllowsetNotAllowed();
     /// @param expected Address of REWARD_TOKEN
     /// @param actual Address of token expected by allocation mechanism
     error AssetMismatch(address expected, address actual);
+    /// @param depositId Deposit with an active commitment lock
+    error ActiveCommitmentExists(DepositIdentifier depositId);
+    /// @param depositId Deposit that is locked
+    /// @param lockEnd Timestamp when the lock expires
+    error CommitmentLockActive(DepositIdentifier depositId, uint64 lockEnd);
+    /// @param pct Percentage that was out of the 1-5 range
+    error InvalidAdvanceRewardsPct(uint256 pct);
+    /// @param requested Amount requested for contribution
+    /// @param available Earmarked amount available
+    error InsufficientAdvanceRewards(uint256 requested, uint256 available);
 
     // === State Variables ===
     /// @notice Shared configuration state instance
@@ -169,6 +183,15 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
 
     /// @notice Cached metadata for the most recent reward schedule.
     RewardSchedule public latestRewardSchedule;
+
+    /// @notice Info about a deposit's advance reward earmark and commitment lock
+    struct AdvanceRewardInfo {
+        uint96 amount; // earmarked stake tokens (decreases as contributed)
+        uint64 lockEnd; // withdrawal lock timestamp (0 = no lock)
+    }
+
+    /// @notice Per-deposit advance reward earmarks
+    mapping(DepositIdentifier => AdvanceRewardInfo) public advanceRewards;
 
     // === Events ===
     /// @notice Emitted when the staker allowset is updated
@@ -698,6 +721,87 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
         return amountContributedToAllocationMechanism;
     }
 
+    /// @notice Earmarks a percentage of staked capital as advance rewards and locks the deposit.
+    /// @dev Lock duration = pct x 30 days. Tokens stay in place; no transfers occur on this call.
+    /// @dev Only callable while not paused. Reverts if an active lock already exists.
+    /// @param _depositId Deposit to earmark
+    /// @param _pct Percentage of current balance to earmark (1 to 5 inclusive)
+    function setAdvanceRewards(DepositIdentifier _depositId, uint256 _pct) external whenNotPaused {
+        if (_pct == 0 || _pct > 5) revert InvalidAdvanceRewardsPct(_pct);
+
+        Deposit storage deposit = deposits[_depositId];
+        if (deposit.owner != msg.sender) revert Staker__Unauthorized("not owner", msg.sender);
+
+        AdvanceRewardInfo storage sr = advanceRewards[_depositId];
+        if (sr.lockEnd > block.timestamp) revert ActiveCommitmentExists(_depositId);
+
+        uint256 amount = (deposit.balance * _pct) / 100;
+        require(amount > 0, ZeroOperation());
+
+        uint64 lockEnd = uint64(block.timestamp + _pct * 30 days);
+        advanceRewards[_depositId] = AdvanceRewardInfo(amount.toUint96(), lockEnd);
+    }
+
+    /// @notice Consumes earmarked advance rewards and transfers stake tokens to caller.
+    /// @dev NOTE: Caller is responsible for any subsequent contribution flow.
+    /// @dev Reduces deposit.balance and earning power; lock persists until expiry even if amount reaches zero.
+    /// @param _depositId Deposit the advance amount originates from
+    /// @param _amount Amount to consume (must be <= current earmarked amount)
+    /// @param _deadline Unused (kept for backwards compatibility)
+    /// @param _v Unused (kept for backwards compatibility)
+    /// @param _r Unused (kept for backwards compatibility)
+    /// @param _s Unused (kept for backwards compatibility)
+    function contributeFromAdvanceRewards(
+        DepositIdentifier _depositId,
+        address,
+        uint256 _amount,
+        uint256 _deadline,
+        uint8 _v,
+        bytes32 _r,
+        bytes32 _s
+    ) external whenNotPaused nonReentrant {
+        // Silence compatibility parameters in a low-cost way.
+        (_deadline, _v, _r, _s);
+
+        Deposit storage deposit = deposits[_depositId];
+        if (deposit.claimer != msg.sender && deposit.owner != msg.sender) {
+            revert Staker__Unauthorized("not claimer or owner", msg.sender);
+        }
+
+        AdvanceRewardInfo storage sr = advanceRewards[_depositId];
+        require(_amount > 0, ZeroOperation());
+        if (_amount > sr.amount) revert InsufficientAdvanceRewards(_amount, sr.amount);
+
+        _checkpointGlobalReward();
+        _checkpointReward(deposit);
+
+        deposit.balance -= _amount.toUint96();
+        _updateEarningPower(deposit);
+        totalStaked -= _amount;
+        depositorTotalStaked[deposit.owner] -= _amount;
+        sr.amount -= _amount.toUint96();
+        _stakeTokenSafeTransferFrom(address(surrogates(deposit.delegatee)), msg.sender, _amount);
+    }
+
+    /// @notice Updates earning power for a deposit after a balance change.
+    /// @dev Extracted to reduce stack depth in contributeFromAdvanceRewards.
+    /// @param deposit Deposit storage reference (balance must already be updated before calling)
+    function _updateEarningPower(Deposit storage deposit) private {
+        uint256 _oldEarningPower = deposit.earningPower;
+        uint256 _newEarningPower = earningPowerCalculator.getEarningPower(
+            deposit.balance,
+            deposit.owner,
+            deposit.delegatee
+        );
+        totalEarningPower = _calculateTotalEarningPower(_oldEarningPower, _newEarningPower, totalEarningPower);
+        depositorTotalEarningPower[deposit.owner] = _calculateTotalEarningPower(
+            _oldEarningPower,
+            _newEarningPower,
+            depositorTotalEarningPower[deposit.owner]
+        );
+        deposit.earningPower = _newEarningPower.toUint96();
+    }
+
     /// @notice Compounds rewards by claiming them and immediately restaking them into the same deposit
     /// @dev REQUIREMENT: Only works when REWARD_TOKEN == STAKE_TOKEN, otherwise reverts.
     /// @dev EARNING POWER: Compounding updates earning power based on new total balance.
@@ -862,7 +966,8 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
         _revertIfMinimumStakeAmountNotMet(_depositId);
     }
 
-    /// @notice Prevents withdrawing 0; prevents withdrawals that drop balance below minimum.
+    /// @notice Prevents withdrawing 0; prevents withdrawals that drop balance below minimum;
+    ///         enforces advance rewards commitment lock.
     /// @dev USER PROTECTION: Withdrawals remain enabled even when contract is paused to ensure
     ///      users can always access their principal funds.
     /// @dev Uses reentrancy guard
@@ -874,6 +979,12 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
         DepositIdentifier _depositId,
         uint256 _amount
     ) internal virtual override nonReentrant {
+        // Enforce advance rewards commitment lock
+        AdvanceRewardInfo storage sr = advanceRewards[_depositId];
+        if (sr.lockEnd > block.timestamp) revert CommitmentLockActive(_depositId, sr.lockEnd);
+        // Lock expired: clear stale earmark
+        if (sr.lockEnd != 0) delete advanceRewards[_depositId];
+
         require(_amount > 0, ZeroOperation());
         super._withdraw(deposit, _depositId, _amount);
         _revertIfMinimumStakeAmountNotMet(_depositId);
