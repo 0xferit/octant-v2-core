@@ -333,11 +333,24 @@ contract AllocationMechanismFactory {
         AccessMode _accessMode,
         address deployer
     ) internal view returns (bytes32) {
+        // Hash config fields separately to avoid stack-too-deep
+        bytes32 configHash = keccak256(
+            abi.encode(
+                _config.asset,
+                _config.name,
+                _config.symbol,
+                _config.votingDelay,
+                _config.votingPeriod,
+                _config.quorumShares,
+                _config.timelockDelay,
+                _config.gracePeriod
+            )
+        );
         return
             keccak256(
                 abi.encode(
                     tokenizedAllocationImplementation,
-                    _config,
+                    configHash,
                     _alphaNumerator,
                     _alphaDenominator,
                     _allowset,
