@@ -596,12 +596,12 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
     /// @dev Requires contract not paused and uses reentrancy guard
     /// @param _depositId Deposit identifier to contribute from
     /// @param _allocationMechanismAddress Approved allocation mechanism to receive contribution
-    /// @param _amount Amount of unclaimed rewards to contribute (must be <= available rewards)
+    /// @param _amount Amount requested to contribute, consumed from rewards first then advance rewards
     /// @param _deadline Signature expiration timestamp
     /// @param _v Signature component v
     /// @param _r Signature component r
     /// @param _s Signature component s
-    /// @return amountContributedToAllocationMechanism Actual amount contributed
+    /// @return amountContributedToAllocationMechanism Actual amount contributed to allocation mechanism (reward leg only)
     function contribute(
         DepositIdentifier _depositId,
         address _allocationMechanismAddress,
@@ -611,53 +611,45 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
         bytes32 _r,
         bytes32 _s
     ) public virtual whenNotPaused nonReentrant returns (uint256 amountContributedToAllocationMechanism) {
-        _revertIfAddressZero(_allocationMechanismAddress);
-        require(
-            sharedState.allocationMechanismAllowset.contains(_allocationMechanismAddress),
-            NotInAllowset(_allocationMechanismAddress)
-        );
-
-        // Validate asset compatibility to fail fast and provide clear error
-        {
-            address expectedAsset = address(TokenizedAllocationMechanism(_allocationMechanismAddress).asset());
-            if (address(REWARD_TOKEN) != expectedAsset) {
-                revert AssetMismatch(address(REWARD_TOKEN), expectedAsset);
-            }
-        }
-
         Deposit storage deposit = deposits[_depositId];
         if (deposit.claimer != msg.sender && deposit.owner != msg.sender) {
             revert Staker__Unauthorized("not claimer or owner", msg.sender);
-        }
-
-        // Defense-in-depth dual-check architecture (Cantina Finding #127 fix):
-        // 1. TAM checks msg.sender (claimer/contributor) via beforeSignupHook - receives voting power
-        // 2. RegenStaker checks deposit.owner (fund source) must also be eligible (defense-in-depth)
-        // This prevents delisted owners from using allowlisted claimers as proxies
-        //
-        // IMPORTANT: Voting power goes to msg.sender (claimer), NOT deposit.owner
-        // Per documented permission model (see lines 56-64), the contributor (msg.sender) receives
-        // voting power, preserving claimer autonomy. The owner check here is an additional security
-        // layer to ensure fund sources are also eligible, closing the bypass vector identified in
-        // Cantina Finding #127 where delisted owners could use allowlisted claimers as proxies.
-
-        // Explicit fund source check: Verify deposit owner is also eligible for this mechanism
-        // Assumes mechanism implements canSignup() (OctantQFMechanism interface)
-        bool ownerCanSignup = OctantQFMechanism(payable(_allocationMechanismAddress)).canSignup(deposit.owner);
-        if (!ownerCanSignup) {
-            revert DepositOwnerNotEligibleForMechanism(_allocationMechanismAddress, deposit.owner);
         }
 
         _checkpointGlobalReward();
         _checkpointReward(deposit);
 
         uint256 unclaimedAmount = deposit.scaledUnclaimedRewardCheckpoint / SCALE_FACTOR;
-        require(_amount <= unclaimedAmount, CantAfford(_amount, unclaimedAmount));
+        uint256 rewardToContribute = _amount <= unclaimedAmount ? _amount : unclaimedAmount;
+        uint256 advanceToContribute = _amount - rewardToContribute;
 
         // Special case: Allow zero-amount contributions to enable users to register for voting
         // without contributing funds. This is useful for participation-only scenarios where
         // users want to signal support without financial commitment.
         if (_amount == 0) {
+            _revertIfAddressZero(_allocationMechanismAddress);
+            require(
+                sharedState.allocationMechanismAllowset.contains(_allocationMechanismAddress),
+                NotInAllowset(_allocationMechanismAddress)
+            );
+
+            // Validate asset compatibility to fail fast and provide clear error
+            {
+                address expectedAsset = address(TokenizedAllocationMechanism(_allocationMechanismAddress).asset());
+                if (address(REWARD_TOKEN) != expectedAsset) {
+                    revert AssetMismatch(address(REWARD_TOKEN), expectedAsset);
+                }
+            }
+
+            // Defense-in-depth dual-check architecture (Cantina Finding #127 fix):
+            // 1. TAM checks msg.sender (claimer/contributor) via beforeSignupHook - receives voting power
+            // 2. RegenStaker checks deposit.owner (fund source) must also be eligible (defense-in-depth)
+            // This prevents delisted owners from using allowlisted claimers as proxies.
+            bool ownerCanSignup = OctantQFMechanism(payable(_allocationMechanismAddress)).canSignup(deposit.owner);
+            if (!ownerCanSignup) {
+                revert DepositOwnerNotEligibleForMechanism(_allocationMechanismAddress, deposit.owner);
+            }
+
             emit RewardContributed(_depositId, msg.sender, _allocationMechanismAddress, 0);
             TokenizedAllocationMechanism(_allocationMechanismAddress).signupOnBehalfWithSignature(
                 msg.sender, // Claimer/contributor receives voting power and provides signature
@@ -670,53 +662,73 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
             return 0;
         }
 
-        amountContributedToAllocationMechanism = _amount;
-        _consumeRewards(deposit, _amount);
+        if (rewardToContribute > 0) {
+            _revertIfAddressZero(_allocationMechanismAddress);
+            require(
+                sharedState.allocationMechanismAllowset.contains(_allocationMechanismAddress),
+                NotInAllowset(_allocationMechanismAddress)
+            );
 
-        // Defensive earning power update - maintaining consistency with base Staker pattern
-        uint256 _oldEarningPower = deposit.earningPower;
-        uint256 _newEarningPower = earningPowerCalculator.getEarningPower(
-            deposit.balance,
-            deposit.owner,
-            deposit.delegatee
-        );
+            // Validate asset compatibility to fail fast and provide clear error
+            {
+                address expectedAsset = address(TokenizedAllocationMechanism(_allocationMechanismAddress).asset());
+                if (address(REWARD_TOKEN) != expectedAsset) {
+                    revert AssetMismatch(address(REWARD_TOKEN), expectedAsset);
+                }
+            }
 
-        // Update earning power totals before modifying deposit state
-        totalEarningPower = _calculateTotalEarningPower(_oldEarningPower, _newEarningPower, totalEarningPower);
-        depositorTotalEarningPower[deposit.owner] = _calculateTotalEarningPower(
-            _oldEarningPower,
-            _newEarningPower,
-            depositorTotalEarningPower[deposit.owner]
-        );
-        deposit.earningPower = _newEarningPower.toUint96();
+            // Defense-in-depth dual-check architecture (Cantina Finding #127 fix):
+            // 1. TAM checks msg.sender (claimer/contributor) via beforeSignupHook - receives voting power
+            // 2. RegenStaker checks deposit.owner (fund source) must also be eligible (defense-in-depth)
+            // This prevents delisted owners from using allowlisted claimers as proxies.
+            bool ownerCanSignup = OctantQFMechanism(payable(_allocationMechanismAddress)).canSignup(deposit.owner);
+            if (!ownerCanSignup) {
+                revert DepositOwnerNotEligibleForMechanism(_allocationMechanismAddress, deposit.owner);
+            }
 
-        emit RewardClaimed(_depositId, msg.sender, amountContributedToAllocationMechanism, _newEarningPower);
+            amountContributedToAllocationMechanism = rewardToContribute;
+            _consumeRewards(deposit, rewardToContribute);
+            _updateEarningPower(deposit);
+            emit RewardClaimed(_depositId, msg.sender, amountContributedToAllocationMechanism, deposit.earningPower);
 
-        // approve the allocation mechanism to spend the rewards
-        SafeERC20.safeIncreaseAllowance(
-            REWARD_TOKEN,
-            _allocationMechanismAddress,
-            amountContributedToAllocationMechanism
-        );
+            // approve the allocation mechanism to spend the rewards
+            SafeERC20.safeIncreaseAllowance(
+                REWARD_TOKEN,
+                _allocationMechanismAddress,
+                amountContributedToAllocationMechanism
+            );
 
-        emit RewardContributed(
-            _depositId,
-            msg.sender,
-            _allocationMechanismAddress,
-            amountContributedToAllocationMechanism
-        );
+            emit RewardContributed(
+                _depositId,
+                msg.sender,
+                _allocationMechanismAddress,
+                amountContributedToAllocationMechanism
+            );
 
-        TokenizedAllocationMechanism(_allocationMechanismAddress).signupOnBehalfWithSignature(
-            msg.sender, // Claimer/contributor receives voting power and provides signature
-            amountContributedToAllocationMechanism,
-            _deadline,
-            _v,
-            _r,
-            _s
-        );
+            TokenizedAllocationMechanism(_allocationMechanismAddress).signupOnBehalfWithSignature(
+                msg.sender, // Claimer/contributor receives voting power and provides signature
+                amountContributedToAllocationMechanism,
+                _deadline,
+                _v,
+                _r,
+                _s
+            );
 
-        // check that allowance is zero
-        require(REWARD_TOKEN.allowance(address(this), _allocationMechanismAddress) == 0, "allowance not zero");
+            // check that allowance is zero
+            require(
+                REWARD_TOKEN.allowance(address(this), _allocationMechanismAddress) == 0,
+                "allowance not zero"
+            );
+        }
+
+        if (advanceToContribute > 0) {
+            _applyAdvanceContributeFromExistingRewards(
+                deposit,
+                _depositId,
+                msg.sender,
+                advanceToContribute
+            );
+        }
 
         return amountContributedToAllocationMechanism;
     }
@@ -742,49 +754,47 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
         advanceRewards[_depositId] = AdvanceRewardInfo(amount.toUint96(), lockEnd);
     }
 
-    /// @notice Consumes earmarked advance rewards and transfers stake tokens to caller.
-    /// @dev NOTE: Caller is responsible for any subsequent contribution flow.
-    /// @dev Reduces deposit.balance and earning power; lock persists until expiry even if amount reaches zero.
-    /// @param _depositId Deposit the advance amount originates from
-    /// @param _amount Amount to consume (must be <= current earmarked amount)
-    /// @param _deadline Unused (kept for backwards compatibility)
-    /// @param _v Unused (kept for backwards compatibility)
-    /// @param _r Unused (kept for backwards compatibility)
-    /// @param _s Unused (kept for backwards compatibility)
-    function contributeFromAdvanceRewards(
+    /// @notice Applies the advance-rewards leg of contribute.
+    /// @dev Reduces principal balance and earning power; active commitment locks block calls.
+    /// @param deposit Deposit storage reference
+    /// @param _depositId Deposit identifier
+    /// @param _recipient Recipient receiving stake payout (owner or claimer)
+    /// @param _amount Amount to pay from advance rewards
+    function _applyAdvanceContributeFromExistingRewards(
+        Deposit storage deposit,
         DepositIdentifier _depositId,
-        address,
-        uint256 _amount,
-        uint256 _deadline,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) external whenNotPaused nonReentrant {
-        // Silence compatibility parameters in a low-cost way.
-        (_deadline, _v, _r, _s);
-
-        Deposit storage deposit = deposits[_depositId];
-        if (deposit.claimer != msg.sender && deposit.owner != msg.sender) {
-            revert Staker__Unauthorized("not claimer or owner", msg.sender);
-        }
+        address _recipient,
+        uint256 _amount
+    ) private {
+        require(_amount > 0, ZeroOperation());
 
         AdvanceRewardInfo storage sr = advanceRewards[_depositId];
-        require(_amount > 0, ZeroOperation());
-        if (_amount > sr.amount) revert InsufficientAdvanceRewards(_amount, sr.amount);
+        if (sr.lockEnd > block.timestamp) {
+            revert CommitmentLockActive(_depositId, sr.lockEnd);
+        }
+        // Lock expired: clear stale lock metadata while preserving earmarked amount
+        // so advance payout can be consumed post-expiry.
+        if (sr.lockEnd != 0) {
+            sr.lockEnd = 0;
+        }
 
-        _checkpointGlobalReward();
-        _checkpointReward(deposit);
+        if (_amount > sr.amount) {
+            revert InsufficientAdvanceRewards(_amount, sr.amount);
+        }
+        if (_amount > deposit.balance) {
+            revert CantAfford(_amount, deposit.balance);
+        }
 
         deposit.balance -= _amount.toUint96();
         _updateEarningPower(deposit);
         totalStaked -= _amount;
         depositorTotalStaked[deposit.owner] -= _amount;
         sr.amount -= _amount.toUint96();
-        _stakeTokenSafeTransferFrom(address(surrogates(deposit.delegatee)), msg.sender, _amount);
+        _stakeTokenSafeTransferFrom(address(surrogates(deposit.delegatee)), _recipient, _amount);
     }
 
     /// @notice Updates earning power for a deposit after a balance change.
-    /// @dev Extracted to reduce stack depth in contributeFromAdvanceRewards.
+    /// @dev Shared helper for balance/earning-power updates across contribution flows.
     /// @param deposit Deposit storage reference (balance must already be updated before calling)
     function _updateEarningPower(Deposit storage deposit) private {
         uint256 _oldEarningPower = deposit.earningPower;

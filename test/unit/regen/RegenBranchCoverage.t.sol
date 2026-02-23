@@ -1516,7 +1516,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.clearMockedCalls();
     }
 
-    // ===== contribute: CantAfford reverts =====
+    // ===== contribute: insufficient advance rewards reverts =====
 
     function test_contribute_cantAfford_reverts() public {
         Staker.DepositIdentifier depositId = _stakeFor(staker1, 1000e18);
@@ -1536,7 +1536,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.mockCall(fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("canSignup(address)"))), abi.encode(true));
 
         vm.prank(staker1);
-        vm.expectRevert(abi.encodeWithSelector(RegenStakerBase.CantAfford.selector, 1e18, 0));
+        vm.expectRevert(abi.encodeWithSelector(RegenStakerBase.InsufficientAdvanceRewards.selector, 1e18, 0));
         regenStaker.contribute(depositId, fakeMechanism, 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0));
 
         vm.clearMockedCalls();
@@ -1587,6 +1587,8 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
     function test_contribute_ownerNotEligible_reverts() public {
         Staker.DepositIdentifier depositId = _stakeFor(staker1, 1000e18);
+        _notifyReward(10e18);
+        vm.warp(block.timestamp + 7 days);
 
         address fakeMechanism = makeAddr("validMech4");
         vm.mockCall(

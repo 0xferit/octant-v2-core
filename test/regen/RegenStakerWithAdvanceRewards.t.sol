@@ -16,7 +16,7 @@ import { AddressSet } from "src/utils/AddressSet.sol";
 import { IAddressSet } from "src/utils/IAddressSet.sol";
 
 /// @title RegenStaker Advance Rewards Tests
-/// @notice Tests for setAdvanceRewards() and contributeFromAdvanceRewards()
+/// @notice Tests for setAdvanceRewards() and contribution split flow through contribute()
 contract RegenStakerWithAdvanceRewardsTest is Test {
     RegenStaker public regenStaker;
     MockERC20Staking public token;
@@ -116,6 +116,25 @@ contract RegenStakerWithAdvanceRewardsTest is Test {
     /// @dev Returns deposit earning power from the public tuple getter
     function _depositEarningPower(Staker.DepositIdentifier _depositId) internal view returns (uint96 ep) {
         (, , ep, , , , ) = regenStaker.deposits(_depositId);
+    }
+
+    function _contributeSignatureFor(
+        address _contributor,
+        uint256 _contributorPk,
+        uint256 _amount
+    ) internal returns (uint256 deadline, uint8 v, bytes32 r, bytes32 s) {
+        bytes32 domainSeparator = TokenizedAllocationMechanism(address(allocationMechanism)).DOMAIN_SEPARATOR();
+        uint256 nonce = TokenizedAllocationMechanism(address(allocationMechanism)).nonces(_contributor);
+        deadline = block.timestamp + 1 days;
+
+        bytes32 typeHash = keccak256(
+            bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)")
+        );
+        bytes32 structHash = keccak256(
+            abi.encode(typeHash, _contributor, address(regenStaker), _amount, nonce, deadline)
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (v, r, s) = vm.sign(_contributorPk, digest);
     }
 
     // =========================================================
@@ -220,195 +239,319 @@ contract RegenStakerWithAdvanceRewardsTest is Test {
     }
 
     // =========================================================
-    // contributeFromAdvanceRewards
+    // contribute split flow
     // =========================================================
 
-    function test_contributeFromAdvance_tokensFlowToCaller() public {
-        uint256 earmarkPct = 5;
-        uint256 earmarkedAmount = (STAKE_AMOUNT * earmarkPct) / 100;
+    function test_contribute_usesRewardsOnly_whenAvailable() public {
+        vm.warp(block.timestamp + REWARD_DURATION / 4);
+
+        uint256 rewardAvailable = regenStaker.unclaimedReward(depositId);
+        uint256 rewardToContribute = rewardAvailable / 2;
+        require(rewardToContribute > 0, "reward-to-contribute should be > 0");
+
+        (uint256 deadline, uint8 v, bytes32 r, bytes32 s) = _contributeSignatureFor(
+            owner,
+            ownerPk,
+            rewardToContribute
+        );
+
+        uint256 mechanismBalanceBefore = token.balanceOf(address(allocationMechanism));
         uint96 balanceBefore = _depositBalance(depositId);
+        uint256 totalStakedBefore = regenStaker.totalStaked();
+
+        vm.prank(owner);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            rewardToContribute,
+            deadline,
+            v,
+            r,
+            s
+        );
+
+        assertEq(contributed, rewardToContribute, "contributed amount mismatch");
+        assertEq(
+            token.balanceOf(address(allocationMechanism)) - mechanismBalanceBefore,
+            rewardToContribute,
+            "all contribution should hit mechanism"
+        );
+        assertEq(_depositBalance(depositId), balanceBefore, "deposit balance should not reduce");
+        assertEq(regenStaker.totalStaked(), totalStakedBefore, "total staked should not change");
+    }
+
+    function test_contribute_usesAdvanceRewardsOnly_whenNoRewardsAvailable() public {
+        vm.prank(owner);
+        regenStaker.setAdvanceRewards(depositId, 5);
+        uint256 earmarkAmount = (STAKE_AMOUNT * 5) / 100;
+        (, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
+        vm.warp(uint256(lockEnd) + 1);
+
+        vm.prank(owner);
+        regenStaker.claimReward(depositId);
+
+        assertEq(regenStaker.unclaimedReward(depositId), 0, "should have zero unclaimed reward");
+
+        uint96 balanceBefore = _depositBalance(depositId);
+        uint256 totalStakedBefore = regenStaker.totalStaked();
+        uint256 ownerTotalStakedBefore = regenStaker.depositorTotalStaked(owner);
         uint256 ownerBalanceBefore = token.balanceOf(owner);
-
-        vm.prank(owner);
-        regenStaker.setAdvanceRewards(depositId, earmarkPct);
-
-        vm.prank(owner);
-        regenStaker.contributeFromAdvanceRewards(
-            depositId,
-            address(0),
-            earmarkedAmount,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
-        );
-
-        assertEq(_depositBalance(depositId), balanceBefore - earmarkedAmount, "deposit.balance should decrease");
-        assertEq(token.balanceOf(owner), ownerBalanceBefore + earmarkedAmount, "owner should receive stake tokens");
-    }
-
-    function test_contributeFromAdvance_earningPowerUpdated() public {
-        uint256 earmarkPct = 5;
-        uint256 earmarkedAmount = (STAKE_AMOUNT * earmarkPct) / 100;
         uint96 epBefore = _depositEarningPower(depositId);
+        uint256 mechanismBalanceBefore = token.balanceOf(address(allocationMechanism));
 
         vm.prank(owner);
-        regenStaker.setAdvanceRewards(depositId, earmarkPct);
-
-        vm.prank(owner);
-        regenStaker.contributeFromAdvanceRewards(
+        uint256 contributed = regenStaker.contribute(
             depositId,
             address(0),
-            earmarkedAmount,
-            block.timestamp + 1 days,
+            earmarkAmount,
+            0,
             0,
             bytes32(0),
             bytes32(0)
         );
 
-        uint96 epAfter = _depositEarningPower(depositId);
-        // MockEarningPowerCalculator returns balance as earning power
-        assertEq(epAfter, STAKE_AMOUNT - earmarkedAmount, "earning power should decrease proportionally");
-        assertTrue(epAfter < epBefore, "earning power should have dropped");
+        assertEq(contributed, 0, "contributed-to-mechanism amount should be zero");
+        assertEq(token.balanceOf(address(allocationMechanism)), mechanismBalanceBefore, "mechanism should not receive tokens");
+        assertEq(token.balanceOf(owner), ownerBalanceBefore + earmarkAmount, "owner should receive stake payout");
+        assertEq(_depositBalance(depositId), balanceBefore - earmarkAmount, "deposit balance should reduce by advance amount");
+        assertEq(regenStaker.totalStaked(), totalStakedBefore - earmarkAmount, "global total staked should reduce");
+        assertEq(
+            regenStaker.depositorTotalStaked(owner),
+            ownerTotalStakedBefore - earmarkAmount,
+            "depositor total staked should reduce"
+        );
+        assertEq(_depositEarningPower(depositId), epBefore - uint96(earmarkAmount), "earning power should reduce");
+        (uint96 remaining, uint64 currentLockEnd) = regenStaker.advanceRewards(depositId);
+        assertEq(remaining, 0, "advance rewards should be consumed");
+        assertEq(currentLockEnd, 0, "stale lock should be cleared on advance consumption");
     }
 
-    function test_contributeFromAdvance_partialReducesEarmark() public {
-        uint256 earmarkPct = 5;
-        uint256 earmarkedAmount = (STAKE_AMOUNT * earmarkPct) / 100;
-        uint256 partialAmount = earmarkedAmount / 2;
-
+    function test_contribute_mixedRewardAndAdvanceFlow() public {
         vm.prank(owner);
-        regenStaker.setAdvanceRewards(depositId, earmarkPct);
+        regenStaker.setAdvanceRewards(depositId, 1);
+        (, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
+        vm.warp(uint256(lockEnd) + 1);
 
-        vm.prank(owner);
-        regenStaker.contributeFromAdvanceRewards(
-            depositId,
-            address(0),
-            partialAmount,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
+        uint256 rewardToContribute = regenStaker.unclaimedReward(depositId);
+        require(rewardToContribute > 0, "reward should have accrued");
+        uint256 advanceAmount = ((STAKE_AMOUNT * 1) / 100) / 2;
+
+        (uint256 deadline, uint8 v, bytes32 r, bytes32 s) = _contributeSignatureFor(
+            owner,
+            ownerPk,
+            rewardToContribute
         );
 
-        (uint96 remaining, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
-        assertEq(remaining, earmarkedAmount - partialAmount, "earmark should be reduced by partial amount");
-        assertGt(lockEnd, block.timestamp, "lock should still be active after partial contribution");
+        vm.prank(owner);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            rewardToContribute + advanceAmount,
+            deadline,
+            v,
+            r,
+            s
+        );
+
+        assertEq(contributed, rewardToContribute, "reward portion should be returned");
+        assertEq(token.balanceOf(address(allocationMechanism)), rewardToContribute, "mechanism should only receive reward portion");
+        assertEq(token.balanceOf(owner), advanceAmount, "owner should receive advance payout");
+        assertEq(_depositBalance(depositId), STAKE_AMOUNT - advanceAmount, "deposit should reduce by advance portion only");
+        assertEq(regenStaker.totalStaked(), STAKE_AMOUNT - advanceAmount, "global total staked should reduce only by advance");
+        assertEq(regenStaker.depositorTotalStaked(owner), STAKE_AMOUNT - advanceAmount, "depositor total staked should reduce only by advance");
+        (uint96 remaining, uint64 currentLockEnd) = regenStaker.advanceRewards(depositId);
+        assertEq(remaining, ((STAKE_AMOUNT * 1) / 100) - advanceAmount, "advance reward marking should reduce by payout");
+        assertEq(currentLockEnd, 0, "stale lock should be cleared on mixed advance consumption");
     }
 
-    function test_contributeFromAdvance_fullConsumesAmountButKeepsLockUntilExpiry() public {
-        uint256 earmarkPct = 5;
-        uint256 earmarkedAmount = (STAKE_AMOUNT * earmarkPct) / 100;
-
+    function test_contribute_rewardOnlyLegStillWorksDuringActiveLock() public {
+        vm.warp(block.timestamp + REWARD_DURATION / 4);
         vm.prank(owner);
-        regenStaker.setAdvanceRewards(depositId, earmarkPct);
+        regenStaker.setAdvanceRewards(depositId, 5);
 
-        // Read lockEnd before consumption to use in the withdraw revert assertion
         (, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
 
-        vm.prank(owner);
-        regenStaker.contributeFromAdvanceRewards(
-            depositId,
-            address(0),
-            earmarkedAmount,
-            block.timestamp + 1 days,
-            0,
-            bytes32(0),
-            bytes32(0)
+        uint256 rewardAvailable = regenStaker.unclaimedReward(depositId);
+        uint256 rewardToContribute = rewardAvailable / 2;
+        require(rewardToContribute > 0, "reward-to-contribute should be > 0");
+
+        (uint256 deadline, uint8 v, bytes32 r, bytes32 s) = _contributeSignatureFor(
+            owner,
+            ownerPk,
+            rewardToContribute
         );
 
-        (uint96 amount, uint64 lockEndAfter) = regenStaker.advanceRewards(depositId);
-        assertEq(amount, 0, "earmark amount should be consumed after full contribution");
-        assertGt(lockEndAfter, block.timestamp, "lockEnd should remain active until expiry");
+        uint256 mechanismBalanceBefore = token.balanceOf(address(allocationMechanism));
+        vm.prank(owner);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            rewardToContribute,
+            deadline,
+            v,
+            r,
+            s
+        );
+
+        assertEq(contributed, rewardToContribute);
+        assertEq(token.balanceOf(address(allocationMechanism)) - mechanismBalanceBefore, rewardToContribute);
+        (uint96 remainingAdvance, uint64 currentLockEnd) = regenStaker.advanceRewards(depositId);
+        assertEq(remainingAdvance, (STAKE_AMOUNT * 5) / 100);
+        assertEq(currentLockEnd, lockEnd);
+    }
+
+    function test_contribute_mixedLegBlockedWhenActiveCommitmentLock() public {
+        vm.prank(owner);
+        regenStaker.setAdvanceRewards(depositId, 5);
+        (uint96 earmark, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
+        assertGt(earmark, 0, "earmark should exist");
+
+        vm.warp(block.timestamp + REWARD_DURATION / 4);
+        uint256 rewardAvailable = regenStaker.unclaimedReward(depositId);
+
+        uint256 totalToContribute = rewardAvailable + 1;
+        (uint256 deadline, uint8 v, bytes32 r, bytes32 s) = _contributeSignatureFor(
+            owner,
+            ownerPk,
+            rewardAvailable
+        );
 
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(RegenStakerBase.CommitmentLockActive.selector, depositId, lockEnd));
-        regenStaker.withdraw(depositId, 1e18);
+        regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            totalToContribute,
+            deadline,
+            v,
+            r,
+            s
+        );
     }
 
-    function test_contributeFromAdvance_revertsOverEarmark() public {
-        uint256 earmarkPct = 5;
-        uint256 earmarkedAmount = (STAKE_AMOUNT * earmarkPct) / 100;
-        uint256 overAmount = earmarkedAmount + 1;
+    function test_contribute_staleAdvanceLockIsClearedAndCanBeReset() public {
+        vm.prank(owner);
+        regenStaker.setAdvanceRewards(depositId, 5);
+        (uint96 earmarkAmount, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
+        require(earmarkAmount > 0, "earmark should exist");
+        vm.warp(uint256(lockEnd) + 1);
 
         vm.prank(owner);
-        regenStaker.setAdvanceRewards(depositId, earmarkPct);
+        regenStaker.claimReward(depositId);
+        assertEq(regenStaker.unclaimedReward(depositId), 0, "rewards should be zeroed before advance leg");
+
+        uint96 balanceBefore = _depositBalance(depositId);
+        vm.prank(owner);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(0),
+            1,
+            0,
+            0,
+            bytes32(0),
+            bytes32(0)
+        );
+        assertEq(contributed, 0, "advance-only call should return mechanism contribution of 0");
+        assertEq(_depositBalance(depositId), balanceBefore - 1, "advance should reduce principal");
+        (uint96 remainingAfterConsume, uint64 lockAfterConsume) = regenStaker.advanceRewards(depositId);
+        assertEq(remainingAfterConsume, earmarkAmount - 1, "advance amount should remain after stale-lock cleanup");
+        assertEq(lockAfterConsume, 0, "lock should be cleared after expiry");
+
+        uint96 balanceBeforeReset = _depositBalance(depositId);
+        vm.prank(owner);
+        regenStaker.setAdvanceRewards(depositId, 5);
+        (uint96 refreshedAmount, uint64 refreshedLockEnd) = regenStaker.advanceRewards(depositId);
+        assertEq(refreshedAmount, (uint256(balanceBeforeReset) * 5) / 100, "stale lock should allow full reset");
+        assertEq(refreshedLockEnd, block.timestamp + 5 * 30 days, "new lock should be active");
+    }
+
+    function test_contribute_overconsumedAdvanceAmount_reverts() public {
+        vm.prank(owner);
+        regenStaker.setAdvanceRewards(depositId, 5);
+        uint256 earmarkAmount = (STAKE_AMOUNT * 5) / 100;
+        (, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
+        vm.warp(uint256(lockEnd) + 1);
+
+        vm.prank(owner);
+        regenStaker.claimReward(depositId);
+        assertEq(regenStaker.unclaimedReward(depositId), 0, "rewards should be zeroed before advance leg");
 
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(RegenStakerBase.InsufficientAdvanceRewards.selector, overAmount, earmarkedAmount)
+            abi.encodeWithSelector(RegenStakerBase.InsufficientAdvanceRewards.selector, earmarkAmount + 1, earmarkAmount)
         );
-        regenStaker.contributeFromAdvanceRewards(
+        regenStaker.contribute(
             depositId,
             address(0),
-            overAmount,
-            block.timestamp + 1 days,
+            earmarkAmount + 1,
+            0,
             0,
             bytes32(0),
             bytes32(0)
         );
     }
 
-    function test_contributeFromAdvance_rewardAccrualUnaffected() public {
-        // Accrue some rewards before contribution
+    function test_contribute_zeroAmountStillAllowedForContributionSignup() public {
         vm.warp(block.timestamp + REWARD_DURATION / 4);
+        uint256 rewardAvailable = regenStaker.unclaimedReward(depositId);
+        require(rewardAvailable > 0, "reward should be available");
 
-        uint256 earmarkPct = 5;
-        uint256 earmarkedAmount = (STAKE_AMOUNT * earmarkPct) / 100;
-
-        vm.prank(owner);
-        regenStaker.setAdvanceRewards(depositId, earmarkPct);
+        (uint256 deadline, uint8 v, bytes32 r, bytes32 s) = _contributeSignatureFor(owner, ownerPk, 0);
 
         vm.prank(owner);
-        regenStaker.contributeFromAdvanceRewards(
+        uint256 contributed = regenStaker.contribute(
             depositId,
-            address(0),
-            earmarkedAmount,
-            block.timestamp + 1 days,
+            address(allocationMechanism),
             0,
-            bytes32(0),
-            bytes32(0)
+            deadline,
+            v,
+            r,
+            s
         );
+        assertEq(contributed, 0, "zero amount should still be a valid signup path");
+    }
 
-        uint96 remainingBalance = _depositBalance(depositId);
-        assertEq(remainingBalance, STAKE_AMOUNT - earmarkedAmount, "balance should reflect contribution");
+    function test_contribute_fromAdvanceRewards_allowedForClaimerToo() public {
+        vm.prank(owner);
+        regenStaker.setAdvanceRewards(depositId, 5);
+        (, uint64 lockEnd) = regenStaker.advanceRewards(depositId);
+        vm.warp(uint256(lockEnd) + 1);
 
-        // Accrue more rewards on the remaining balance
-        vm.warp(block.timestamp + REWARD_DURATION / 4);
-
-        uint256 balanceBefore = token.balanceOf(owner);
         vm.prank(owner);
         regenStaker.claimReward(depositId);
-        uint256 claimed = token.balanceOf(owner) - balanceBefore;
-        assertGt(claimed, 0, "should have accrued rewards on remaining balance");
-    }
+        assertEq(regenStaker.unclaimedReward(depositId), 0, "rewards should be zeroed before advance leg");
 
-    function test_contributeFromAdvance_allowedByClaimerToo() public {
-        uint256 earmarkPct = 5;
-        uint256 earmarkedAmount = (STAKE_AMOUNT * earmarkPct) / 100;
-
-        // Only owner can earmark
-        vm.prank(owner);
-        regenStaker.setAdvanceRewards(depositId, earmarkPct);
-
+        uint256 earmarkAmount = (STAKE_AMOUNT * 5) / 100;
         uint256 claimerBalanceBefore = token.balanceOf(claimer);
 
-        // Claimer can call contributeFromAdvanceRewards; tokens go to claimer (msg.sender)
         vm.prank(claimer);
-        regenStaker.contributeFromAdvanceRewards(
+        uint256 contributed = regenStaker.contribute(
             depositId,
             address(0),
-            earmarkedAmount,
-            block.timestamp + 1 days,
+            earmarkAmount,
+            0,
             0,
             bytes32(0),
             bytes32(0)
         );
+        assertEq(contributed, 0, "advance-only call should return contribution portion");
+        assertEq(token.balanceOf(claimer), claimerBalanceBefore + earmarkAmount, "claimer should receive payout");
+    }
 
-        assertEq(
-            token.balanceOf(claimer),
-            claimerBalanceBefore + earmarkedAmount,
-            "claimer should receive stake tokens"
+    function test_contribute_fromAdvanceRewards_revertsUnauthorizedCaller() public {
+        vm.prank(owner);
+        regenStaker.setAdvanceRewards(depositId, 5);
+
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Staker.Staker__Unauthorized.selector, bytes32("not claimer or owner"), stranger));
+        regenStaker.contribute(
+            depositId,
+            address(0),
+            (STAKE_AMOUNT * 5) / 100,
+            0,
+            0,
+            bytes32(0),
+            bytes32(0)
         );
     }
 }

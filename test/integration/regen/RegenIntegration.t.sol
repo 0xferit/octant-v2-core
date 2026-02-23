@@ -2547,9 +2547,10 @@ contract RegenIntegrationTest is Test {
         // Notify rewards
         vm.prank(ADMIN);
         regenStaker.notifyRewardAmount(rewardAmount);
-        vm.warp(block.timestamp + regenStaker.rewardDuration());
+        vm.warp(block.timestamp + 2 days);
 
         uint256 unclaimedAmount = regenStaker.unclaimedReward(depositId);
+        uint256 advanceTopUpNeeded = contributeAmount - unclaimedAmount;
 
         // Create signature
         uint256 nonce = TokenizedAllocationMechanism(allocationMechanism).nonces(alice);
@@ -2559,7 +2560,7 @@ contract RegenIntegrationTest is Test {
             allocationMechanism,
             alice,
             address(regenStaker),
-            contributeAmount,
+            unclaimedAmount,
             nonce,
             deadline
         );
@@ -2570,8 +2571,10 @@ contract RegenIntegrationTest is Test {
         vm.startPrank(alice);
         rewardToken.approve(allocationMechanism, contributeAmount);
 
-        // Should revert with CantAfford
-        vm.expectRevert(abi.encodeWithSelector(RegenStakerBase.CantAfford.selector, contributeAmount, unclaimedAmount));
+        // Reward leg can execute up to `unclaimedAmount`; remaining top-up requires advance rewards.
+        vm.expectRevert(
+            abi.encodeWithSelector(RegenStakerBase.InsufficientAdvanceRewards.selector, advanceTopUpNeeded, 0)
+        );
         regenStaker.contribute(depositId, allocationMechanism, contributeAmount, deadline, v, r, s);
         vm.stopPrank();
     }
