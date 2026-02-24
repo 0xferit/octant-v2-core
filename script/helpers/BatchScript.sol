@@ -68,6 +68,9 @@ abstract contract BatchScript is Script {
     // Address to send transaction from
     address private safe;
 
+    // Address of the sender (derived from PRIVATE_KEY or msg.sender)
+    address private sender;
+
     enum Operation {
         CALL,
         DELEGATECALL
@@ -93,35 +96,44 @@ abstract contract BatchScript is Script {
     // Modifiers
 
     modifier isBatch(address safe_) {
-        // Set the chain ID
-        Chain memory chain = getChain(vm.envString("CHAIN"));
-        chainId = chain.chainId;
+        string memory chainName = vm.envString("CHAIN");
 
-        // Set the Safe API base URL and multisend address based on chain
-        // Note: Safe API migrated to api.safe.global/tx-service/{network}/...
-        if (chainId == 1) {
-            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/eth/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
-        } else if (chainId == 137) {
-            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/polygon/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
-        } else if (chainId == 5) {
-            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/goerli/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
-        } else if (chainId == 11155111) {
-            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/sepolia/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
-        } else if (chainId == 8453) {
-            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/base/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
-        } else if (chainId == 42161) {
-            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/arbitrum/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
-        } else if (chainId == 43114) {
-            SAFE_API_BASE_URL = "https://api.safe.global/tx-service/avalanche/api/v1/safes/";
+        // Handle Tenderly virtual network
+        if (keccak256(bytes(chainName)) == keccak256(bytes("tenderly"))) {
+            chainId = vm.envUint("CHAIN_ID");
+            SAFE_API_BASE_URL = vm.envString("SAFE_API_BASE_URL");
             SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
         } else {
-            revert("Unsupported chain");
+            // Set the chain ID
+            Chain memory chain = getChain(chainName);
+            chainId = chain.chainId;
+
+            // Set the Safe API base URL and multisend address based on chain
+            // Note: Safe API migrated to api.safe.global/tx-service/{network}/...
+            if (chainId == 1) {
+                SAFE_API_BASE_URL = "https://api.safe.global/tx-service/eth/api/v1/safes/";
+                SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+            } else if (chainId == 137) {
+                SAFE_API_BASE_URL = "https://api.safe.global/tx-service/polygon/api/v1/safes/";
+                SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+            } else if (chainId == 5) {
+                SAFE_API_BASE_URL = "https://api.safe.global/tx-service/goerli/api/v1/safes/";
+                SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+            } else if (chainId == 11155111) {
+                SAFE_API_BASE_URL = "https://api.safe.global/tx-service/sepolia/api/v1/safes/";
+                SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+            } else if (chainId == 8453) {
+                SAFE_API_BASE_URL = "https://api.safe.global/tx-service/base/api/v1/safes/";
+                SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+            } else if (chainId == 42161) {
+                SAFE_API_BASE_URL = "https://api.safe.global/tx-service/arbitrum/api/v1/safes/";
+                SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+            } else if (chainId == 43114) {
+                SAFE_API_BASE_URL = "https://api.safe.global/tx-service/avalanche/api/v1/safes/";
+                SAFE_MULTISEND_ADDRESS = 0x40A2aCCbd92BCA938b02010E17A5b8929b49130D;
+            } else {
+                revert("Unsupported chain");
+            }
         }
 
         // Store the provided safe address
@@ -131,8 +143,12 @@ abstract contract BatchScript is Script {
         walletType = keccak256(abi.encodePacked(vm.envString("WALLET_TYPE")));
         if (walletType == LOCAL) {
             privateKey = vm.envBytes32("PRIVATE_KEY");
+            // Derive sender address from private key
+            sender = vm.addr(uint256(privateKey));
         } else if (walletType == LEDGER) {
             mnemonicIndex = vm.envUint("MNEMONIC_INDEX");
+            // For Ledger, try to get sender from env or use msg.sender
+            sender = vm.envOr("SENDER", msg.sender);
         } else {
             revert("Unsupported wallet type");
         }
@@ -362,7 +378,7 @@ abstract contract BatchScript is Script {
         placeholder.serialize("refundReceiver", address(0));
         placeholder.serialize("contractTransactionHash", batch_.txHash);
         placeholder.serialize("signature", batch_.signature);
-        string memory payload = placeholder.serialize("sender", msg.sender);
+        string memory payload = placeholder.serialize("sender", sender);
 
         // Send batch
         (uint256 status, bytes memory data) = endpoint.post(_getHeaders(), payload);
