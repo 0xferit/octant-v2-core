@@ -37,17 +37,18 @@ contract AllocationMechanismFactoryTest is Test {
     }
 
     function _baseConfig() internal view returns (AllocationConfig memory) {
-        return AllocationConfig({
-            asset: IERC20(address(token)),
-            name: "Octant QF",
-            symbol: "OQF",
-            votingDelay: VOTING_DELAY,
-            votingPeriod: VOTING_PERIOD,
-            quorumShares: QUORUM_SHARES,
-            timelockDelay: TIMELOCK_DELAY,
-            gracePeriod: GRACE_PERIOD,
-            owner: address(0) // factory overwrites this with msg.sender
-        });
+        return
+            AllocationConfig({
+                asset: IERC20(address(token)),
+                name: "Octant QF",
+                symbol: "OQF",
+                votingDelay: VOTING_DELAY,
+                votingPeriod: VOTING_PERIOD,
+                quorumShares: QUORUM_SHARES,
+                timelockDelay: TIMELOCK_DELAY,
+                gracePeriod: GRACE_PERIOD,
+                owner: address(0) // factory overwrites this with msg.sender
+            });
     }
 
     // ============================================
