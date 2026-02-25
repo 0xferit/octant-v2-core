@@ -102,7 +102,7 @@ contract DeployedAddresses is Script {
 
     /**
      * @notice Sepolia (Ethereum testnet) deployed contract addresses
-     * @dev Currently all addresses are zero - to be populated when contracts are deployed to Sepolia
+     * @dev Currently all addresses are zero - except the contracts that are deployed to Sepolia
      * @return ContractAddresses struct for Sepolia testnet
      */
     function getSepoliaAddresses() internal pure returns (ContractAddresses memory) {
@@ -114,7 +114,7 @@ contract DeployedAddresses is Script {
                 morphoCompounderStrategyFactory: address(0),
                 regenEarningPowerCalculatorFactory: address(0),
                 regenStakerFactory: address(0),
-                allocationMechanismFactory: address(0),
+                allocationMechanismFactory: 0x4fc209Fbc5eFE0549cdB878f206942a91bBC17d2,
                 yieldDonatingTokenizedStrategy: address(0),
                 yearnV3StrategyFactory: address(0),
                 lidoStrategyFactory: address(0),

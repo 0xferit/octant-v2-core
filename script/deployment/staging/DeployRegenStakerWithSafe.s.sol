@@ -80,6 +80,15 @@ contract DeployRegenStakerWithSafe is Script {
         stakerAllowset = addresses.stakerAllowset;
         stakerBlockset = addresses.stakerBlockset;
         allocationMechanismAllowset = addresses.allocationMechanismAllowset;
+        if (stakerAllowset != address(0)) {
+            vm.setEnv("STAKER_ALLOWSET", vm.toString(stakerAllowset));
+        }
+        if (stakerBlockset != address(0)) {
+            vm.setEnv("STAKER_BLOCKSET", vm.toString(stakerBlockset));
+        }
+        if (allocationMechanismAllowset != address(0)) {
+            vm.setEnv("ALLOCATION_ALLOWSET", vm.toString(allocationMechanismAllowset));
+        }
 
         regenEarningPowerCalculator = addresses.regenEarningPowerCalculator;
         if (regenEarningPowerCalculator != address(0)) {
