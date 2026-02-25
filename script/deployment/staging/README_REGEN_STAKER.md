@@ -44,7 +44,7 @@ export CHAIN=tenderly
 export CHAIN_ID=1
 export SAFE_API_BASE_URL=https://safeapi.ov2sm.octant.build/tx-service/eth/api/v1/safes/
 export WALLET_TYPE=local
-export RPC_URL=https://virtual-mainnet.rpc.ontact.build
+export RPC_URL=https://virtual-mainnet.rpc.octant.build
 export SAFE_ADDRESS=0x...
 
 # 2. Validate PRIVATE_KEY is set
