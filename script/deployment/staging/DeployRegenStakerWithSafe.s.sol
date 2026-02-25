@@ -82,7 +82,7 @@ contract DeployRegenStakerWithSafe is Script {
         allocationMechanismAllowset = addresses.allocationMechanismAllowset;
 
         regenEarningPowerCalculator = addresses.regenEarningPowerCalculator;
-        if(regenEarningPowerCalculator != address(0)) {
+        if (regenEarningPowerCalculator != address(0)) {
             vm.setEnv("EARNING_POWER_CALCULATOR", vm.toString(regenEarningPowerCalculator));
         }
     }
@@ -120,6 +120,8 @@ contract DeployRegenStakerWithSafe is Script {
         console2.log("RegenStakerFactory:               ", regenStakerFactory);
         console2.log("RegenStaker (without delegation): ", regenStaker);
         console2.log("------------------");
-        console2.log("Now go to Safe app and approve all transactions in the batch with the above details. After confirming, you can verify the deployments on-chain and update your registry if needed.");
+        console2.log(
+            "Now go to Safe app and approve all transactions in the batch with the above details. After confirming, you can verify the deployments on-chain and update your registry if needed."
+        );
     }
 }
