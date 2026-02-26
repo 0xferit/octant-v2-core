@@ -5,10 +5,7 @@ import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { RegenStakerFactory } from "src/factories/RegenStakerFactory.sol";
 import { IERC20, IAddressSet, IEarningPowerCalculator } from "src/regen/RegenStakerBase.sol";
-import {
-    REGEN_STAKER_V1_CREATION_CODE,
-    REGEN_STAKER_WITHOUT_DELEGATION_V1_CREATION_CODE
-} from "script/prod/RegenStakerBytecodes.sol";
+import { REGEN_STAKER_V1_CREATION_CODE, REGEN_STAKER_WITHOUT_DELEGATION_V1_CREATION_CODE } from "script/prod/RegenStakerBytecodes.sol";
 import { AccessMode } from "src/constants.sol";
 import { BatchScript } from "../helpers/BatchScript.sol";
 
