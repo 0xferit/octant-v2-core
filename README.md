@@ -1,9 +1,9 @@
 # Octant V2 Core
 
-<!-- Coverage badges: updated by push-to-develop workflow via schneegans/dynamic-badges-action -->
-[![Lines](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/golemfoundation/3d581c9545c040ac95fdd354e69f9bc8/raw/coverage-lines.json)](https://github.com/golemfoundation/octant-v2-core)
-[![Branches](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/golemfoundation/3d581c9545c040ac95fdd354e69f9bc8/raw/coverage-branches.json)](https://github.com/golemfoundation/octant-v2-core)
-[![Functions](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/golemfoundation/3d581c9545c040ac95fdd354e69f9bc8/raw/coverage-functions.json)](https://github.com/golemfoundation/octant-v2-core)
+<!-- Coverage badges: updated by Github Actions via schneegans/dynamic-badges-action -->
+[![Lines](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/housekeeper-bot/3d581c9545c040ac95fdd354e69f9bc8/raw/coverage-lines.json)](https://github.com/golemfoundation/octant-v2-core)
+[![Branches](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/housekeeper-bot/3d581c9545c040ac95fdd354e69f9bc8/raw/coverage-branches.json)](https://github.com/golemfoundation/octant-v2-core)
+[![Functions](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/housekeeper-bot/3d581c9545c040ac95fdd354e69f9bc8/raw/coverage-functions.json)](https://github.com/golemfoundation/octant-v2-core)
 
 ## Prerequisites
 
