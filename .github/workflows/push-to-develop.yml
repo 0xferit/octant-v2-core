@@ -109,7 +109,7 @@ jobs:
     name: Update Coverage Badges
     needs: build-image
     runs-on: general
-    environment: action
+    environment: actions
     container:
       image: ${{ vars.GCP_DOCKER_IMAGE_REGISTRY }}/core:${{ github.sha }}
       credentials:
