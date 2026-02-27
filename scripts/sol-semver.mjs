@@ -386,21 +386,58 @@ function inspectDeployedBytecode(worktreeDir, contractId) {
   return run("forge", ["inspect", contractId, "deployedBytecode"], { cwd: worktreeDir }).trim();
 }
 
-function analyzeContract(worktrees, contractId) {
-  const oldAbi = inspectAbi(worktrees.old, contractId);
-  const newAbi = inspectAbi(worktrees.new, contractId);
-  const oldStorage = inspectStorage(worktrees.old, contractId);
-  const newStorage = inspectStorage(worktrees.new, contractId);
-  const oldBytecode = inspectDeployedBytecode(worktrees.old, contractId);
-  const newBytecode = inspectDeployedBytecode(worktrees.new, contractId);
+function isMissingContractInspectError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /Could not find artifact/i.test(message) ||
+    /Could not find source file for contract/i.test(message) ||
+    /No contract found/i.test(message)
+  );
+}
 
-  const storageLayer = compareStorage(oldStorage, newStorage);
-  const abiLayer = compareAbi(oldAbi, newAbi);
-  const bytecodeLayer = compareBytecode(oldBytecode, newBytecode);
+function inspectContractSnapshot(worktreeDir, contractId, opts = {}) {
+  try {
+    return {
+      missing: false,
+      abi: inspectAbi(worktreeDir, contractId),
+      storage: inspectStorage(worktreeDir, contractId),
+      bytecode: inspectDeployedBytecode(worktreeDir, contractId)
+    };
+  } catch (error) {
+    if (opts.allowMissing && isMissingContractInspectError(error)) {
+      return {
+        missing: true,
+        abi: null,
+        storage: null,
+        bytecode: "0x"
+      };
+    }
+    throw error;
+  }
+}
+
+function analyzeContract(worktrees, contractId) {
+  const oldSnapshot = inspectContractSnapshot(worktrees.old, contractId, { allowMissing: true });
+  const newSnapshot = inspectContractSnapshot(worktrees.new, contractId);
+
+  let storageLayer;
+  let abiLayer;
+  let bytecodeLayer;
+
+  if (oldSnapshot.missing) {
+    // New contract in new-ref: treat as additive change and require lock/version checks.
+    storageLayer = { bump: "minor", reasons: ["contract is absent in old ref"] };
+    abiLayer = { bump: "minor", reasons: ["contract is absent in old ref"] };
+    bytecodeLayer = { bump: "patch", reasons: ["contract is absent in old ref"] };
+  } else {
+    storageLayer = compareStorage(oldSnapshot.storage, newSnapshot.storage);
+    abiLayer = compareAbi(oldSnapshot.abi, newSnapshot.abi);
+    bytecodeLayer = compareBytecode(oldSnapshot.bytecode, newSnapshot.bytecode);
+  }
   const recommendation = deriveRecommendedBump(storageLayer, abiLayer, bytecodeLayer);
   const recommendedBump = recommendation.recommended;
 
-  const declaredVersionOld = readDeclaredVersion(worktrees.old, contractId);
+  const declaredVersionOld = oldSnapshot.missing ? null : readDeclaredVersion(worktrees.old, contractId);
   const declaredVersionNew = readDeclaredVersion(worktrees.new, contractId);
 
   return {
@@ -453,38 +490,44 @@ function gatherChangedSolidityFiles(oldRef, newRef) {
     .filter((line) => line.endsWith(".sol"));
 }
 
-function detectChangedVersionedContracts(worktrees, changedFiles, lockContracts) {
+function detectChangedVersionedContracts(changedFiles, lockContracts) {
   const candidates = [];
-  const lockSet = new Set(lockContracts);
-
   for (const contractId of lockContracts) {
     const { sourcePath } = parseContractId(contractId);
     if (changedFiles.includes(sourcePath)) {
       candidates.push(contractId);
     }
   }
+  return [...new Set(candidates)];
+}
 
-  // If no lock entries match changed files, scan changed files for API_VERSION and map to known lock entries.
-  if (candidates.length === 0) {
-    for (const file of changedFiles) {
-      const fullPath = path.join(worktrees.new, file);
-      if (!fs.existsSync(fullPath)) {
-        continue;
-      }
-      const source = fs.readFileSync(fullPath, "utf8");
-      if (!/\bAPI_VERSION\b/.test(source)) {
-        continue;
-      }
-      for (const contractId of lockSet) {
-        const { sourcePath } = parseContractId(contractId);
-        if (sourcePath === file) {
-          candidates.push(contractId);
-        }
-      }
+function fileHasVersionConstant(worktreeDir, sourcePath) {
+  const fullPath = path.join(worktreeDir, sourcePath);
+  if (!fs.existsSync(fullPath)) {
+    return false;
+  }
+  const source = fs.readFileSync(fullPath, "utf8");
+  return (
+    /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source) ||
+    /\bVERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source)
+  );
+}
+
+function findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, lockContracts) {
+  const lockPaths = new Set(lockContracts.map((contractId) => parseContractId(contractId).sourcePath));
+  const missing = [];
+
+  for (const sourcePath of changedFiles) {
+    if (lockPaths.has(sourcePath)) {
+      continue;
+    }
+
+    if (fileHasVersionConstant(worktrees.new, sourcePath)) {
+      missing.push(sourcePath);
     }
   }
 
-  return [...new Set(candidates)];
+  return missing;
 }
 
 function createTempWorktrees(oldRef, newRef) {
@@ -524,7 +567,7 @@ function cleanupTempWorktrees(worktrees) {
 }
 
 function validateUnderBump(result, oldLockedVersion) {
-  if (oldLockedVersion && semverCompare(oldLockedVersion, oldLockedVersion) === null) {
+  if (oldLockedVersion && parseSemver(oldLockedVersion) === null) {
     return {
       ok: false,
       reason: `invalid lock version format '${oldLockedVersion}'`,
@@ -540,8 +583,7 @@ function validateUnderBump(result, oldLockedVersion) {
     };
   }
 
-  const cmpFormat = semverCompare(result.declared_version_new, result.declared_version_new);
-  if (cmpFormat === null) {
+  if (parseSemver(result.declared_version_new) === null) {
     return {
       ok: false,
       reason: `invalid semantic version format '${result.declared_version_new}'`,
@@ -589,26 +631,53 @@ function buildCheckReport(opts, worktrees) {
 
   const oldLock = loadLockFile(worktrees.old, lockFilePath);
   const newLock = loadLockFile(worktrees.new, lockFilePath);
+  const changedFiles = gatherChangedSolidityFiles(oldRef, newRef);
+  const failures = [];
+  const lockContracts = [
+    ...new Set([...Object.keys(oldLock.contracts || {}), ...Object.keys(newLock.contracts || {})])
+  ];
 
   let contracts = parseContractsOption(opts.contracts);
   if (contracts.length === 0) {
-    contracts = Object.keys(newLock.contracts || {});
+    contracts = lockContracts;
+  }
+
+  const changedCandidates = detectChangedVersionedContracts(changedFiles, contracts);
+  contracts = [...new Set([...contracts, ...changedCandidates])];
+
+  if (lockFilePath) {
+    const missingLockEntries = findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, lockContracts);
+    for (const sourcePath of missingLockEntries) {
+      failures.push(`${sourcePath}: changed contract declares API_VERSION/VERSION but is missing in ${lockFilePath}`);
+    }
   }
 
   if (contracts.length === 0) {
+    if (failures.length > 0) {
+      return {
+        old_ref: oldRef,
+        new_ref: newRef,
+        lock_file: lockFilePath || null,
+        contracts_analyzed: [],
+        changed_files: changedFiles,
+        failures,
+        results: []
+      };
+    }
     throw new Error("No contracts to check. Provide --contracts or --lock-file with non-empty contracts map.");
   }
 
-  const changedFiles = gatherChangedSolidityFiles(oldRef, newRef);
-  const changedCandidates = detectChangedVersionedContracts(worktrees, changedFiles, contracts);
-  const contractsToAnalyze = changedCandidates.length > 0 ? changedCandidates : contracts;
+  const contractsToAnalyze = contracts;
 
   const contractReports = [];
-  const failures = [];
 
   for (const contractId of contractsToAnalyze) {
     const result = analyzeContract(worktrees, contractId);
     const changed = result.recommended_bump !== "none";
+    const oldLockedExists = lockFilePath ? Object.hasOwn(oldLock.contracts, contractId) : false;
+    const newLockedExists = lockFilePath ? Object.hasOwn(newLock.contracts, contractId) : false;
+    const oldLocked = oldLockedExists ? oldLock.contracts[contractId] : null;
+    const newLocked = newLockedExists ? newLock.contracts[contractId] : null;
     const contractStatus = {
       contract: contractId,
       changed,
@@ -628,56 +697,100 @@ function buildCheckReport(opts, worktrees) {
       if (!underBump.ok) {
         failures.push(`${contractId}: ${underBump.reason}`);
       }
+    }
 
-      if (lockFilePath) {
-        const newLocked = newLock.contracts[contractId];
+    if (lockFilePath) {
+      if (!newLockedExists) {
+        failures.push(`${contractId}: missing entry in ${lockFilePath}`);
+        contractStatus.checks.push({
+          name: "lock-entry-present",
+          ok: false,
+          reason: `missing lock entry in ${lockFilePath}`
+        });
+      } else {
+        contractStatus.checks.push({
+          name: "lock-entry-present",
+          ok: true,
+          reason: ""
+        });
+      }
 
-        if (!newLocked) {
-          failures.push(`${contractId}: missing entry in ${lockFilePath}`);
+      if (newLockedExists && parseSemver(newLocked) === null) {
+        failures.push(`${contractId}: invalid lock version format '${newLocked}'`);
+        contractStatus.checks.push({
+          name: "lock-format-valid",
+          ok: false,
+          reason: `invalid lock version format '${newLocked}'`
+        });
+      } else {
+        contractStatus.checks.push({
+          name: "lock-format-valid",
+          ok: true,
+          reason: ""
+        });
+      }
+
+      if (oldLockedExists && parseSemver(oldLocked) === null) {
+        failures.push(`${contractId}: invalid old lock version format '${oldLocked}'`);
+        contractStatus.checks.push({
+          name: "old-lock-format-valid",
+          ok: false,
+          reason: `invalid old lock version format '${oldLocked}'`
+        });
+      } else {
+        contractStatus.checks.push({
+          name: "old-lock-format-valid",
+          ok: true,
+          reason: ""
+        });
+      }
+
+      if (oldLockedExists && newLockedExists && parseSemver(oldLocked) && parseSemver(newLocked)) {
+        const lockCmp = semverCompare(newLocked, oldLocked);
+        if (lockCmp !== null && lockCmp < 0) {
+          failures.push(`${contractId}: lock version downgraded (${oldLocked} -> ${newLocked})`);
           contractStatus.checks.push({
-            name: "lock-entry-present",
+            name: "lock-not-downgraded",
             ok: false,
-            reason: `missing lock entry in ${lockFilePath}`
+            reason: `lock downgraded (${oldLocked} -> ${newLocked})`
           });
         } else {
           contractStatus.checks.push({
-            name: "lock-entry-present",
+            name: "lock-not-downgraded",
             ok: true,
             reason: ""
           });
         }
+      }
 
-        if (newLocked && result.declared_version_new && newLocked !== result.declared_version_new) {
-          failures.push(
-            `${contractId}: lock version ${newLocked} does not match declared version ${result.declared_version_new}`
-          );
-          contractStatus.checks.push({
-            name: "lock-vs-declared",
-            ok: false,
-            reason: `lock=${newLocked} declared=${result.declared_version_new}`
-          });
-        } else {
-          contractStatus.checks.push({
-            name: "lock-vs-declared",
-            ok: true,
-            reason: ""
-          });
-        }
+      if (newLockedExists && result.declared_version_new && newLocked !== result.declared_version_new) {
+        failures.push(`${contractId}: lock version ${newLocked} does not match declared version ${result.declared_version_new}`);
+        contractStatus.checks.push({
+          name: "lock-vs-declared",
+          ok: false,
+          reason: `lock=${newLocked} declared=${result.declared_version_new}`
+        });
+      } else {
+        contractStatus.checks.push({
+          name: "lock-vs-declared",
+          ok: true,
+          reason: ""
+        });
+      }
 
-        if (oldLocked && newLocked && oldLocked === newLocked) {
-          failures.push(`${contractId}: changed contract but ${lockFilePath} was not updated`);
-          contractStatus.checks.push({
-            name: "lock-updated",
-            ok: false,
-            reason: "lock version did not change despite contract changes"
-          });
-        } else {
-          contractStatus.checks.push({
-            name: "lock-updated",
-            ok: true,
-            reason: ""
-          });
-        }
+      if (changed && oldLockedExists && newLockedExists && oldLocked === newLocked) {
+        failures.push(`${contractId}: changed contract but ${lockFilePath} was not updated`);
+        contractStatus.checks.push({
+          name: "lock-updated",
+          ok: false,
+          reason: "lock version did not change despite contract changes"
+        });
+      } else {
+        contractStatus.checks.push({
+          name: "lock-updated",
+          ok: true,
+          reason: ""
+        });
       }
     }
 
