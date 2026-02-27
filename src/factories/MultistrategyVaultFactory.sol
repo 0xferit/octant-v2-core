@@ -66,9 +66,9 @@ contract MultistrategyVaultFactory is IMultistrategyVaultFactory {
     // CONSTANTS
     // ============================================
 
-    /// @notice Version of vaults deployed by this factory
-    /// @dev Must match VAULT_ORIGINAL's version
-    string public constant VERSION = "3.0.4";
+    /// @notice API version of vaults deployed by this factory
+    /// @dev Must match VAULT_ORIGINAL's API version
+    string public constant override API_VERSION = "3.0.4";
 
     /// @notice Maximum protocol fee in basis points (50%)
     /// @dev Hard cap to prevent excessive fees. 5000 bps = 50%
@@ -201,7 +201,7 @@ contract MultistrategyVaultFactory is IMultistrategyVaultFactory {
 
     /// @inheritdoc IMultistrategyVaultFactory
     function apiVersion() external pure override returns (string memory) {
-        return VERSION;
+        return API_VERSION;
     }
 
     // ============================================

@@ -40,6 +40,7 @@ interface IMultistrategyVaultFactory {
     event UpdatePendingGovernance(address indexed newPendingGovernance);
 
     // Constants
+    function API_VERSION() external pure returns (string memory);
     /// @notice Returns the maximum allowed protocol fee in basis points
     /// @return maxFeeBps Maximum fee value (typically 5000 = 50%)
     function MAX_FEE_BPS() external pure returns (uint16);

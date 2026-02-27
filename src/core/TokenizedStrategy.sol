@@ -446,9 +446,9 @@ abstract contract TokenizedStrategy {
     // CONSTANTS
     // ============================================
 
-    /// @notice Version identifier for this TokenizedStrategy implementation
+    /// @notice API version identifier for this TokenizedStrategy implementation
     /// @dev Used for tracking strategy versions and compatibility
-    string internal constant VERSION = "1.0.0";
+    string internal constant API_VERSION = "1.0.0";
 
     /// @notice Reentrancy guard flag value during function execution
     /// @dev Set to 2 when a protected function is executing
@@ -478,9 +478,9 @@ abstract contract TokenizedStrategy {
     bytes32 internal constant EIP712DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    /// @notice Precomputed hash of version for EIP-712 domain
+    /// @notice Precomputed hash of API version for EIP-712 domain
     /// @dev Saves gas by computing once
-    bytes32 internal constant VERSION_HASH = keccak256(bytes(VERSION));
+    bytes32 internal constant VERSION_HASH = keccak256(bytes(API_VERSION));
 
     /// @notice Custom storage slot for StrategyData struct
     /// @dev CRITICAL: This custom slot prevents storage collisions in the proxy pattern
@@ -626,7 +626,7 @@ abstract contract TokenizedStrategy {
         S.cachedDomainSeparator = _buildDomainSeparator(S);
 
         // Emit event to signal a new strategy has been initialized.
-        emit NewTokenizedStrategy(address(this), _asset, VERSION);
+        emit NewTokenizedStrategy(address(this), _asset, API_VERSION);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -1242,7 +1242,7 @@ abstract contract TokenizedStrategy {
      * @return version API version string
      */
     function apiVersion() external pure returns (string memory) {
-        return VERSION;
+        return API_VERSION;
     }
 
     /**
@@ -1796,7 +1796,7 @@ abstract contract TokenizedStrategy {
 
     /**
      * @notice Builds the EIP-712 domain separator using current state.
-     * @dev Uses strategy name, version, chain ID, and contract address.
+     * @dev Uses strategy name, API version, chain ID, and contract address.
      * @param S Storage pointer to strategy data
      * @return The computed domain separator.
      */
