@@ -73,9 +73,9 @@ contract MultistrategyVault is IMultistrategyVault {
     ///      1,000,000,000,000 = 1e12 for high precision time-weighted calculations
     uint256 public constant MAX_BPS_EXTENDED = 1_000_000_000_000;
 
-    /// @notice API version of this vault implementation
+    /// @notice Version of this vault implementation
     /// @dev Based on Yearn V3 vault version
-    string public constant API_VERSION = "3.0.4";
+    string public constant VERSION = "3.0.4";
 
     /// @notice EIP-712 domain type hash for signature verification
     /// @dev Used in permit() function for gasless approvals
@@ -1742,7 +1742,7 @@ contract MultistrategyVault is IMultistrategyVault {
      * @return version API version string (e.g., "3.0.4")
      */
     function apiVersion() external pure override returns (string memory) {
-        return API_VERSION;
+        return VERSION;
     }
 
     // ============================================
@@ -1836,7 +1836,7 @@ contract MultistrategyVault is IMultistrategyVault {
                 abi.encode(
                     DOMAIN_TYPE_HASH,
                     keccak256(bytes(name)),
-                    keccak256(bytes(API_VERSION)),
+                    keccak256(bytes(VERSION)),
                     block.chainid,
                     address(this)
                 )

@@ -232,10 +232,10 @@ BaseStrategy (Abstract)
 5. Update documentation with strategy-specific details
 
 **Contract semantic versioning checks**:
-1. Keep `API_VERSION` (or `VERSION`) in sync with contract interface/storage changes.
+1. Keep `VERSION` in sync with contract interface/storage changes.
 2. Semver classification uses a single built-in mode based on storage, ABI, and bytecode layers.
-3. Version source of truth is the contract constant (`API_VERSION`/`VERSION`) in code.
-4. If a changed tracked contract has no version constant, semver check fails and requires adding one in `X.Y.Z` format.
+3. Version source of truth is the contract constant `VERSION` in code.
+4. If a changed tracked contract has no `VERSION` constant, semver check fails and requires adding one in `X.Y.Z` format.
 5. Run local checks:
 
 ```bash

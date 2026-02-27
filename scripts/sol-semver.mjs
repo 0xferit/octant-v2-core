@@ -355,11 +355,6 @@ function readDeclaredVersion(worktreeDir, contractId) {
   }
 
   const source = fs.readFileSync(filePath, "utf8");
-  const apiVersionMatch = source.match(/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/);
-  if (apiVersionMatch) {
-    return apiVersionMatch[1];
-  }
-
   const versionMatch = source.match(/\bVERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/);
   if (versionMatch) {
     return versionMatch[1];
@@ -507,10 +502,7 @@ function fileHasVersionConstant(worktreeDir, sourcePath) {
     return false;
   }
   const source = fs.readFileSync(fullPath, "utf8");
-  return (
-    /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source) ||
-    /\bVERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source)
-  );
+  return /\bVERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source);
 }
 
 function findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, lockContracts) {
@@ -578,7 +570,7 @@ function validateUnderBump(result, oldLockedVersion) {
   if (!result.declared_version_new) {
     return {
       ok: false,
-      reason: "missing declared API_VERSION/VERSION; version is required",
+      reason: "missing declared VERSION; version is required",
       expectedMinimumVersion: null
     };
   }
@@ -648,7 +640,7 @@ function buildCheckReport(opts, worktrees) {
   if (lockFilePath) {
     const missingLockEntries = findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, lockContracts);
     for (const sourcePath of missingLockEntries) {
-      failures.push(`${sourcePath}: changed contract declares API_VERSION/VERSION but is missing in ${lockFilePath}`);
+      failures.push(`${sourcePath}: changed contract declares VERSION but is missing in ${lockFilePath}`);
     }
   }
 
