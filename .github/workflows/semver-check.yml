@@ -8,7 +8,6 @@ on:
       - develop
     paths:
       - 'src/**/*.sol'
-      - 'semver-lock.json'
       - 'scripts/sol-semver.mjs'
 
 jobs:
@@ -39,4 +38,4 @@ jobs:
           node scripts/sol-semver.mjs check \
             --old-ref "$BASE_REF" \
             --new-ref "$HEAD_REF" \
-            --lock-file semver-lock.json
+            --contracts "src/core/MultistrategyVault.sol:MultistrategyVault,src/factories/MultistrategyVaultFactory.sol:MultistrategyVaultFactory,src/core/TokenizedStrategy.sol:TokenizedStrategy"
