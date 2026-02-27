@@ -1,0 +1,42 @@
+name: Contract Semver Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'src/**/*.sol'
+      - 'semver-lock.json'
+      - 'scripts/sol-semver.mjs'
+
+jobs:
+  check-semver:
+    name: Verify contract semantic version bumps
+    runs-on: general
+    container:
+      image: ${{ vars.GCP_DOCKER_IMAGE_REGISTRY }}/node-extended:f4f41461
+      credentials:
+        username: _json_key_base64
+        password: ${{ secrets.GCP_DOCKER_IMAGES_REGISTRY_SERVICE_ACCOUNT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Init env
+        run: |
+          yarn install
+          forge soldeer install
+
+      - name: Check semantic version bumps in changed contracts
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node scripts/sol-semver.mjs check \
+            --old-ref "$BASE_REF" \
+            --new-ref "$HEAD_REF" \
+            --lock-file semver-lock.json

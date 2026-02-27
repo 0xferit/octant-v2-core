@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "contracts": {
+    "src/core/MultistrategyVault.sol:MultistrategyVault": "3.0.4",
+    "src/factories/MultistrategyVaultFactory.sol:MultistrategyVaultFactory": "3.0.4",
+    "src/core/TokenizedStrategy.sol:TokenizedStrategy": "1.0.0"
+  }
+}
