@@ -37,5 +37,4 @@ jobs:
         run: |
           node scripts/sol-semver.mjs check \
             --old-ref "$BASE_REF" \
-            --new-ref "$HEAD_REF" \
-            --contracts "src/core/MultistrategyVault.sol:MultistrategyVault,src/factories/MultistrategyVaultFactory.sol:MultistrategyVaultFactory,src/core/TokenizedStrategy.sol:TokenizedStrategy"
+            --new-ref "$HEAD_REF"

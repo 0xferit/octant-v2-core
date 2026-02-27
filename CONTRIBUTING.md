@@ -66,6 +66,26 @@ Main time cost of developing smart-contract is audits, not development itself. B
 ## 🛠️ Development Workflow
 - We use [Gitflow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow) as Git branching model.
 - We use a pre-commit hook to automatically format, lint and test, ensuring no surprises on continuous integration run.
+
+### Contract Semver Checks
+- Keep `API_VERSION` in sync with interface/storage changes for versioned contracts.
+- Semver classification is based on storage layout, ABI, and deployed bytecode diffs.
+- `scripts/sol-semver.mjs check` compares `old-ref` (PR target/base) vs `new-ref` (PR source/head).
+- Without `--contracts`, the checker auto-discovers changed contracts by:
+  - taking changed `.sol` files from `git diff --name-only <old-ref> <new-ref> -- src`
+  - selecting files that declare `API_VERSION`
+  - resolving inspectable `path:ContractName` pairs with `forge inspect`
+- If discovery is ambiguous for a changed versioned file, pass `--contracts` explicitly.
+
+Run locally:
+```bash
+yarn semver:check --old-ref origin/develop --new-ref HEAD
+yarn semver:diff --old-ref origin/develop --new-ref HEAD --contract src/core/MultistrategyVault.sol:MultistrategyVault
+
+# Optional explicit scope override:
+node scripts/sol-semver.mjs check --old-ref origin/develop --new-ref HEAD --contracts src/core/MultistrategyVault.sol:MultistrategyVault
+```
+
 ## 🤝 Communication
 - Use clear, verbose language in all communications
 - Ask questions when something isn't clear

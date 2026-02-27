@@ -505,6 +505,59 @@ function fileHasVersionConstant(worktreeDir, sourcePath) {
   return /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source);
 }
 
+function extractContractNames(sourceCode) {
+  const names = [];
+  const regex = /\b(?:abstract\s+)?contract\s+([A-Za-z_][A-Za-z0-9_]*)\b/g;
+  let match;
+  while ((match = regex.exec(sourceCode)) !== null) {
+    names.push(match[1]);
+  }
+  return [...new Set(names)];
+}
+
+function discoverVersionedChangedContracts(worktrees, changedFiles) {
+  const discovered = [];
+  const unresolvedFiles = [];
+
+  for (const sourcePath of changedFiles) {
+    const fullPath = path.join(worktrees.new, sourcePath);
+    if (!fs.existsSync(fullPath)) {
+      continue;
+    }
+
+    const source = fs.readFileSync(fullPath, "utf8");
+    if (!/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source)) {
+      continue;
+    }
+
+    const candidates = extractContractNames(source);
+    let matchedAtLeastOne = false;
+
+    for (const contractName of candidates) {
+      const contractId = `${sourcePath}:${contractName}`;
+      try {
+        inspectContractSnapshot(worktrees.new, contractId);
+        discovered.push(contractId);
+        matchedAtLeastOne = true;
+      } catch (error) {
+        if (isMissingContractInspectError(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!matchedAtLeastOne) {
+      unresolvedFiles.push(sourcePath);
+    }
+  }
+
+  return {
+    contracts: [...new Set(discovered)],
+    unresolvedFiles
+  };
+}
+
 function findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, lockContracts) {
   const lockPaths = new Set(lockContracts.map((contractId) => parseContractId(contractId).sourcePath));
   const missing = [];
@@ -630,8 +683,19 @@ function buildCheckReport(opts, worktrees) {
   ];
 
   let contracts = parseContractsOption(opts.contracts);
-  if (contracts.length === 0) {
-    contracts = lockContracts;
+  const hasExplicitContracts = Object.hasOwn(opts, "contracts");
+  if (!hasExplicitContracts && contracts.length === 0) {
+    if (lockContracts.length > 0) {
+      contracts = lockContracts;
+    } else {
+      const discovery = discoverVersionedChangedContracts(worktrees, changedFiles);
+      contracts = discovery.contracts;
+      for (const sourcePath of discovery.unresolvedFiles) {
+        failures.push(
+          `${sourcePath}: contains API_VERSION but no inspectable contract could be determined; pass --contracts explicitly`
+        );
+      }
+    }
   }
 
   const changedCandidates = detectChangedVersionedContracts(changedFiles, contracts);
@@ -656,7 +720,18 @@ function buildCheckReport(opts, worktrees) {
         results: []
       };
     }
-    throw new Error("No contracts to check. Provide --contracts or --lock-file with non-empty contracts map.");
+    if (hasExplicitContracts) {
+      throw new Error("No contracts to check. Provide non-empty --contracts list.");
+    }
+    return {
+      old_ref: oldRef,
+      new_ref: newRef,
+      lock_file: lockFilePath || null,
+      contracts_analyzed: [],
+      changed_files: changedFiles,
+      failures: [],
+      results: []
+    };
   }
 
   const contractsToAnalyze = contracts;

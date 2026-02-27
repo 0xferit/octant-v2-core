@@ -232,14 +232,4 @@ BaseStrategy (Abstract)
 5. Update documentation with strategy-specific details
 
 **Contract semantic versioning checks**:
-1. Keep `API_VERSION` in sync with contract interface/storage changes.
-2. Semver classification uses a single built-in mode based on storage, ABI, and bytecode layers.
-3. Version source of truth is the contract constant `API_VERSION` in code.
-4. If a changed tracked contract has no `API_VERSION` constant, semver check fails and requires adding one in `X.Y.Z` format.
-5. Run local checks:
-
-```bash
-yarn semver:diff --old-ref origin/develop --new-ref HEAD --contract src/core/MultistrategyVault.sol:MultistrategyVault
-yarn semver:check --old-ref origin/develop --new-ref HEAD
-node scripts/sol-semver.mjs check --old-ref origin/develop --new-ref HEAD --contracts src/core/MultistrategyVault.sol:MultistrategyVault,src/factories/MultistrategyVaultFactory.sol:MultistrategyVaultFactory,src/core/TokenizedStrategy.sol:TokenizedStrategy
-```
+See `CONTRIBUTING.md` for semver policy and workflow details.
