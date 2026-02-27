@@ -200,11 +200,6 @@ contract MultistrategyVaultFactory is IMultistrategyVaultFactory {
     }
 
     /// @inheritdoc IMultistrategyVaultFactory
-    function API_VERSION() external pure override returns (string memory) {
-        return VERSION;
-    }
-
-    /// @inheritdoc IMultistrategyVaultFactory
     function apiVersion() external pure override returns (string memory) {
         return VERSION;
     }
