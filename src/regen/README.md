@@ -604,4 +604,3 @@ See main repository for security information.
 **Golem Foundation**
 - Website: https://golem.foundation
 - Security: security@golem.foundation
-

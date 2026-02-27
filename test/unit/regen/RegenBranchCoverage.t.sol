@@ -807,9 +807,8 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         // Notify more rewards (should carry over remaining)
         _notifyReward(5000e18);
 
-        // Verify schedule was updated
-        (uint256 addedAmount, , , , , ) = regenStaker.latestRewardSchedule();
-        assertEq(addedAmount, 5000e18);
+        // Verify cumulative rewards include the carry-over path update
+        assertEq(regenStaker.totalRewards(), 15000e18);
     }
 
     // ===== _checkpointGlobalReward: totalEarningPower == 0 extends rewardEndTime =====
