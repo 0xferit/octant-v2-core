@@ -156,20 +156,6 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
     /// @dev This includes claims, compounding, contributions, and tips
     uint256 public totalClaimedRewards;
 
-    /// @notice Summary of the most recently scheduled reward cycle.
-    /// @dev Tracks both the new amount and any carried-over rewards for analytics and UX.
-    struct RewardSchedule {
-        uint256 addedAmount;
-        uint256 carryOverAmount;
-        uint256 totalScheduledAmount;
-        uint256 requiredBalance;
-        uint256 duration;
-        uint256 endTime;
-    }
-
-    /// @notice Cached metadata for the most recent reward schedule.
-    RewardSchedule public latestRewardSchedule;
-
     // === Events ===
     /// @notice Emitted when the staker allowset is updated
     /// @param allowset Address of new allowset contract controlling staker access
@@ -419,16 +405,6 @@ abstract contract RegenStakerBase is Staker, Pausable, ReentrancyGuard, EIP712, 
         totalRewards += _amount;
 
         emit RewardNotified(_amount, msg.sender);
-
-        latestRewardSchedule = RewardSchedule({
-            addedAmount: _amount,
-            carryOverAmount: carryOverAmount,
-            totalScheduledAmount: totalScheduledAmount,
-            requiredBalance: _requiredBalance,
-            duration: sharedState.rewardDuration,
-            endTime: rewardEndTime
-        });
-
         emit RewardScheduleUpdated(
             _amount,
             carryOverAmount,
