@@ -173,13 +173,24 @@ function compareStorage(oldStorageRaw, newStorageRaw) {
   return { bump: "none", reasons: ["storage layout is identical"] };
 }
 
+function canonicalAbiParamType(param) {
+  const rawType = (param && param.type) || "";
+  if (!rawType.startsWith("tuple")) {
+    return rawType;
+  }
+
+  const tupleSuffix = rawType.slice("tuple".length);
+  const components = (param.components || []).map((component) => canonicalAbiParamType(component)).join(",");
+  return `tuple(${components})${tupleSuffix}`;
+}
+
 function abiKey(item) {
-  const inputs = (item.inputs || []).map((i) => i.type).join(",");
+  const inputs = (item.inputs || []).map((i) => canonicalAbiParamType(i)).join(",");
   return `${item.type}:${item.name || ""}(${inputs})`;
 }
 
 function abiOutputs(item) {
-  return (item.outputs || []).map((o) => o.type).join(",");
+  return (item.outputs || []).map((o) => canonicalAbiParamType(o)).join(",");
 }
 
 function eventIndexedPattern(item) {
@@ -566,16 +577,27 @@ function discoverChangedContracts(worktrees, changedFiles) {
       continue;
     }
 
-    const source = fs.readFileSync(existsInNew ? newFullPath : oldFullPath, "utf8");
-    const hasVersion = /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source);
-    const inspectable = findInspectableContractsInSource(
-      existsInNew ? worktrees.new : worktrees.old,
-      sourcePath,
-      source
-    );
+    let hasVersion = false;
+    const inspectable = [];
+    const addInspectableFrom = (worktreeDir, fullPath) => {
+      const source = fs.readFileSync(fullPath, "utf8");
+      if (/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source)) {
+        hasVersion = true;
+      }
+      inspectable.push(...findInspectableContractsInSource(worktreeDir, sourcePath, source));
+    };
 
-    discovered.push(...inspectable);
-    if (hasVersion && inspectable.length === 0) {
+    if (existsInOld) {
+      addInspectableFrom(worktrees.old, oldFullPath);
+    }
+    if (existsInNew) {
+      addInspectableFrom(worktrees.new, newFullPath);
+    }
+
+    const uniqueInspectable = [...new Set(inspectable)];
+
+    discovered.push(...uniqueInspectable);
+    if (hasVersion && uniqueInspectable.length === 0) {
       unresolvedFiles.push(sourcePath);
     }
   }
