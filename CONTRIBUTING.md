@@ -71,11 +71,12 @@ Main time cost of developing smart-contract is audits, not development itself. B
 - Keep `API_VERSION` in sync with interface/storage changes for versioned contracts.
 - Semver classification is based on storage layout, ABI, and deployed bytecode diffs.
 - `scripts/sol-semver.mjs check` compares `old-ref` (PR target/base) vs `new-ref` (PR source/head).
-- Without `--contracts`, the checker auto-discovers changed contracts by:
+- Without `--contracts`, the checker:
   - taking changed `.sol` files from `git diff --name-only <old-ref> <new-ref> -- src`
-  - selecting files that declare `API_VERSION`
-  - resolving inspectable `path:ContractName` pairs with `forge inspect`
-- If discovery is ambiguous for a changed versioned file, pass `--contracts` explicitly.
+  - failing if a changed contract has no declared `API_VERSION`
+  - resolving inspectable changed `path:ContractName` pairs with `forge inspect`
+  - analyzing all versioned contracts (those declaring `API_VERSION`) to catch transitive impacts
+- If discovery is ambiguous for a versioned file, pass `--contracts` explicitly.
 
 Run locally:
 ```bash

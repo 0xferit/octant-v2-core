@@ -515,7 +515,27 @@ function extractContractNames(sourceCode) {
   return [...new Set(names)];
 }
 
-function discoverVersionedChangedContracts(worktrees, changedFiles) {
+function findInspectableContractsInSource(worktreeDir, sourcePath, sourceCode) {
+  const inspectable = [];
+  const candidates = extractContractNames(sourceCode);
+
+  for (const contractName of candidates) {
+    const contractId = `${sourcePath}:${contractName}`;
+    try {
+      inspectContractSnapshot(worktreeDir, contractId);
+      inspectable.push(contractId);
+    } catch (error) {
+      if (isMissingContractInspectError(error)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return inspectable;
+}
+
+function discoverChangedContracts(worktrees, changedFiles) {
   const discovered = [];
   const unresolvedFiles = [];
 
@@ -526,30 +546,59 @@ function discoverVersionedChangedContracts(worktrees, changedFiles) {
     }
 
     const source = fs.readFileSync(fullPath, "utf8");
+    const hasVersion = /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source);
+    const inspectable = findInspectableContractsInSource(worktrees.new, sourcePath, source);
+
+    discovered.push(...inspectable);
+    if (hasVersion && inspectable.length === 0) {
+      unresolvedFiles.push(sourcePath);
+    }
+  }
+
+  return {
+    contracts: [...new Set(discovered)],
+    unresolvedFiles
+  };
+}
+
+function listSoliditySourceFiles(baseDir, relativeDir = "src") {
+  const root = path.join(baseDir, relativeDir);
+  if (!fs.existsSync(root)) {
+    return [];
+  }
+
+  const files = [];
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryRelative = path.join(relativeDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listSoliditySourceFiles(baseDir, entryRelative));
+    } else if (entry.isFile() && entry.name.endsWith(".sol")) {
+      files.push(entryRelative);
+    }
+  }
+  return files;
+}
+
+function discoverVersionedContracts(worktrees) {
+  const discovered = [];
+  const unresolvedFiles = [];
+  const sourceFiles = listSoliditySourceFiles(worktrees.new, "src");
+
+  for (const sourcePath of sourceFiles) {
+    const fullPath = path.join(worktrees.new, sourcePath);
+    const source = fs.readFileSync(fullPath, "utf8");
     if (!/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source)) {
       continue;
     }
 
-    const candidates = extractContractNames(source);
-    let matchedAtLeastOne = false;
-
-    for (const contractName of candidates) {
-      const contractId = `${sourcePath}:${contractName}`;
-      try {
-        inspectContractSnapshot(worktrees.new, contractId);
-        discovered.push(contractId);
-        matchedAtLeastOne = true;
-      } catch (error) {
-        if (isMissingContractInspectError(error)) {
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    if (!matchedAtLeastOne) {
+    const inspectable = findInspectableContractsInSource(worktrees.new, sourcePath, source);
+    if (inspectable.length === 0) {
       unresolvedFiles.push(sourcePath);
+      continue;
     }
+
+    discovered.push(...inspectable);
   }
 
   return {
@@ -681,6 +730,7 @@ function buildCheckReport(opts, worktrees) {
   const lockContracts = [
     ...new Set([...Object.keys(oldLock.contracts || {}), ...Object.keys(newLock.contracts || {})])
   ];
+  const changedDiscovery = discoverChangedContracts(worktrees, changedFiles);
 
   let contracts = parseContractsOption(opts.contracts);
   const hasExplicitContracts = Object.hasOwn(opts, "contracts");
@@ -688,7 +738,7 @@ function buildCheckReport(opts, worktrees) {
     if (lockContracts.length > 0) {
       contracts = lockContracts;
     } else {
-      const discovery = discoverVersionedChangedContracts(worktrees, changedFiles);
+      const discovery = discoverVersionedContracts(worktrees);
       contracts = discovery.contracts;
       for (const sourcePath of discovery.unresolvedFiles) {
         failures.push(
@@ -698,6 +748,13 @@ function buildCheckReport(opts, worktrees) {
     }
   }
 
+  for (const sourcePath of changedDiscovery.unresolvedFiles) {
+    failures.push(
+      `${sourcePath}: contains API_VERSION but no inspectable contract could be determined; pass --contracts explicitly`
+    );
+  }
+
+  contracts = [...new Set([...contracts, ...changedDiscovery.contracts])];
   const changedCandidates = detectChangedVersionedContracts(changedFiles, contracts);
   contracts = [...new Set([...contracts, ...changedCandidates])];
 
@@ -709,6 +766,7 @@ function buildCheckReport(opts, worktrees) {
   }
 
   if (contracts.length === 0) {
+    const uniqueFailures = [...new Set(failures)];
     if (failures.length > 0) {
       return {
         old_ref: oldRef,
@@ -716,7 +774,7 @@ function buildCheckReport(opts, worktrees) {
         lock_file: lockFilePath || null,
         contracts_analyzed: [],
         changed_files: changedFiles,
-        failures,
+        failures: uniqueFailures,
         results: []
       };
     }
@@ -729,7 +787,7 @@ function buildCheckReport(opts, worktrees) {
       lock_file: lockFilePath || null,
       contracts_analyzed: [],
       changed_files: changedFiles,
-      failures: [],
+      failures: uniqueFailures,
       results: []
     };
   }
@@ -741,6 +799,8 @@ function buildCheckReport(opts, worktrees) {
   for (const contractId of contractsToAnalyze) {
     const result = analyzeContract(worktrees, contractId);
     const changed = result.recommended_bump !== "none";
+    const sourcePath = parseContractId(contractId).sourcePath;
+    const changedInPr = changedFiles.includes(sourcePath);
     const oldLockedExists = lockFilePath ? Object.hasOwn(oldLock.contracts, contractId) : false;
     const newLockedExists = lockFilePath ? Object.hasOwn(newLock.contracts, contractId) : false;
     const oldLocked = oldLockedExists ? oldLock.contracts[contractId] : null;
@@ -748,11 +808,12 @@ function buildCheckReport(opts, worktrees) {
     const contractStatus = {
       contract: contractId,
       changed,
+      changed_in_pr: changedInPr,
       result,
       checks: []
     };
 
-    if (changed) {
+    if (changed || changedInPr) {
       const oldLocked = lockFilePath ? oldLock.contracts[contractId] : null;
       const underBump = validateUnderBump(result, oldLocked);
       result.expected_minimum_version = underBump.expectedMinimumVersion;
@@ -864,13 +925,14 @@ function buildCheckReport(opts, worktrees) {
     contractReports.push(contractStatus);
   }
 
+  const uniqueFailures = [...new Set(failures)];
   return {
     old_ref: oldRef,
     new_ref: newRef,
     lock_file: lockFilePath || null,
     contracts_analyzed: contractsToAnalyze,
     changed_files: changedFiles,
-    failures,
+    failures: uniqueFailures,
     results: contractReports
   };
 }
