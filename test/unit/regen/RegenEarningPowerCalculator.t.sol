@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {AccessMode} from "src/constants.sol";
+import { AccessMode } from "src/constants.sol";
 import "forge-std/Test.sol";
-import {RegenEarningPowerCalculator} from "src/regen/RegenEarningPowerCalculator.sol";
-import {AddressSet} from "src/utils/AddressSet.sol";
-import {IAddressSet} from "src/utils/IAddressSet.sol";
-import {
-    IAccessControlledEarningPowerCalculator
-} from "src/regen/interfaces/IAccessControlledEarningPowerCalculator.sol";
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import { RegenEarningPowerCalculator } from "src/regen/RegenEarningPowerCalculator.sol";
+import { AddressSet } from "src/utils/AddressSet.sol";
+import { IAddressSet } from "src/utils/IAddressSet.sol";
+import { IAccessControlledEarningPowerCalculator } from "src/regen/interfaces/IAccessControlledEarningPowerCalculator.sol";
+import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract RegenEarningPowerCalculatorTest is Test {
     RegenEarningPowerCalculator calculator;
@@ -104,7 +102,12 @@ contract RegenEarningPowerCalculatorTest is Test {
         vm.prank(owner);
         calculator.setAllowset(newEmptyAllowset);
 
-        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(initialStakedAmount, staker1, address(0), oldEP);
+        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(
+            initialStakedAmount,
+            staker1,
+            address(0),
+            oldEP
+        );
         assertEq(newEP, 0, "New EP should be 0 after changing allowset");
         assertTrue(qualifies, "Should qualify for bump after changing allowset");
     }
@@ -162,8 +165,12 @@ contract RegenEarningPowerCalculatorTest is Test {
         uint256 stakedAmount = uint256(type(uint96).max) + 1000;
         uint256 oldEarningPower = type(uint96).max;
 
-        (uint256 newEP, bool qualifies) =
-            calculator.getNewEarningPower(stakedAmount, staker1, address(0), oldEarningPower);
+        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(
+            stakedAmount,
+            staker1,
+            address(0),
+            oldEarningPower
+        );
         assertEq(newEP, type(uint96).max, "New EP should remain capped at uint96 max");
         assertFalse(qualifies, "Should not qualify for bump when EP remains at cap");
     }
@@ -235,7 +242,10 @@ contract RegenEarningPowerCalculatorBlocksetTest is Test {
         blockset = new AddressSet();
 
         calculator = new RegenEarningPowerCalculator(
-            owner, IAddressSet(address(allowset)), IAddressSet(address(blockset)), AccessMode.BLOCKSET
+            owner,
+            IAddressSet(address(allowset)),
+            IAddressSet(address(blockset)),
+            AccessMode.BLOCKSET
         );
 
         vm.stopPrank();
@@ -274,26 +284,24 @@ contract RegenEarningPowerCalculatorBlocksetTest is Test {
         vm.prank(owner);
         blockset.add(blockedStaker);
 
-        (uint256 newEP, bool qualifies) =
-            calculator.getNewEarningPower(
-                1000,
-                blockedStaker,
-                address(0),
-                1000 // old earning power was 1000
-            );
+        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(
+            1000,
+            blockedStaker,
+            address(0),
+            1000 // old earning power was 1000
+        );
 
         assertEq(newEP, 0, "Blocked user should have 0 new earning power");
         assertTrue(qualifies, "Should qualify for bump since EP changed from 1000 to 0");
     }
 
     function test_blocksetMode_getNewEarningPower_unblockedUser() public view {
-        (uint256 newEP, bool qualifies) =
-            calculator.getNewEarningPower(
-                500,
-                staker1,
-                address(0),
-                0 // old earning power was 0
-            );
+        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(
+            500,
+            staker1,
+            address(0),
+            0 // old earning power was 0
+        );
 
         assertEq(newEP, 500, "Unblocked user should have full earning power");
         assertTrue(qualifies, "Should qualify for bump since EP changed from 0 to 500");
@@ -301,13 +309,12 @@ contract RegenEarningPowerCalculatorBlocksetTest is Test {
 
     function test_blocksetMode_getNewEarningPower_noBump() public view {
         // No change in earning power
-        (uint256 newEP, bool qualifies) =
-            calculator.getNewEarningPower(
-                500,
-                staker1,
-                address(0),
-                500 // old EP matches new EP
-            );
+        (uint256 newEP, bool qualifies) = calculator.getNewEarningPower(
+            500,
+            staker1,
+            address(0),
+            500 // old EP matches new EP
+        );
 
         assertEq(newEP, 500);
         assertFalse(qualifies, "Should not qualify when EP unchanged");
@@ -417,7 +424,10 @@ contract RegenEarningPowerCalculatorBlocksetTest is Test {
 
         vm.prank(owner);
         RegenEarningPowerCalculator calc = new RegenEarningPowerCalculator(
-            owner, IAddressSet(address(as_)), IAddressSet(address(bs)), AccessMode.BLOCKSET
+            owner,
+            IAddressSet(address(as_)),
+            IAddressSet(address(bs)),
+            AccessMode.BLOCKSET
         );
 
         assertEq(uint8(calc.accessMode()), uint8(AccessMode.BLOCKSET));
@@ -426,8 +436,12 @@ contract RegenEarningPowerCalculatorBlocksetTest is Test {
 
     function test_constructor_noneMode() public {
         vm.prank(owner);
-        RegenEarningPowerCalculator calc =
-            new RegenEarningPowerCalculator(owner, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE);
+        RegenEarningPowerCalculator calc = new RegenEarningPowerCalculator(
+            owner,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE
+        );
 
         assertEq(uint8(calc.accessMode()), uint8(AccessMode.NONE));
         // Everyone has earning power in NONE mode

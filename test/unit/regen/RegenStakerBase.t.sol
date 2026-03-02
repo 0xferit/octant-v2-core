@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {AccessMode} from "src/constants.sol";
+import { AccessMode } from "src/constants.sol";
 import "forge-std/Test.sol";
 import { RegenEarningPowerCalculator } from "src/regen/RegenEarningPowerCalculator.sol";
 import { AddressSet } from "src/utils/AddressSet.sol";
@@ -49,7 +49,10 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         allocationMechanismAllowset = new AddressSet();
 
         calculator = new RegenEarningPowerCalculator(
-            ADMIN, IAddressSet(address(stakerAllowset)), IAddressSet(address(stakerBlockset)), AccessMode.NONE
+            ADMIN,
+            IAddressSet(address(stakerAllowset)),
+            IAddressSet(address(stakerBlockset)),
+            AccessMode.NONE
         );
 
         regenStaker = new RegenStaker(
@@ -627,7 +630,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         regenStaker.alterDelegatee(depositId, staker2);
 
         // Verify delegatee changed
-        (,,, address delegatee,,,) = regenStaker.deposits(depositId);
+        (, , , address delegatee, , , ) = regenStaker.deposits(depositId);
         assertEq(delegatee, staker2, "Delegatee should be staker2");
     }
 
@@ -715,7 +718,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.clearMockedCalls();
 
         // Verify earning power was updated
-        (,, uint96 earningPower,,,,) = regenStaker.deposits(depositId);
+        (, , uint96 earningPower, , , , ) = regenStaker.deposits(depositId);
         assertEq(earningPower, 0, "Earning power should be 0 after block");
     }
 
@@ -766,7 +769,10 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.mockCall(
             address(calculator),
             abi.encodeWithSelector(
-                IEarningPowerCalculator.getEarningPower.selector, uint256(1000e18), staker1, staker1
+                IEarningPowerCalculator.getEarningPower.selector,
+                uint256(1000e18),
+                staker1,
+                staker1
             ),
             abi.encode(uint256(500e18))
         );
@@ -778,7 +784,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
         vm.clearMockedCalls();
 
-        (,, uint96 earningPower,,,,) = regenStaker.deposits(depositId);
+        (, , uint96 earningPower, , , , ) = regenStaker.deposits(depositId);
         assertEq(earningPower, 500e18, "Earning power should be updated to 500e18");
     }
 
@@ -1101,7 +1107,10 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.mockCall(
             address(calculator),
             abi.encodeWithSelector(
-                IEarningPowerCalculator.getEarningPower.selector, uint256(1000e18), staker1, staker1
+                IEarningPowerCalculator.getEarningPower.selector,
+                uint256(1000e18),
+                staker1,
+                staker1
             ),
             abi.encode(uint256(2000e18))
         );
@@ -1117,7 +1126,7 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         uint256 tipBalance = stakeToken.balanceOf(tipReceiver);
         assertEq(tipBalance, 0.1e18, "Tip receiver should have received tip");
 
-        (,, uint96 earningPower,,,,) = regenStaker.deposits(depositId);
+        (, , uint96 earningPower, , , , ) = regenStaker.deposits(depositId);
         assertEq(earningPower, 2000e18, "Earning power should be updated to 2000e18");
     }
 
@@ -1145,7 +1154,10 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.mockCall(
             address(calculator),
             abi.encodeWithSelector(
-                IEarningPowerCalculator.getEarningPower.selector, uint256(1000e18), staker1, staker1
+                IEarningPowerCalculator.getEarningPower.selector,
+                uint256(1000e18),
+                staker1,
+                staker1
             ),
             abi.encode(uint256(500e18))
         );
@@ -1202,7 +1214,9 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         // Deploy a mock mechanism that returns the right asset
         address fakeMechanism = makeAddr("validMechanism");
         vm.mockCall(
-            fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("asset()"))), abi.encode(address(stakeToken))
+            fakeMechanism,
+            abi.encodeWithSelector(bytes4(keccak256("asset()"))),
+            abi.encode(address(stakeToken))
         );
         vm.mockCall(
             address(allocationMechanismAllowset),
@@ -1227,7 +1241,9 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
         address fakeMechanism = makeAddr("validMech2");
         vm.mockCall(
-            fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("asset()"))), abi.encode(address(stakeToken))
+            fakeMechanism,
+            abi.encodeWithSelector(bytes4(keccak256("asset()"))),
+            abi.encode(address(stakeToken))
         );
         vm.mockCall(
             address(allocationMechanismAllowset),
@@ -1250,7 +1266,9 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
         address fakeMechanism = makeAddr("validMech3");
         vm.mockCall(
-            fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("asset()"))), abi.encode(address(stakeToken))
+            fakeMechanism,
+            abi.encodeWithSelector(bytes4(keccak256("asset()"))),
+            abi.encode(address(stakeToken))
         );
         vm.mockCall(
             address(allocationMechanismAllowset),
@@ -1291,7 +1309,9 @@ contract RegenStakerBaseBranchCoverageTest is Test {
 
         address fakeMechanism = makeAddr("validMech4");
         vm.mockCall(
-            fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("asset()"))), abi.encode(address(stakeToken))
+            fakeMechanism,
+            abi.encodeWithSelector(bytes4(keccak256("asset()"))),
+            abi.encode(address(stakeToken))
         );
         vm.mockCall(
             address(allocationMechanismAllowset),
@@ -1300,7 +1320,9 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         );
         // Mock canSignup to return false for the owner
         vm.mockCall(
-            fakeMechanism, abi.encodeWithSelector(bytes4(keccak256("canSignup(address)")), staker1), abi.encode(false)
+            fakeMechanism,
+            abi.encodeWithSelector(bytes4(keccak256("canSignup(address)")), staker1),
+            abi.encode(false)
         );
 
         vm.prank(staker1);
@@ -1355,7 +1377,10 @@ contract RegenStakerBaseBranchCoverageTest is Test {
         vm.mockCall(
             address(calculator),
             abi.encodeWithSelector(
-                IEarningPowerCalculator.getEarningPower.selector, uint256(1000e18), staker1, staker1
+                IEarningPowerCalculator.getEarningPower.selector,
+                uint256(1000e18),
+                staker1,
+                staker1
             ),
             abi.encode(uint256(100e18))
         );
@@ -1432,8 +1457,12 @@ contract RegenStakerBaseAssetValidationTest is Test {
         wrongToken = new MockERC20(18);
 
         // Deploy calculator
-        calculator =
-            new RegenEarningPowerCalculator(admin, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE);
+        calculator = new RegenEarningPowerCalculator(
+            admin,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE
+        );
 
         // Deploy allowsets as admin
         vm.startPrank(admin);
@@ -1494,7 +1523,15 @@ contract RegenStakerBaseAssetValidationTest is Test {
 
         // Try to contribute - should revert with AssetMismatch
         vm.prank(alice);
-        regenStaker.contribute(depositId, address(mechanism), 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0));
+        regenStaker.contribute(
+            depositId,
+            address(mechanism),
+            1e18,
+            block.timestamp + 1 days,
+            0,
+            bytes32(0),
+            bytes32(0)
+        );
     }
 
     function testContributeDoesNotRevertOnAssetMatch() public {
@@ -1508,9 +1545,17 @@ contract RegenStakerBaseAssetValidationTest is Test {
         // The validation should pass the asset check
         // (may still revert for other reasons like signature validation)
         vm.prank(alice);
-        try regenStaker.contribute(
-            depositId, address(mechanism), 1e18, block.timestamp + 1 days, 0, bytes32(0), bytes32(0)
-        ) {
+        try
+            regenStaker.contribute(
+                depositId,
+                address(mechanism),
+                1e18,
+                block.timestamp + 1 days,
+                0,
+                bytes32(0),
+                bytes32(0)
+            )
+        {
             // If it succeeds, great
             assertTrue(true);
         } catch Error(string memory reason) {
@@ -1638,13 +1683,13 @@ contract RegenStakerBaseClaimerPermissionsDemoTest is Test {
     /// @notice Demonstrates that claimers CAN compound rewards - INTENDED BEHAVIOR
     /// @dev This increases the deposit's stake amount, which is the documented behavior
     function testDemonstrate_ClaimerCanCompoundRewards() public {
-        (uint96 stakeBefore,,,,,,) = regenStaker.deposits(depositId);
+        (uint96 stakeBefore, , , , , , ) = regenStaker.deposits(depositId);
 
         // Claimer compounds rewards (claims + restakes in one operation)
         vm.prank(claimer);
         uint256 compoundedAmount = regenStaker.compoundRewards(depositId);
 
-        (uint96 stakeAfter,,,,,,) = regenStaker.deposits(depositId);
+        (uint96 stakeAfter, , , , , , ) = regenStaker.deposits(depositId);
 
         // Verify stake increased through compounding
         assertGt(compoundedAmount, 0, "compounded");
@@ -1669,8 +1714,9 @@ contract RegenStakerBaseClaimerPermissionsDemoTest is Test {
         uint256 nonce = TokenizedAllocationMechanism(address(allocationMechanism)).nonces(claimer);
         uint256 amount = 1e18;
         uint256 deadline = block.timestamp + 1 days;
-        bytes32 typeHash =
-            keccak256(bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)"));
+        bytes32 typeHash = keccak256(
+            bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)")
+        );
         bytes32 structHash = keccak256(abi.encode(typeHash, claimer, address(regenStaker), amount, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(claimerPk, digest);
@@ -1679,7 +1725,15 @@ contract RegenStakerBaseClaimerPermissionsDemoTest is Test {
 
         // Claimer contributes unclaimed rewards to the real allocation mechanism
         vm.prank(claimer);
-        uint256 contributed = regenStaker.contribute(depositId, address(allocationMechanism), amount, deadline, v, r, s);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            amount,
+            deadline,
+            v,
+            r,
+            s
+        );
 
         // Verify contribution succeeded
         assertEq(contributed, amount);
@@ -1729,7 +1783,10 @@ contract RegenStakerBaseCompoundAllowsetFixTest is Test {
     uint256 constant REWARD_AMOUNT = 500e18;
 
     event StakeDeposited(
-        address indexed depositor, Staker.DepositIdentifier indexed depositId, uint256 amount, uint256 earningPower
+        address indexed depositor,
+        Staker.DepositIdentifier indexed depositId,
+        uint256 amount,
+        uint256 earningPower
     );
 
     function setUp() public {
@@ -1743,7 +1800,10 @@ contract RegenStakerBaseCompoundAllowsetFixTest is Test {
 
         // Deploy earning power calculator
         earningPowerCalculator = new RegenEarningPowerCalculator(
-            admin, IAddressSet(address(earningPowerAllowset)), IAddressSet(address(0)), AccessMode.ALLOWSET
+            admin,
+            IAddressSet(address(earningPowerAllowset)),
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
         );
 
         // Deploy staker with same token for staking and rewards (to enable compounding)
@@ -1963,7 +2023,9 @@ contract RegenStakerBaseCompoundAllowsetFixTest is Test {
         vm.prank(unauthorizedUser);
         vm.expectRevert(
             abi.encodeWithSelector(
-                Staker.Staker__Unauthorized.selector, bytes32("not claimer or owner"), unauthorizedUser
+                Staker.Staker__Unauthorized.selector,
+                bytes32("not claimer or owner"),
+                unauthorizedUser
             )
         );
         staker.compoundRewards(depositId);
@@ -2020,8 +2082,11 @@ contract RegenStakerBaseCompoundAllowsetFixTest is Test {
         // Create deposit
         vm.startPrank(depositor);
         stakeToken.approve(address(staker), STAKE_AMOUNT);
-        Staker.DepositIdentifier depositId =
-            staker.stake(STAKE_AMOUNT, delegatee, callerIsOwner ? depositor : allowlistedClaimer);
+        Staker.DepositIdentifier depositId = staker.stake(
+            STAKE_AMOUNT,
+            delegatee,
+            callerIsOwner ? depositor : allowlistedClaimer
+        );
         vm.stopPrank();
 
         // Add rewards
@@ -2087,8 +2152,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
         vm.startPrank(admin);
         allowset = new AddressSet();
         allocationAllowset = new AddressSet();
-        earningPowerCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        earningPowerCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // Deploy RegenStaker
         regenStaker = new RegenStaker(
@@ -2151,8 +2220,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function test_setEarningPowerCalculator_revertsDuringActiveReward() public {
         // Deploy alternative calculator
-        RegenEarningPowerCalculator newCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator newCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // Start reward period
         vm.startPrank(rewardNotifier);
@@ -2174,8 +2247,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function test_setEarningPowerCalculator_succeedsAfterRewardPeriod() public {
         // Deploy alternative calculator
-        RegenEarningPowerCalculator newCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator newCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // Start reward period
         vm.startPrank(rewardNotifier);
@@ -2199,8 +2276,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function test_setEarningPowerCalculator_worksBeforeFirstReward() public {
         // Deploy alternative calculator
-        RegenEarningPowerCalculator newCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator newCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // No rewards notified yet, rewardEndTime should be 0
         assertEq(regenStaker.rewardEndTime(), 0, "No active reward period");
@@ -2217,8 +2298,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function test_setEarningPowerCalculator_onlyAdmin() public {
         // Deploy alternative calculator
-        RegenEarningPowerCalculator newCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator newCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // Fast forward past any potential reward period
         vm.warp(block.timestamp + REWARD_DURATION + 1);
@@ -2243,8 +2328,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function test_setEarningPowerCalculator_governanceProtectionConsistency() public {
         // Deploy alternative calculator
-        RegenEarningPowerCalculator newCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator newCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // Start reward period
         vm.startPrank(rewardNotifier);
@@ -2299,8 +2388,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function testFuzz_setEarningPowerCalculator_protectionTiming(uint256 timeOffset) public {
         // Deploy alternative calculator
-        RegenEarningPowerCalculator newCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator newCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // Start reward period
         vm.startPrank(rewardNotifier);
@@ -2335,11 +2428,19 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function test_setEarningPowerCalculator_multipleRewardCycles() public {
         // Deploy alternative calculators
-        RegenEarningPowerCalculator calculator2 =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator calculator2 = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
-        RegenEarningPowerCalculator calculator3 =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator calculator3 = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // First reward cycle
         vm.startPrank(rewardNotifier);
@@ -2385,8 +2486,12 @@ contract RegenStakerGovernanceProtectionTest is Test {
      */
     function test_setEarningPowerCalculator_exactlyAtRewardEndTime() public {
         // Deploy alternative calculator
-        RegenEarningPowerCalculator newCalculator =
-            new RegenEarningPowerCalculator(admin, allowset, IAddressSet(address(0)), AccessMode.ALLOWSET);
+        RegenEarningPowerCalculator newCalculator = new RegenEarningPowerCalculator(
+            admin,
+            allowset,
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
+        );
 
         // Start reward period
         vm.startPrank(rewardNotifier);
@@ -2411,7 +2516,9 @@ contract RegenStakerGovernanceProtectionTest is Test {
         vm.prank(admin);
         regenStaker.setEarningPowerCalculator(address(newCalculator));
         assertEq(
-            address(regenStaker.earningPowerCalculator()), address(newCalculator), "Should succeed after rewardEndTime"
+            address(regenStaker.earningPowerCalculator()),
+            address(newCalculator),
+            "Should succeed after rewardEndTime"
         );
     }
 }
@@ -2528,17 +2635,26 @@ contract RegenStakerBaseVotingPowerAssignmentTest is Test {
         uint256 nonce = TokenizedAllocationMechanism(address(allocationMechanism)).nonces(owner);
         uint256 deadline = block.timestamp + 1 days;
 
-        bytes32 typeHash =
-            keccak256(bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)"));
-        bytes32 structHash =
-            keccak256(abi.encode(typeHash, owner, address(regenStaker), CONTRIBUTION_AMOUNT, nonce, deadline));
+        bytes32 typeHash = keccak256(
+            bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)")
+        );
+        bytes32 structHash = keccak256(
+            abi.encode(typeHash, owner, address(regenStaker), CONTRIBUTION_AMOUNT, nonce, deadline)
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPk, digest);
 
         // Owner contributes their own deposit's rewards
         vm.prank(owner);
-        uint256 contributed =
-            regenStaker.contribute(depositId, address(allocationMechanism), CONTRIBUTION_AMOUNT, deadline, v, r, s);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            CONTRIBUTION_AMOUNT,
+            deadline,
+            v,
+            r,
+            s
+        );
 
         // Verify contribution succeeded
         assertEq(contributed, CONTRIBUTION_AMOUNT, "Contribution amount mismatch");
@@ -2563,17 +2679,26 @@ contract RegenStakerBaseVotingPowerAssignmentTest is Test {
         uint256 nonce = TokenizedAllocationMechanism(address(allocationMechanism)).nonces(claimer);
         uint256 deadline = block.timestamp + 1 days;
 
-        bytes32 typeHash =
-            keccak256(bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)"));
-        bytes32 structHash =
-            keccak256(abi.encode(typeHash, claimer, address(regenStaker), CONTRIBUTION_AMOUNT, nonce, deadline));
+        bytes32 typeHash = keccak256(
+            bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)")
+        );
+        bytes32 structHash = keccak256(
+            abi.encode(typeHash, claimer, address(regenStaker), CONTRIBUTION_AMOUNT, nonce, deadline)
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(claimerPk, digest);
 
         // Claimer contributes owner's deposit's rewards
         vm.prank(claimer);
-        uint256 contributed =
-            regenStaker.contribute(depositId, address(allocationMechanism), CONTRIBUTION_AMOUNT, deadline, v, r, s);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            CONTRIBUTION_AMOUNT,
+            deadline,
+            v,
+            r,
+            s
+        );
 
         // Verify contribution succeeded
         assertEq(contributed, CONTRIBUTION_AMOUNT, "Contribution amount mismatch");
@@ -2612,14 +2737,23 @@ contract RegenStakerBaseVotingPowerAssignmentTest is Test {
         uint256 nonce = TokenizedAllocationMechanism(address(allocationMechanism)).nonces(owner);
         uint256 deadline = block.timestamp + 1 days;
 
-        bytes32 typeHash =
-            keccak256(bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)"));
+        bytes32 typeHash = keccak256(
+            bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)")
+        );
         bytes32 structHash = keccak256(abi.encode(typeHash, owner, address(regenStaker), amount, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPk, digest);
 
         vm.prank(owner);
-        uint256 contributed = regenStaker.contribute(depositId, address(allocationMechanism), amount, deadline, v, r, s);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            amount,
+            deadline,
+            v,
+            r,
+            s
+        );
         assertEq(contributed, amount, "Owner contribution mismatch");
     }
 
@@ -2630,14 +2764,23 @@ contract RegenStakerBaseVotingPowerAssignmentTest is Test {
         uint256 nonce = TokenizedAllocationMechanism(address(allocationMechanism)).nonces(claimer);
         uint256 deadline = block.timestamp + 1 days;
 
-        bytes32 typeHash =
-            keccak256(bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)"));
+        bytes32 typeHash = keccak256(
+            bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)")
+        );
         bytes32 structHash = keccak256(abi.encode(typeHash, claimer, address(regenStaker), amount, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(claimerPk, digest);
 
         vm.prank(claimer);
-        uint256 contributed = regenStaker.contribute(depositId, address(allocationMechanism), amount, deadline, v, r, s);
+        uint256 contributed = regenStaker.contribute(
+            depositId,
+            address(allocationMechanism),
+            amount,
+            deadline,
+            v,
+            r,
+            s
+        );
         assertEq(contributed, amount, "Claimer contribution mismatch");
     }
 
@@ -2649,11 +2792,13 @@ contract RegenStakerBaseVotingPowerAssignmentTest is Test {
         uint256 nonce = TokenizedAllocationMechanism(address(allocationMechanism)).nonces(owner);
         uint256 deadline = block.timestamp + 1 days;
 
-        bytes32 typeHash =
-            keccak256(bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)"));
+        bytes32 typeHash = keccak256(
+            bytes("Signup(address user,address payer,uint256 deposit,uint256 nonce,uint256 deadline)")
+        );
         // Sign for owner but with WRONG private key
-        bytes32 structHash =
-            keccak256(abi.encode(typeHash, owner, address(regenStaker), CONTRIBUTION_AMOUNT, nonce, deadline));
+        bytes32 structHash = keccak256(
+            abi.encode(typeHash, owner, address(regenStaker), CONTRIBUTION_AMOUNT, nonce, deadline)
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(claimerPk, digest); // Wrong signer!
 

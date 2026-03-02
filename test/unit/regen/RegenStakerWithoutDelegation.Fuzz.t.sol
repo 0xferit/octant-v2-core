@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.0;
 
-import {AccessMode} from "src/constants.sol";
-import {Test, console2} from "forge-std/Test.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {RegenStakerWithoutDelegateSurrogateVotes} from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
-import {RegenStakerBase} from "src/regen/RegenStakerBase.sol";
-import {Staker} from "staker/Staker.sol";
-import {StakerOnBehalf} from "staker/extensions/StakerOnBehalf.sol";
-import {MockERC20} from "test/mocks/MockERC20.sol";
-import {MockERC20Permit} from "test/mocks/MockERC20Permit.sol";
-import {AddressSet} from "src/utils/AddressSet.sol";
-import {RegenEarningPowerCalculator} from "src/regen/RegenEarningPowerCalculator.sol";
-import {IAddressSet} from "src/utils/IAddressSet.sol";
+import { AccessMode } from "src/constants.sol";
+import { Test, console2 } from "forge-std/Test.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { RegenStakerWithoutDelegateSurrogateVotes } from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
+import { RegenStakerBase } from "src/regen/RegenStakerBase.sol";
+import { Staker } from "staker/Staker.sol";
+import { StakerOnBehalf } from "staker/extensions/StakerOnBehalf.sol";
+import { MockERC20 } from "test/mocks/MockERC20.sol";
+import { MockERC20Permit } from "test/mocks/MockERC20Permit.sol";
+import { AddressSet } from "src/utils/AddressSet.sol";
+import { RegenEarningPowerCalculator } from "src/regen/RegenEarningPowerCalculator.sol";
+import { IAddressSet } from "src/utils/IAddressSet.sol";
 
 /// @title Fuzz Tests for RegenStakerWithoutDelegateSurrogateVotes
 /// @notice Targeted fuzz testing for critical scenarios and edge cases
@@ -53,7 +53,10 @@ contract RegenStakerWithoutDelegateSurrogateVotesFuzzTest is Test {
         contributionAllowset = new AddressSet();
         allocationAllowset = new AddressSet();
         calculator = new RegenEarningPowerCalculator(
-            admin, IAddressSet(address(stakerAllowset)), IAddressSet(address(0)), AccessMode.ALLOWSET
+            admin,
+            IAddressSet(address(stakerAllowset)),
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
         );
 
         // Deploy staker contracts
@@ -381,7 +384,10 @@ contract RegenStakerWithoutDelegateSurrogateVotesWithdrawalFixTest is Test {
 
         // Deploy earning power calculator
         earningPowerCalculator = new RegenEarningPowerCalculator(
-            admin, IAddressSet(address(allowset)), IAddressSet(address(0)), AccessMode.ALLOWSET
+            admin,
+            IAddressSet(address(allowset)),
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
         );
 
         // Deploy staker
@@ -559,7 +565,7 @@ contract RegenStakerWithoutDelegateSurrogateVotesWithdrawalFixTest is Test {
         vm.prank(alice);
         sameTokenStaker.compoundRewards(depositId);
 
-        (uint96 newStakeAmount,,,,,,) = sameTokenStaker.deposits(depositId);
+        (uint96 newStakeAmount, , , , , , ) = sameTokenStaker.deposits(depositId);
         assertGt(newStakeAmount, STAKE_AMOUNT, "Stake should have increased");
 
         // Withdraw everything
@@ -729,8 +735,12 @@ contract CompoundEquivalenceTest is Test {
 
     function setUp() public {
         token = new MockERC20Permit(18);
-        calculator =
-            new RegenEarningPowerCalculator(ADMIN, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE);
+        calculator = new RegenEarningPowerCalculator(
+            ADMIN,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE
+        );
         allocationAllowset = new AddressSet();
 
         stakerA = new RegenStakerWithoutDelegateSurrogateVotes(
@@ -826,9 +836,11 @@ contract CompoundEquivalenceTest is Test {
         assertEq(stakerA.depositorTotalEarningPower(USER), stakerB.depositorTotalEarningPower(USER), "user total EP");
     }
 
-    function testFuzz_CompoundEqualsClaimPlusStakeMore(uint128 stakeAmt, uint128 rewardAmt, uint32 secondsElapsed)
-        public
-    {
+    function testFuzz_CompoundEqualsClaimPlusStakeMore(
+        uint128 stakeAmt,
+        uint128 rewardAmt,
+        uint32 secondsElapsed
+    ) public {
         // bounds to avoid pathological overflows and zero cases (values are token units before scaling)
         stakeAmt = uint128(bound(uint256(stakeAmt), 1e6, 1_000_000));
         rewardAmt = uint128(bound(uint256(rewardAmt), 3_000_000, 10_000_000)); // ensure amount/duration >= 1 in wei after scaling

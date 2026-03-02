@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.23;
 
-import {AccessMode} from "src/constants.sol";
-import {Test} from "forge-std/Test.sol";
-import {StdInvariant} from "forge-std/StdInvariant.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {RegenStakerWithoutDelegateSurrogateVotes} from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
-import {RegenStakerBase} from "src/regen/RegenStakerBase.sol";
-import {Staker} from "staker/Staker.sol";
-import {RegenEarningPowerCalculator} from "src/regen/RegenEarningPowerCalculator.sol";
-import {IAddressSet} from "src/utils/IAddressSet.sol";
-import {AddressSet} from "src/utils/AddressSet.sol";
-import {MockERC20} from "test/mocks/MockERC20.sol";
+import { AccessMode } from "src/constants.sol";
+import { Test } from "forge-std/Test.sol";
+import { StdInvariant } from "forge-std/StdInvariant.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { RegenStakerWithoutDelegateSurrogateVotes } from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
+import { RegenStakerBase } from "src/regen/RegenStakerBase.sol";
+import { Staker } from "staker/Staker.sol";
+import { RegenEarningPowerCalculator } from "src/regen/RegenEarningPowerCalculator.sol";
+import { IAddressSet } from "src/utils/IAddressSet.sol";
+import { AddressSet } from "src/utils/AddressSet.sol";
+import { MockERC20 } from "test/mocks/MockERC20.sol";
 
 contract RegenSameTokenInvariant is StdInvariant, Test {
     RegenStakerWithoutDelegateSurrogateVotes public staker;
@@ -28,7 +28,10 @@ contract RegenSameTokenInvariant is StdInvariant, Test {
         allowset = new AddressSet();
         allowset.add(user);
         earningPowerCalculator = new RegenEarningPowerCalculator(
-            admin, IAddressSet(address(allowset)), IAddressSet(address(0)), AccessMode.ALLOWSET
+            admin,
+            IAddressSet(address(allowset)),
+            IAddressSet(address(0)),
+            AccessMode.ALLOWSET
         );
 
         staker = new RegenStakerWithoutDelegateSurrogateVotes(
