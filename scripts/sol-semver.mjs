@@ -91,6 +91,12 @@ function parseContractId(contractId) {
   return { sourcePath, contractName };
 }
 
+function remapContractIdSourcePath(contractId, sourcePathMap = {}) {
+  const { sourcePath, contractName } = parseContractId(contractId);
+  const mappedSourcePath = sourcePathMap[sourcePath] || sourcePath;
+  return `${mappedSourcePath}:${contractName}`;
+}
+
 function normalizeStorageTypeId(typeId) {
   // forge type ids include compiler-generated numeric suffixes for structs.
   // Example: t_struct(StrategyParams)79023_storage -> t_struct(StrategyParams)_storage
@@ -699,11 +705,94 @@ function fileHasVersionConstant(worktreeDir, sourcePath) {
   return /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source);
 }
 
+function stripComments(sourceCode) {
+  let output = "";
+  let mode = "normal";
+
+  for (let i = 0; i < sourceCode.length; i += 1) {
+    const ch = sourceCode[i];
+    const next = sourceCode[i + 1];
+
+    if (mode === "line-comment") {
+      if (ch === "\n") {
+        mode = "normal";
+        output += "\n";
+      } else {
+        output += " ";
+      }
+      continue;
+    }
+
+    if (mode === "block-comment") {
+      if (ch === "*" && next === "/") {
+        mode = "normal";
+        output += "  ";
+        i += 1;
+      } else if (ch === "\n") {
+        output += "\n";
+      } else {
+        output += " ";
+      }
+      continue;
+    }
+
+    if (mode === "single-quote") {
+      output += ch;
+      if (ch === "\\") {
+        output += next || "";
+        i += 1;
+      } else if (ch === "'") {
+        mode = "normal";
+      }
+      continue;
+    }
+
+    if (mode === "double-quote") {
+      output += ch;
+      if (ch === "\\") {
+        output += next || "";
+        i += 1;
+      } else if (ch === "\"") {
+        mode = "normal";
+      }
+      continue;
+    }
+
+    if (ch === "/" && next === "/") {
+      mode = "line-comment";
+      output += "  ";
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      mode = "block-comment";
+      output += "  ";
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      mode = "single-quote";
+      output += ch;
+      continue;
+    }
+    if (ch === "\"") {
+      mode = "double-quote";
+      output += ch;
+      continue;
+    }
+
+    output += ch;
+  }
+
+  return output;
+}
+
 function extractContractNames(sourceCode) {
   const names = [];
+  const uncommentedSource = stripComments(sourceCode);
   const regex = /\b(?:abstract\s+)?contract\s+([A-Za-z_][A-Za-z0-9_]*)\b/g;
   let match;
-  while ((match = regex.exec(sourceCode)) !== null) {
+  while ((match = regex.exec(uncommentedSource)) !== null) {
     names.push(match[1]);
   }
   return [...new Set(names)];
@@ -936,17 +1025,18 @@ function buildCheckReport(opts, worktrees) {
   const newRef = opts["new-ref"] || "HEAD";
   const lockFilePath = opts["lock-file"] || "";
 
-  const oldLock = loadLockFile(worktrees.old, lockFilePath);
-  const newLock = loadLockFile(worktrees.new, lockFilePath);
   const {
     changedFiles,
     renamedNewToOld,
     renamedOldToNew
   } = gatherChangedSolidityFiles(oldRef, newRef);
+  const oldLock = loadLockFile(worktrees.old, lockFilePath);
+  const newLock = loadLockFile(worktrees.new, lockFilePath);
   const failures = [];
-  const lockContracts = [
+  const rawLockContracts = [
     ...new Set([...Object.keys(oldLock.contracts || {}), ...Object.keys(newLock.contracts || {})])
   ];
+  const lockContracts = [...new Set(rawLockContracts.map((contractId) => remapContractIdSourcePath(contractId, renamedOldToNew)))];
 
   let contracts = parseContractsOption(opts.contracts);
   const hasExplicitContracts = Object.hasOwn(opts, "contracts");
@@ -980,7 +1070,7 @@ function buildCheckReport(opts, worktrees) {
   }
 
   if (lockFilePath) {
-    const missingLockEntries = findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, lockContracts);
+    const missingLockEntries = findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, rawLockContracts);
     for (const sourcePath of missingLockEntries) {
       failures.push(`${sourcePath}: changed contract declares API_VERSION but is missing in ${lockFilePath}`);
     }
