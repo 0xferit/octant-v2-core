@@ -413,17 +413,26 @@ function inspectContractSnapshot(worktreeDir, contractId, opts = {}) {
 
 function analyzeContract(worktrees, contractId) {
   const oldSnapshot = inspectContractSnapshot(worktrees.old, contractId, { allowMissing: true });
-  const newSnapshot = inspectContractSnapshot(worktrees.new, contractId);
+  const newSnapshot = inspectContractSnapshot(worktrees.new, contractId, { allowMissing: true });
 
   let storageLayer;
   let abiLayer;
   let bytecodeLayer;
+
+  if (oldSnapshot.missing && newSnapshot.missing) {
+    throw new Error(`Contract ${contractId} is missing in both old and new refs`);
+  }
 
   if (oldSnapshot.missing) {
     // New contract in new-ref: treat as additive change and require lock/version checks.
     storageLayer = { bump: "minor", reasons: ["contract is absent in old ref"] };
     abiLayer = { bump: "minor", reasons: ["contract is absent in old ref"] };
     bytecodeLayer = { bump: "patch", reasons: ["contract is absent in old ref"] };
+  } else if (newSnapshot.missing) {
+    // Contract removed in new-ref: always breaking.
+    storageLayer = { bump: "major", reasons: ["contract is absent in new ref"] };
+    abiLayer = { bump: "major", reasons: ["contract is absent in new ref"] };
+    bytecodeLayer = { bump: "major", reasons: ["contract is absent in new ref"] };
   } else {
     storageLayer = compareStorage(oldSnapshot.storage, newSnapshot.storage);
     abiLayer = compareAbi(oldSnapshot.abi, newSnapshot.abi);
@@ -433,7 +442,7 @@ function analyzeContract(worktrees, contractId) {
   const recommendedBump = recommendation.recommended;
 
   const declaredVersionOld = oldSnapshot.missing ? null : readDeclaredVersion(worktrees.old, contractId);
-  const declaredVersionNew = readDeclaredVersion(worktrees.new, contractId);
+  const declaredVersionNew = newSnapshot.missing ? null : readDeclaredVersion(worktrees.new, contractId);
 
   return {
     contract: contractId,
@@ -446,7 +455,8 @@ function analyzeContract(worktrees, contractId) {
     },
     declared_version_old: declaredVersionOld,
     declared_version_new: declaredVersionNew,
-    expected_minimum_version: null
+    expected_minimum_version: null,
+    removed_in_new_ref: !oldSnapshot.missing && newSnapshot.missing
   };
 }
 
@@ -540,14 +550,22 @@ function discoverChangedContracts(worktrees, changedFiles) {
   const unresolvedFiles = [];
 
   for (const sourcePath of changedFiles) {
-    const fullPath = path.join(worktrees.new, sourcePath);
-    if (!fs.existsSync(fullPath)) {
+    const newFullPath = path.join(worktrees.new, sourcePath);
+    const oldFullPath = path.join(worktrees.old, sourcePath);
+    const existsInNew = fs.existsSync(newFullPath);
+    const existsInOld = fs.existsSync(oldFullPath);
+
+    if (!existsInNew && !existsInOld) {
       continue;
     }
 
-    const source = fs.readFileSync(fullPath, "utf8");
+    const source = fs.readFileSync(existsInNew ? newFullPath : oldFullPath, "utf8");
     const hasVersion = /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source);
-    const inspectable = findInspectableContractsInSource(worktrees.new, sourcePath, source);
+    const inspectable = findInspectableContractsInSource(
+      existsInNew ? worktrees.new : worktrees.old,
+      sourcePath,
+      source
+    );
 
     discovered.push(...inspectable);
     if (hasVersion && inspectable.length === 0) {
@@ -815,7 +833,13 @@ function buildCheckReport(opts, worktrees) {
 
     if (changed || changedInPr) {
       const oldLocked = lockFilePath ? oldLock.contracts[contractId] : null;
-      const underBump = validateUnderBump(result, oldLocked);
+      const underBump = result.removed_in_new_ref
+        ? {
+            ok: false,
+            reason: "contract is absent in new ref; deletion is a breaking change and requires manual semver review",
+            expectedMinimumVersion: computeExpectedMinimumVersion(result, oldLocked)
+          }
+        : validateUnderBump(result, oldLocked);
       result.expected_minimum_version = underBump.expectedMinimumVersion;
       contractStatus.checks.push({
         name: "under-bump",
