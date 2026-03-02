@@ -1,5 +1,20 @@
 
 
+## [1.2.0-develop.0](https://github.com/golemfoundation/octant-v2-core/compare/v1.1.0-develop.0...v1.2.0-develop.0) (2026-03-02)
+
+
+### Features
+
+* add new contracts to DeployedAddresses helper ([dd3a18a](https://github.com/golemfoundation/octant-v2-core/commit/dd3a18a9224e720966b2914f02217f1fe4224018))
+* add tenderly support for BatchScript helper ([8b220d7](https://github.com/golemfoundation/octant-v2-core/commit/8b220d7478e308010588e3693f0e1352ce2579cd))
+* Regen Staker staging deployment script ([46b6da0](https://github.com/golemfoundation/octant-v2-core/commit/46b6da094f3c262313ba9cfbb46f576969841bc5))
+
+
+### Bug Fixes
+
+* preserve sepolia allocation factory and export reused allowsets ([06ef06f](https://github.com/golemfoundation/octant-v2-core/commit/06ef06f33804a388320e000ec4b2a2e101afeed9))
+* use pinned bytecode constants in DeployRegenStaker script ([88c5ad3](https://github.com/golemfoundation/octant-v2-core/commit/88c5ad31b26e5675a7a08b319c6c19eed0714a28))
+
 ## [1.1.0-develop.0](https://github.com/golemfoundation/octant-v2-core/compare/v1.0.0-develop.0...v1.1.0-develop.0) (2026-02-27)
 
 
