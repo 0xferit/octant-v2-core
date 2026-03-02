@@ -551,8 +551,12 @@ function inspectContractSnapshot(worktreeDir, contractId, opts = {}) {
   }
 }
 
-function analyzeContract(worktrees, contractId) {
-  const oldSnapshot = inspectContractSnapshot(worktrees.old, contractId, { allowMissing: true });
+function analyzeContract(worktrees, contractId, opts = {}) {
+  const { sourcePath, contractName } = parseContractId(contractId);
+  const oldSourcePath = (opts.renamedNewToOld && opts.renamedNewToOld[sourcePath]) || sourcePath;
+  const oldContractId = oldSourcePath === sourcePath ? contractId : `${oldSourcePath}:${contractName}`;
+
+  const oldSnapshot = inspectContractSnapshot(worktrees.old, oldContractId, { allowMissing: true });
   const newSnapshot = inspectContractSnapshot(worktrees.new, contractId, { allowMissing: true });
 
   let storageLayer;
@@ -581,7 +585,7 @@ function analyzeContract(worktrees, contractId) {
   const recommendation = deriveRecommendedBump(storageLayer, abiLayer, bytecodeLayer);
   const recommendedBump = recommendation.recommended;
 
-  const declaredVersionOld = oldSnapshot.missing ? null : readDeclaredVersion(worktrees.old, contractId);
+  const declaredVersionOld = oldSnapshot.missing ? null : readDeclaredVersion(worktrees.old, oldContractId);
   const declaredVersionNew = newSnapshot.missing ? null : readDeclaredVersion(worktrees.new, contractId);
 
   return {
@@ -628,18 +632,58 @@ function loadLockFile(worktreeDir, lockFilePath) {
 }
 
 function gatherChangedSolidityFiles(oldRef, newRef) {
-  const output = runGit(["diff", "--name-only", oldRef, newRef, "--", "src"]);
-  return output
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.endsWith(".sol"));
+  const output = runGit(["diff", "--name-status", "-M", oldRef, newRef, "--", "src"]);
+  const changedFiles = new Set();
+  const renamedNewToOld = {};
+  const renamedOldToNew = {};
+
+  for (const rawLine of output.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    const parts = line.split("\t");
+    const status = parts[0] || "";
+
+    if (status.startsWith("R")) {
+      const oldPath = parts[1] || "";
+      const newPath = parts[2] || "";
+
+      if (oldPath.endsWith(".sol") && newPath.endsWith(".sol")) {
+        changedFiles.add(newPath);
+        renamedNewToOld[newPath] = oldPath;
+        renamedOldToNew[oldPath] = newPath;
+      } else {
+        if (oldPath.endsWith(".sol")) {
+          changedFiles.add(oldPath);
+        }
+        if (newPath.endsWith(".sol")) {
+          changedFiles.add(newPath);
+        }
+      }
+      continue;
+    }
+
+    const filePath = parts[1] || "";
+    if (filePath.endsWith(".sol")) {
+      changedFiles.add(filePath);
+    }
+  }
+
+  return {
+    changedFiles: [...changedFiles],
+    renamedNewToOld,
+    renamedOldToNew
+  };
 }
 
-function detectChangedVersionedContracts(changedFiles, lockContracts) {
+function detectChangedVersionedContracts(changedFiles, lockContracts, renamedOldToNew = {}) {
   const candidates = [];
+  const changedSet = new Set(changedFiles);
   for (const contractId of lockContracts) {
     const { sourcePath } = parseContractId(contractId);
-    if (changedFiles.includes(sourcePath)) {
+    if (changedSet.has(sourcePath) || Object.hasOwn(renamedOldToNew, sourcePath)) {
       candidates.push(contractId);
     }
   }
@@ -894,15 +938,21 @@ function buildCheckReport(opts, worktrees) {
 
   const oldLock = loadLockFile(worktrees.old, lockFilePath);
   const newLock = loadLockFile(worktrees.new, lockFilePath);
-  const changedFiles = gatherChangedSolidityFiles(oldRef, newRef);
+  const {
+    changedFiles,
+    renamedNewToOld,
+    renamedOldToNew
+  } = gatherChangedSolidityFiles(oldRef, newRef);
   const failures = [];
   const lockContracts = [
     ...new Set([...Object.keys(oldLock.contracts || {}), ...Object.keys(newLock.contracts || {})])
   ];
-  const changedDiscovery = discoverChangedContracts(worktrees, changedFiles);
 
   let contracts = parseContractsOption(opts.contracts);
   const hasExplicitContracts = Object.hasOwn(opts, "contracts");
+  const changedDiscovery = hasExplicitContracts
+    ? { contracts: [], unresolvedFiles: [] }
+    : discoverChangedContracts(worktrees, changedFiles);
   if (!hasExplicitContracts && contracts.length === 0) {
     if (lockContracts.length > 0) {
       contracts = lockContracts;
@@ -923,9 +973,11 @@ function buildCheckReport(opts, worktrees) {
     );
   }
 
-  contracts = [...new Set([...contracts, ...changedDiscovery.contracts])];
-  const changedCandidates = detectChangedVersionedContracts(changedFiles, contracts);
-  contracts = [...new Set([...contracts, ...changedCandidates])];
+  if (!hasExplicitContracts) {
+    contracts = [...new Set([...contracts, ...changedDiscovery.contracts])];
+    const changedCandidates = detectChangedVersionedContracts(changedFiles, contracts, renamedOldToNew);
+    contracts = [...new Set([...contracts, ...changedCandidates])];
+  }
 
   if (lockFilePath) {
     const missingLockEntries = findVersionedChangedFilesMissingLockEntries(worktrees, changedFiles, lockContracts);
@@ -966,10 +1018,10 @@ function buildCheckReport(opts, worktrees) {
   const contractReports = [];
 
   for (const contractId of contractsToAnalyze) {
-    const result = analyzeContract(worktrees, contractId);
+    const result = analyzeContract(worktrees, contractId, { renamedNewToOld });
     const changed = result.recommended_bump !== "none";
     const sourcePath = parseContractId(contractId).sourcePath;
-    const changedInPr = changedFiles.includes(sourcePath);
+    const changedInPr = changedFiles.includes(sourcePath) || Object.hasOwn(renamedOldToNew, sourcePath);
     const oldLockedExists = lockFilePath ? Object.hasOwn(oldLock.contracts, contractId) : false;
     const newLockedExists = lockFilePath ? Object.hasOwn(newLock.contracts, contractId) : false;
     const oldLocked = oldLockedExists ? oldLock.contracts[contractId] : null;
