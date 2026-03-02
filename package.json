@@ -19,6 +19,7 @@
     "out",
     "script",
     "src",
+    "test/mocks",
     "./foundry.toml",
     "./remappings.txt"
   ],
