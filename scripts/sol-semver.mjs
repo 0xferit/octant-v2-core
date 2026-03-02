@@ -186,6 +186,10 @@ function eventIndexedPattern(item) {
   return (item.inputs || []).map((i) => (i.indexed ? "1" : "0")).join("");
 }
 
+function isAnonymousEvent(item) {
+  return Boolean(item && item.type === "event" && item.anonymous);
+}
+
 function compareAbi(oldAbiRaw, newAbiRaw) {
   const oldRelevant = (oldAbiRaw || []).filter((x) => ["function", "event", "error"].includes(x.type));
   const newRelevant = (newAbiRaw || []).filter((x) => ["function", "event", "error"].includes(x.type));
@@ -215,6 +219,9 @@ function compareAbi(oldAbiRaw, newAbiRaw) {
     if (oldItem.type === "event") {
       if (eventIndexedPattern(oldItem) !== eventIndexedPattern(newItem)) {
         majorReasons.push(`changed indexed event arguments for ${key}`);
+      }
+      if (isAnonymousEvent(oldItem) !== isAnonymousEvent(newItem)) {
+        majorReasons.push(`changed event anonymity for ${key}`);
       }
     }
   }
