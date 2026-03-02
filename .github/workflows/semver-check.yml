@@ -9,6 +9,9 @@ on:
     paths:
       - 'src/**/*.sol'
       - 'scripts/sol-semver.mjs'
+      - 'foundry.toml'
+      - 'remappings.txt'
+      - 'soldeer.lock'
 
 jobs:
   check-semver:

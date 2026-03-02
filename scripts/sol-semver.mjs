@@ -202,8 +202,12 @@ function isAnonymousEvent(item) {
 }
 
 function compareAbi(oldAbiRaw, newAbiRaw) {
-  const oldRelevant = (oldAbiRaw || []).filter((x) => ["function", "event", "error"].includes(x.type));
-  const newRelevant = (newAbiRaw || []).filter((x) => ["function", "event", "error"].includes(x.type));
+  const oldRelevant = (oldAbiRaw || []).filter((x) =>
+    ["function", "event", "error", "fallback", "receive"].includes(x.type)
+  );
+  const newRelevant = (newAbiRaw || []).filter((x) =>
+    ["function", "event", "error", "fallback", "receive"].includes(x.type)
+  );
 
   const oldMap = new Map(oldRelevant.map((item) => [abiKey(item), item]));
   const newMap = new Map(newRelevant.map((item) => [abiKey(item), item]));
@@ -222,8 +226,11 @@ function compareAbi(oldAbiRaw, newAbiRaw) {
       if (abiOutputs(oldItem) !== abiOutputs(newItem)) {
         majorReasons.push(`changed function return types for ${key}`);
       }
+    }
+
+    if (["function", "fallback", "receive"].includes(oldItem.type)) {
       if ((oldItem.stateMutability || "") !== (newItem.stateMutability || "")) {
-        majorReasons.push(`changed function mutability for ${key}`);
+        majorReasons.push(`changed ${oldItem.type} mutability for ${key}`);
       }
     }
 
@@ -365,15 +372,130 @@ function computeExpectedMinimumVersion(result, oldLockedVersion) {
   return null;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function findContractBody(source, contractName) {
+  const declaration = new RegExp(
+    `\\b(?:abstract\\s+)?contract\\s+${escapeRegExp(contractName)}\\b[^\\{]*\\{`,
+    "g"
+  );
+  const match = declaration.exec(source);
+  if (!match) {
+    return null;
+  }
+
+  const openBraceIndex = source.indexOf("{", match.index);
+  if (openBraceIndex < 0) {
+    return null;
+  }
+
+  let depth = 1;
+  let i = openBraceIndex + 1;
+  let mode = "normal";
+
+  while (i < source.length) {
+    const ch = source[i];
+    const next = source[i + 1];
+
+    if (mode === "line-comment") {
+      if (ch === "\n") {
+        mode = "normal";
+      }
+      i += 1;
+      continue;
+    }
+
+    if (mode === "block-comment") {
+      if (ch === "*" && next === "/") {
+        mode = "normal";
+        i += 2;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+
+    if (mode === "single-quote") {
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        mode = "normal";
+      }
+      i += 1;
+      continue;
+    }
+
+    if (mode === "double-quote") {
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === "\"") {
+        mode = "normal";
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === "/" && next === "/") {
+      mode = "line-comment";
+      i += 2;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      mode = "block-comment";
+      i += 2;
+      continue;
+    }
+    if (ch === "'") {
+      mode = "single-quote";
+      i += 1;
+      continue;
+    }
+    if (ch === "\"") {
+      mode = "double-quote";
+      i += 1;
+      continue;
+    }
+
+    if (ch === "{") {
+      depth += 1;
+      i += 1;
+      continue;
+    }
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(openBraceIndex + 1, i);
+      }
+      i += 1;
+      continue;
+    }
+
+    i += 1;
+  }
+
+  return null;
+}
+
 function readDeclaredVersion(worktreeDir, contractId) {
-  const { sourcePath } = parseContractId(contractId);
+  const { sourcePath, contractName } = parseContractId(contractId);
   const filePath = path.join(worktreeDir, sourcePath);
   if (!fs.existsSync(filePath)) {
     return null;
   }
 
   const source = fs.readFileSync(filePath, "utf8");
-  const apiVersionMatch = source.match(/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/);
+  const contractBody = findContractBody(source, contractName);
+  if (!contractBody) {
+    return null;
+  }
+
+  const apiVersionMatch = contractBody.match(/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/);
   if (apiVersionMatch) {
     return apiVersionMatch[1];
   }
