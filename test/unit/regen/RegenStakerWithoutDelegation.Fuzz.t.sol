@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.0;
 
-import { AccessMode } from "src/constants.sol";
-import { Test, console2 } from "forge-std/Test.sol";
-import { RegenStakerWithoutDelegateSurrogateVotes } from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
-import { RegenStakerBase } from "src/regen/RegenStakerBase.sol";
-import { Staker } from "staker/Staker.sol";
-import { MockERC20 } from "test/mocks/MockERC20.sol";
-import { AddressSet } from "src/utils/AddressSet.sol";
-import { RegenEarningPowerCalculator } from "src/regen/RegenEarningPowerCalculator.sol";
-import { IAddressSet } from "src/utils/IAddressSet.sol";
+import {AccessMode} from "src/constants.sol";
+import {Test, console2} from "forge-std/Test.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {RegenStakerWithoutDelegateSurrogateVotes} from "src/regen/RegenStakerWithoutDelegateSurrogateVotes.sol";
+import {RegenStakerBase} from "src/regen/RegenStakerBase.sol";
+import {Staker} from "staker/Staker.sol";
+import {StakerOnBehalf} from "staker/extensions/StakerOnBehalf.sol";
+import {MockERC20} from "test/mocks/MockERC20.sol";
+import {MockERC20Permit} from "test/mocks/MockERC20Permit.sol";
+import {AddressSet} from "src/utils/AddressSet.sol";
+import {RegenEarningPowerCalculator} from "src/regen/RegenEarningPowerCalculator.sol";
+import {IAddressSet} from "src/utils/IAddressSet.sol";
 
 /// @title Fuzz Tests for RegenStakerWithoutDelegateSurrogateVotes
 /// @notice Targeted fuzz testing for critical scenarios and edge cases
@@ -50,10 +53,7 @@ contract RegenStakerWithoutDelegateSurrogateVotesFuzzTest is Test {
         contributionAllowset = new AddressSet();
         allocationAllowset = new AddressSet();
         calculator = new RegenEarningPowerCalculator(
-            admin,
-            IAddressSet(address(stakerAllowset)),
-            IAddressSet(address(0)),
-            AccessMode.ALLOWSET
+            admin, IAddressSet(address(stakerAllowset)), IAddressSet(address(0)), AccessMode.ALLOWSET
         );
 
         // Deploy staker contracts
@@ -346,5 +346,583 @@ contract RegenStakerWithoutDelegateSurrogateVotesFuzzTest is Test {
         uint256 totalClaimed = staker.totalClaimedRewards();
         assertGe(totalRewards, 0, "Small reward notification affected totalRewards");
         assertEq(totalClaimed, 0, "Small reward notification affected claimed tracking");
+    }
+}
+
+contract RegenStakerWithoutDelegateSurrogateVotesWithdrawalFixTest is Test {
+    RegenStakerWithoutDelegateSurrogateVotes public staker;
+    MockERC20 public stakeToken;
+    MockERC20 public rewardToken;
+    RegenEarningPowerCalculator public earningPowerCalculator;
+    AddressSet public allowset;
+    AddressSet public allocationAllowset;
+
+    address public admin = makeAddr("admin");
+    address public alice = makeAddr("alice");
+    address public bob = makeAddr("bob");
+    address public notifier = makeAddr("notifier");
+
+    uint256 constant INITIAL_BALANCE = 10_000e18;
+    uint128 constant MIN_STAKE = 100e18;
+    uint256 constant STAKE_AMOUNT = 1000e18;
+    uint256 constant REWARD_AMOUNT = 500e18;
+
+    function setUp() public {
+        // Deploy tokens
+        stakeToken = new MockERC20(18);
+        rewardToken = new MockERC20(18);
+
+        // Deploy allowsets
+        allowset = new AddressSet();
+        allowset.add(alice);
+        allowset.add(bob);
+
+        allocationAllowset = new AddressSet();
+
+        // Deploy earning power calculator
+        earningPowerCalculator = new RegenEarningPowerCalculator(
+            admin, IAddressSet(address(allowset)), IAddressSet(address(0)), AccessMode.ALLOWSET
+        );
+
+        // Deploy staker
+        staker = new RegenStakerWithoutDelegateSurrogateVotes(
+            IERC20(address(rewardToken)),
+            IERC20(address(stakeToken)),
+            earningPowerCalculator,
+            0, // maxBumpTip
+            admin,
+            30 days, // rewardDuration
+            MIN_STAKE, // minimumStakeAmount
+            IAddressSet(address(allowset)), // stakerAllowset
+            IAddressSet(address(0)), // stakerBlockset
+            AccessMode.NONE,
+            allocationAllowset // allocationMechanismAllowset
+        );
+
+        // Setup notifier
+        vm.prank(admin);
+        staker.setRewardNotifier(notifier, true);
+
+        // Fund users
+        stakeToken.mint(alice, INITIAL_BALANCE);
+        stakeToken.mint(bob, INITIAL_BALANCE);
+        rewardToken.mint(notifier, INITIAL_BALANCE);
+    }
+
+    /// @notice Test basic withdrawal succeeds after fix
+    function test_basicWithdrawal() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // Verify stake
+        assertEq(staker.totalStaked(), STAKE_AMOUNT);
+        assertEq(stakeToken.balanceOf(address(staker)), STAKE_AMOUNT);
+        assertEq(stakeToken.balanceOf(alice), INITIAL_BALANCE - STAKE_AMOUNT);
+
+        // Alice withdraws
+        vm.prank(alice);
+        staker.withdraw(depositId, STAKE_AMOUNT);
+
+        // Verify withdrawal
+        assertEq(staker.totalStaked(), 0);
+        assertEq(stakeToken.balanceOf(address(staker)), 0);
+        assertEq(stakeToken.balanceOf(alice), INITIAL_BALANCE);
+    }
+
+    /// @notice Test partial withdrawal
+    function test_partialWithdrawal() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        uint256 withdrawAmount = STAKE_AMOUNT - MIN_STAKE;
+
+        // Alice partially withdraws
+        vm.prank(alice);
+        staker.withdraw(depositId, withdrawAmount);
+
+        // Verify partial withdrawal
+        assertEq(staker.totalStaked(), MIN_STAKE);
+        assertEq(stakeToken.balanceOf(address(staker)), MIN_STAKE);
+        assertEq(stakeToken.balanceOf(alice), INITIAL_BALANCE - MIN_STAKE);
+    }
+
+    /// @notice Test multiple users can withdraw
+    function test_multipleUsersWithdraw() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier aliceDepositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // Bob stakes
+        vm.startPrank(bob);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier bobDepositId = staker.stake(STAKE_AMOUNT, bob, bob);
+        vm.stopPrank();
+
+        // Verify total stakes
+        assertEq(staker.totalStaked(), STAKE_AMOUNT * 2);
+
+        // Alice withdraws
+        vm.prank(alice);
+        staker.withdraw(aliceDepositId, STAKE_AMOUNT);
+
+        // Verify Alice's withdrawal
+        assertEq(staker.totalStaked(), STAKE_AMOUNT);
+        assertEq(stakeToken.balanceOf(alice), INITIAL_BALANCE);
+
+        // Bob withdraws
+        vm.prank(bob);
+        staker.withdraw(bobDepositId, STAKE_AMOUNT);
+
+        // Verify Bob's withdrawal
+        assertEq(staker.totalStaked(), 0);
+        assertEq(stakeToken.balanceOf(bob), INITIAL_BALANCE);
+    }
+
+    /// @notice Test withdrawal after earning rewards
+    function test_withdrawalAfterEarningRewards() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // Add rewards
+        vm.startPrank(notifier);
+        rewardToken.transfer(address(staker), REWARD_AMOUNT);
+        staker.notifyRewardAmount(REWARD_AMOUNT);
+        vm.stopPrank();
+
+        // Advance time to earn rewards
+        vm.warp(block.timestamp + 15 days);
+
+        // Alice withdraws stake (not rewards)
+        vm.prank(alice);
+        staker.withdraw(depositId, STAKE_AMOUNT);
+
+        // Verify withdrawal
+        assertEq(staker.totalStaked(), 0);
+        assertEq(stakeToken.balanceOf(alice), INITIAL_BALANCE);
+
+        // Alice can still claim rewards after withdrawal
+        uint256 aliceRewardBalanceBefore = rewardToken.balanceOf(alice);
+        vm.prank(alice);
+        uint256 rewardsClaimed = staker.claimReward(depositId);
+        assertGt(rewardsClaimed, 0, "Should have claimed rewards");
+        assertEq(rewardToken.balanceOf(alice), aliceRewardBalanceBefore + rewardsClaimed);
+    }
+
+    /// @notice Test withdrawal with compounded rewards
+    function test_withdrawalWithCompoundedRewards() public {
+        // Setup same token for staking and rewards
+        RegenStakerWithoutDelegateSurrogateVotes sameTokenStaker = new RegenStakerWithoutDelegateSurrogateVotes(
+            IERC20(address(stakeToken)), // Same token for rewards
+            IERC20(address(stakeToken)), // Same token for staking
+            earningPowerCalculator,
+            0,
+            admin,
+            30 days,
+            MIN_STAKE,
+            IAddressSet(address(allowset)),
+            IAddressSet(address(0)),
+            AccessMode.NONE,
+            allocationAllowset
+        );
+
+        vm.prank(admin);
+        sameTokenStaker.setRewardNotifier(notifier, true);
+
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(sameTokenStaker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = sameTokenStaker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // Add rewards
+        stakeToken.mint(notifier, REWARD_AMOUNT);
+        vm.startPrank(notifier);
+        stakeToken.transfer(address(sameTokenStaker), REWARD_AMOUNT);
+        sameTokenStaker.notifyRewardAmount(REWARD_AMOUNT);
+        vm.stopPrank();
+
+        // Advance time
+        vm.warp(block.timestamp + 15 days);
+
+        // Compound rewards
+        vm.prank(alice);
+        sameTokenStaker.compoundRewards(depositId);
+
+        (uint96 newStakeAmount,,,,,,) = sameTokenStaker.deposits(depositId);
+        assertGt(newStakeAmount, STAKE_AMOUNT, "Stake should have increased");
+
+        // Withdraw everything
+        vm.prank(alice);
+        sameTokenStaker.withdraw(depositId, newStakeAmount);
+
+        // Verify withdrawal
+        assertEq(sameTokenStaker.totalStaked(), 0);
+        assertGt(stakeToken.balanceOf(alice), INITIAL_BALANCE, "Should have withdrawn compounded amount");
+    }
+
+    /// @notice Test multiple sequential withdrawals
+    function test_multipleSequentialWithdrawals() public {
+        // Alice makes multiple deposits
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT * 3);
+
+        Staker.DepositIdentifier deposit1 = staker.stake(STAKE_AMOUNT, alice, alice);
+        Staker.DepositIdentifier deposit2 = staker.stake(STAKE_AMOUNT, alice, alice);
+        Staker.DepositIdentifier deposit3 = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        assertEq(staker.totalStaked(), STAKE_AMOUNT * 3);
+
+        // Withdraw in different order
+        vm.startPrank(alice);
+        staker.withdraw(deposit2, STAKE_AMOUNT);
+        assertEq(staker.totalStaked(), STAKE_AMOUNT * 2);
+
+        staker.withdraw(deposit1, STAKE_AMOUNT);
+        assertEq(staker.totalStaked(), STAKE_AMOUNT);
+
+        staker.withdraw(deposit3, STAKE_AMOUNT);
+        assertEq(staker.totalStaked(), 0);
+        vm.stopPrank();
+
+        // Verify final balance
+        assertEq(stakeToken.balanceOf(alice), INITIAL_BALANCE);
+    }
+
+    /// @notice Test gas cost of withdrawal
+    function test_withdrawalGasCost() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // Measure withdrawal gas
+        vm.prank(alice);
+        uint256 gasBefore = gasleft();
+        staker.withdraw(depositId, STAKE_AMOUNT);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        // Log gas usage
+        emit log_named_uint("Withdrawal gas used", gasUsed);
+
+        // Verify gas is reasonable (less than 100k)
+        assertLt(gasUsed, 100_000, "Withdrawal should be gas efficient");
+    }
+
+    /// @notice Fuzz test withdrawal amounts
+    function testFuzz_withdrawalAmounts(uint256 stakeAmount, uint256 withdrawAmount) public {
+        // Bound inputs
+        stakeAmount = bound(stakeAmount, MIN_STAKE, INITIAL_BALANCE);
+        withdrawAmount = bound(withdrawAmount, 1, stakeAmount);
+
+        // Adjust withdrawal to respect minimum stake
+        if (withdrawAmount < stakeAmount && stakeAmount - withdrawAmount < MIN_STAKE) {
+            withdrawAmount = stakeAmount; // Full withdrawal if remainder would be below minimum
+        }
+
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), stakeAmount);
+        Staker.DepositIdentifier depositId = staker.stake(stakeAmount, alice, alice);
+        vm.stopPrank();
+
+        uint256 expectedBalance = INITIAL_BALANCE - stakeAmount + withdrawAmount;
+        uint256 expectedStaked = stakeAmount - withdrawAmount;
+
+        // Alice withdraws
+        vm.prank(alice);
+        staker.withdraw(depositId, withdrawAmount);
+
+        // Verify
+        assertEq(staker.totalStaked(), expectedStaked);
+        assertEq(stakeToken.balanceOf(alice), expectedBalance);
+    }
+
+    /// @notice Test that alterDelegatee reverts since delegation is not supported
+    function test_alterDelegateeReverts() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // Attempt to alter delegatee should revert
+        vm.prank(alice);
+        vm.expectRevert(RegenStakerWithoutDelegateSurrogateVotes.DelegationNotSupported.selector);
+        staker.alterDelegatee(depositId, bob);
+    }
+
+    /// @notice Fuzz test that alterDelegatee always reverts regardless of inputs
+    function testFuzz_alterDelegateeAlwaysReverts(address newDelegatee) public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // Any attempt to alter delegatee should revert
+        vm.prank(alice);
+        vm.expectRevert(RegenStakerWithoutDelegateSurrogateVotes.DelegationNotSupported.selector);
+        staker.alterDelegatee(depositId, newDelegatee);
+    }
+
+    /// @notice Test that alterDelegateeOnBehalf reverts since delegation is not supported
+    function test_alterDelegateeOnBehalfReverts() public {
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // With invalid signature, reverts during signature validation (before reaching _alterDelegatee)
+        vm.expectRevert(StakerOnBehalf.StakerOnBehalf__InvalidSignature.selector);
+        staker.alterDelegateeOnBehalf(depositId, bob, alice, block.timestamp + 1000, "");
+    }
+
+    /// @notice Fuzz test that alterDelegateeOnBehalf always reverts regardless of inputs
+    function testFuzz_alterDelegateeOnBehalfAlwaysReverts(address newDelegatee, uint256 deadline) public {
+        vm.assume(deadline > block.timestamp);
+
+        // Alice stakes
+        vm.startPrank(alice);
+        stakeToken.approve(address(staker), STAKE_AMOUNT);
+        Staker.DepositIdentifier depositId = staker.stake(STAKE_AMOUNT, alice, alice);
+        vm.stopPrank();
+
+        // With invalid signature, reverts during signature validation (before reaching _alterDelegatee)
+        vm.expectRevert(StakerOnBehalf.StakerOnBehalf__InvalidSignature.selector);
+        staker.alterDelegateeOnBehalf(depositId, newDelegatee, alice, deadline, "");
+    }
+}
+
+contract CompoundEquivalenceTest is Test {
+    address internal constant ADMIN = address(0xA11CE);
+    address internal constant USER = address(0xBEEF);
+    address internal constant DELEGATEE = address(0xD1E6A7);
+    address internal constant NOTIFIER = address(0xFEE);
+
+    uint256 internal constant INITIAL_USER_BAL = 1_000_000e18;
+    uint256 internal constant STAKE_AMOUNT = 1_000e18;
+    uint256 internal constant REWARD_AMOUNT = 10_000e18;
+    uint256 internal constant MAX_BUMP_TIP = 0;
+    uint128 internal constant REWARD_DURATION = 30 days; // business as usual
+    uint256 internal constant MAX_CLAIM_FEE = 0; // simplify equivalence
+    uint128 internal constant MIN_STAKE = 0;
+
+    MockERC20Permit internal token;
+    RegenEarningPowerCalculator internal calculator;
+    RegenStakerWithoutDelegateSurrogateVotes internal stakerA; // compound path
+    RegenStakerWithoutDelegateSurrogateVotes internal stakerB; // claim+stakeMore path
+    AddressSet internal allocationAllowset;
+
+    function setUp() public {
+        token = new MockERC20Permit(18);
+        calculator =
+            new RegenEarningPowerCalculator(ADMIN, IAddressSet(address(0)), IAddressSet(address(0)), AccessMode.NONE);
+        allocationAllowset = new AddressSet();
+
+        stakerA = new RegenStakerWithoutDelegateSurrogateVotes(
+            token,
+            token,
+            calculator,
+            MAX_BUMP_TIP,
+            ADMIN,
+            REWARD_DURATION,
+            MIN_STAKE,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE,
+            IAddressSet(address(allocationAllowset))
+        );
+
+        stakerB = new RegenStakerWithoutDelegateSurrogateVotes(
+            token,
+            token,
+            calculator,
+            MAX_BUMP_TIP,
+            ADMIN,
+            REWARD_DURATION,
+            MIN_STAKE,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE,
+            IAddressSet(address(allocationAllowset))
+        );
+
+        // fund user and stakers for rewards
+        token.mint(USER, INITIAL_USER_BAL);
+        token.mint(address(this), REWARD_AMOUNT * 2);
+
+        // enable notifier
+        vm.prank(ADMIN);
+        stakerA.setRewardNotifier(NOTIFIER, true);
+        vm.prank(ADMIN);
+        stakerB.setRewardNotifier(NOTIFIER, true);
+
+        // user approves both stakers for stake and future stakeMore
+        vm.startPrank(USER);
+        token.approve(address(stakerA), type(uint256).max);
+        token.approve(address(stakerB), type(uint256).max);
+        vm.stopPrank();
+
+        // initial stake on both instances
+        vm.prank(USER);
+        stakerA.stake(STAKE_AMOUNT, DELEGATEE);
+        vm.prank(USER);
+        stakerB.stake(STAKE_AMOUNT, DELEGATEE);
+
+        // transfer rewards and notify on both instances
+        token.transfer(address(stakerA), REWARD_AMOUNT);
+        vm.prank(NOTIFIER);
+        stakerA.notifyRewardAmount(REWARD_AMOUNT);
+
+        token.transfer(address(stakerB), REWARD_AMOUNT);
+        vm.prank(NOTIFIER);
+        stakerB.notifyRewardAmount(REWARD_AMOUNT);
+
+        // advance time to accrue rewards partially
+        vm.warp(block.timestamp + 7 days);
+    }
+
+    function test_CompoundEqualsClaimPlusStakeMore() public {
+        // deposit ids are 0 on both fresh contracts
+        Staker.DepositIdentifier depositId = Staker.DepositIdentifier.wrap(0);
+
+        // Path A: compound
+        vm.prank(USER);
+        uint256 compounded = stakerA.compoundRewards(depositId);
+
+        // Path B: claim then stakeMore
+        vm.prank(USER);
+        uint256 claimed = stakerB.claimReward(depositId);
+        assertGt(claimed, 0, "expected positive claim");
+        vm.prank(USER);
+        stakerB.stakeMore(depositId, claimed);
+
+        // Assert amounts match
+        assertEq(compounded, claimed, "compounded vs claimed mismatch");
+
+        // Compare live unclaimed rewards (sub-wei behavior aligned with claim semantics)
+        uint256 unclaimedA = stakerA.unclaimedReward(depositId);
+        uint256 unclaimedB = stakerB.unclaimedReward(depositId);
+        assertEq(unclaimedA, unclaimedB, "unclaimedReward");
+
+        // Compare globals
+        assertEq(stakerA.totalStaked(), stakerB.totalStaked(), "totalStaked");
+        assertEq(stakerA.totalEarningPower(), stakerB.totalEarningPower(), "totalEP");
+        assertEq(stakerA.depositorTotalStaked(USER), stakerB.depositorTotalStaked(USER), "user total staked");
+        assertEq(stakerA.depositorTotalEarningPower(USER), stakerB.depositorTotalEarningPower(USER), "user total EP");
+    }
+
+    function testFuzz_CompoundEqualsClaimPlusStakeMore(uint128 stakeAmt, uint128 rewardAmt, uint32 secondsElapsed)
+        public
+    {
+        // bounds to avoid pathological overflows and zero cases (values are token units before scaling)
+        stakeAmt = uint128(bound(uint256(stakeAmt), 1e6, 1_000_000));
+        rewardAmt = uint128(bound(uint256(rewardAmt), 3_000_000, 10_000_000)); // ensure amount/duration >= 1 in wei after scaling
+        secondsElapsed = uint32(bound(uint256(secondsElapsed), 1 minutes, 25 days));
+
+        uint256 stakeWei = uint256(stakeAmt) * 1e18;
+        uint256 rewardWei = uint256(rewardAmt) * 1e18;
+
+        // fresh instances for each fuzz case
+        MockERC20Permit tkn = new MockERC20Permit(18);
+        RegenStakerWithoutDelegateSurrogateVotes A = new RegenStakerWithoutDelegateSurrogateVotes(
+            tkn,
+            tkn,
+            calculator,
+            MAX_BUMP_TIP,
+            ADMIN,
+            REWARD_DURATION,
+            MIN_STAKE,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE,
+            IAddressSet(address(allocationAllowset))
+        );
+        RegenStakerWithoutDelegateSurrogateVotes B = new RegenStakerWithoutDelegateSurrogateVotes(
+            tkn,
+            tkn,
+            calculator,
+            MAX_BUMP_TIP,
+            ADMIN,
+            REWARD_DURATION,
+            MIN_STAKE,
+            IAddressSet(address(0)),
+            IAddressSet(address(0)),
+            AccessMode.NONE,
+            IAddressSet(address(allocationAllowset))
+        );
+
+        // fund
+        tkn.mint(USER, stakeWei * 2);
+        tkn.mint(address(this), rewardWei * 2);
+
+        // enable notifier
+        vm.prank(ADMIN);
+        A.setRewardNotifier(NOTIFIER, true);
+        vm.prank(ADMIN);
+        B.setRewardNotifier(NOTIFIER, true);
+
+        // user approves
+        vm.startPrank(USER);
+        tkn.approve(address(A), type(uint256).max);
+        tkn.approve(address(B), type(uint256).max);
+        vm.stopPrank();
+
+        // stake
+        vm.prank(USER);
+        A.stake(stakeWei, DELEGATEE);
+        vm.prank(USER);
+        B.stake(stakeWei, DELEGATEE);
+
+        // rewards and notify
+        tkn.transfer(address(A), rewardWei);
+        vm.prank(NOTIFIER);
+        A.notifyRewardAmount(rewardWei);
+
+        tkn.transfer(address(B), rewardWei);
+        vm.prank(NOTIFIER);
+        B.notifyRewardAmount(rewardWei);
+
+        // time passes
+        vm.warp(block.timestamp + secondsElapsed);
+
+        // act
+        Staker.DepositIdentifier id = Staker.DepositIdentifier.wrap(0);
+        vm.prank(USER);
+        uint256 compounded = A.compoundRewards(id);
+
+        vm.prank(USER);
+        uint256 claimed = B.claimReward(id);
+        vm.prank(USER);
+        B.stakeMore(id, claimed);
+
+        // assert equivalence
+        assertEq(compounded, claimed, "amount");
+        assertEq(A.totalStaked(), B.totalStaked(), "totalStaked");
+        assertEq(A.totalEarningPower(), B.totalEarningPower(), "totalEP");
+        assertEq(A.depositorTotalStaked(USER), B.depositorTotalStaked(USER), "user total staked");
+        assertEq(A.depositorTotalEarningPower(USER), B.depositorTotalEarningPower(USER), "user total EP");
+        assertEq(A.rewardPerTokenAccumulatedCheckpoint(), B.rewardPerTokenAccumulatedCheckpoint(), "rPT");
+        assertEq(A.lastCheckpointTime(), B.lastCheckpointTime(), "last time");
+        assertEq(A.scaledRewardRate(), B.scaledRewardRate(), "scaled rate");
+        assertEq(A.rewardEndTime(), B.rewardEndTime(), "end time");
+        // token balances at contracts equal
+        assertEq(tkn.balanceOf(address(A)), tkn.balanceOf(address(B)), "token balance");
+        // live unclaimed equal
+        assertEq(A.unclaimedReward(id), B.unclaimedReward(id), "unclaimed");
     }
 }
