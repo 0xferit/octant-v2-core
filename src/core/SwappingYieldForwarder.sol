@@ -136,7 +136,10 @@ contract SwappingYieldForwarder is YieldForwarder {
 
         // Redeem to this contract (not receiver) so we can swap first
         uint256 assetsIn = IRedeemable(strategy).redeem(shares, address(this), address(this), maxLoss);
-        if (assetsIn == 0) return 0;
+        if (assetsIn == 0) {
+            emit YieldSwappedAndForwarded(strategy, receiver, shares, 0, 0);
+            return 0;
+        }
 
         address assetIn = IERC4626Asset(strategy).asset();
 

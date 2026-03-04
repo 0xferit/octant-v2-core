@@ -289,8 +289,9 @@ contract SwappingYieldForwarderTest is Test {
         assertEq(targetAsset.balanceOf(receiver), 0, "Receiver gets nothing on loss");
     }
 
-    /// @notice Covers the `if (assetsIn == 0) return 0` branch in reportSwapAndForward.
-    ///         shares > 0 but redeem returns 0 assets (e.g., extreme rounding in strategy).
+    /// @notice Covers the `if (assetsIn == 0)` branch in reportSwapAndForward.
+    ///         shares > 0 but redeem returns 0 assets (e.g., illiquid vault with maxLoss=MAX_BPS).
+    ///         Must still emit YieldSwappedAndForwarded for monitoring observability.
     function test_reportSwapAndForward_sharesExistButRedeemReturnsZero() public {
         _depositIntoStrategy(user, DEPOSIT_AMOUNT);
         vm.prank(address(forwarder));
@@ -298,13 +299,15 @@ contract SwappingYieldForwarderTest is Test {
 
         _simulateProfit(10e18);
 
-        // Mock strategy.report() to do nothing special (shares already get minted)
-        // Mock strategy.redeem() to return 0 assets (extreme edge case)
+        // Mock strategy.redeem() to return 0 assets (simulates illiquid vault)
         vm.mockCall(
             address(strategy),
             abi.encodeWithSelector(bytes4(keccak256("redeem(uint256,address,address,uint256)"))),
             abi.encode(uint256(0))
         );
+
+        vm.expectEmit(true, true, false, false);
+        emit SwappingYieldForwarder.YieldSwappedAndForwarded(address(strategy), receiver, 0, 0, 0);
 
         vm.prank(keeperEOA);
         uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
