@@ -12,6 +12,7 @@ const BUMP_RANK = {
   major: 3
 };
 const REPO_SAFE_DIRECTORY = process.cwd();
+const API_VERSION_PATTERN = /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/;
 
 function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, {
@@ -488,6 +489,24 @@ function findContractBody(source, contractName) {
   return null;
 }
 
+function sourceDeclaresApiVersion(source) {
+  return API_VERSION_PATTERN.test(source);
+}
+
+function readDeclaredVersionFromSource(source, contractName) {
+  const contractBody = findContractBody(source, contractName);
+  if (!contractBody) {
+    return null;
+  }
+
+  const apiVersionMatch = contractBody.match(API_VERSION_PATTERN);
+  if (apiVersionMatch) {
+    return apiVersionMatch[1];
+  }
+
+  return null;
+}
+
 function readDeclaredVersion(worktreeDir, contractId) {
   const { sourcePath, contractName } = parseContractId(contractId);
   const filePath = path.join(worktreeDir, sourcePath);
@@ -496,17 +515,7 @@ function readDeclaredVersion(worktreeDir, contractId) {
   }
 
   const source = fs.readFileSync(filePath, "utf8");
-  const contractBody = findContractBody(source, contractName);
-  if (!contractBody) {
-    return null;
-  }
-
-  const apiVersionMatch = contractBody.match(/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/);
-  if (apiVersionMatch) {
-    return apiVersionMatch[1];
-  }
-
-  return null;
+  return readDeclaredVersionFromSource(source, contractName);
 }
 
 function prepareWorktree(worktreeDir) {
@@ -702,7 +711,7 @@ function fileHasVersionConstant(worktreeDir, sourcePath) {
     return false;
   }
   const source = fs.readFileSync(fullPath, "utf8");
-  return /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source);
+  return sourceDeclaresApiVersion(source);
 }
 
 function stripComments(sourceCode) {
@@ -798,11 +807,15 @@ function extractContractNames(sourceCode) {
   return [...new Set(names)];
 }
 
-function findInspectableContractsInSource(worktreeDir, sourcePath, sourceCode) {
+function findVersionedInspectableContractsInSource(worktreeDir, sourcePath, sourceCode) {
   const inspectable = [];
   const candidates = extractContractNames(sourceCode);
 
   for (const contractName of candidates) {
+    if (!readDeclaredVersionFromSource(sourceCode, contractName)) {
+      continue;
+    }
+
     const contractId = `${sourcePath}:${contractName}`;
     try {
       inspectContractSnapshot(worktreeDir, contractId);
@@ -836,10 +849,10 @@ function discoverChangedContracts(worktrees, changedFiles) {
     const inspectable = [];
     const addInspectableFrom = (worktreeDir, fullPath) => {
       const source = fs.readFileSync(fullPath, "utf8");
-      if (/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source)) {
+      if (sourceDeclaresApiVersion(source)) {
         hasVersion = true;
       }
-      inspectable.push(...findInspectableContractsInSource(worktreeDir, sourcePath, source));
+      inspectable.push(...findVersionedInspectableContractsInSource(worktreeDir, sourcePath, source));
     };
 
     if (existsInOld) {
@@ -890,11 +903,11 @@ function discoverVersionedContracts(worktrees) {
   for (const sourcePath of sourceFiles) {
     const fullPath = path.join(worktrees.new, sourcePath);
     const source = fs.readFileSync(fullPath, "utf8");
-    if (!/\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/.test(source)) {
+    if (!sourceDeclaresApiVersion(source)) {
       continue;
     }
 
-    const inspectable = findInspectableContractsInSource(worktrees.new, sourcePath, source);
+    const inspectable = findVersionedInspectableContractsInSource(worktrees.new, sourcePath, source);
     if (inspectable.length === 0) {
       unresolvedFiles.push(sourcePath);
       continue;
