@@ -142,7 +142,7 @@ contract DeployedAddresses is Script {
                 // RegenStaker and AllocationMechanism - deploy fresh (protocol-specific)
                 regenEarningPowerCalculatorFactory: 0xD916da52d277b28CaDFfEE5350bA98cf3d8fa441,
                 regenStakerFactory: 0x6a8250C95d2e866e95fe4749eD540357B8e44a9a,
-                allocationMechanismFactory: address(0),
+                allocationMechanismFactory: 0x944f609aF006543E2AE28b555A3ACa594480B612,
                 // External strategy contracts - reuse existing mainnet deployments
                 yieldDonatingTokenizedStrategy: 0xb27064A2C51b8C5b39A5Bb911AD34DB039C3aB9c,
                 yearnV3StrategyFactory: 0x6D8c4E4A158083E30B53ba7df3cFB885fC096fF6,
