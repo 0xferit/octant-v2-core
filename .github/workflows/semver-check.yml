@@ -38,7 +38,7 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.sha }}
           HEAD_REF: ${{ github.event.pull_request.head.sha }}
         run: |
-          MERGE_BASE=$(git merge-base "$BASE_REF" "$HEAD_REF")
+          MERGE_BASE=$(git -c safe.directory="$PWD" merge-base "$BASE_REF" "$HEAD_REF")
           node scripts/sol-semver.mjs check \
             --old-ref "$MERGE_BASE" \
             --new-ref "$HEAD_REF"
