@@ -89,6 +89,9 @@ contract PSMSwapper is ISwapper {
     /// @param actual Amount actually received
     error NonOneToOneConversion(uint256 expected, uint256 actual);
 
+    /// @notice Thrown when conversionFactor is zero for the BUY_GEM route
+    error InvalidConversionFactor();
+
     // ============================================
     // CONSTRUCTOR
     // ============================================
@@ -103,6 +106,7 @@ contract PSMSwapper is ISwapper {
     constructor(address _protocol, Route _route, address _tokenIn, address _tokenOut, uint256 _conversionFactor) {
         if (_protocol == address(0)) revert InvalidProtocol();
         if (_tokenIn == address(0) || _tokenOut == address(0)) revert InvalidToken();
+        if (_route == Route.BUY_GEM && _conversionFactor == 0) revert InvalidConversionFactor();
         protocol = _protocol;
         route = _route;
         tokenIn = _tokenIn;

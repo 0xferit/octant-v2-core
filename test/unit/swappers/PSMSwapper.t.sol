@@ -61,6 +61,18 @@ contract PSMSwapperTest is Test {
         new PSMSwapper(protocol, PSMSwapper.Route.SELL_GEM, address(gem), address(0), 0);
     }
 
+    function test_constructor_revertsOnZeroConversionFactorForBuyGem() public {
+        vm.expectRevert(PSMSwapper.InvalidConversionFactor.selector);
+        new PSMSwapper(protocol, PSMSwapper.Route.BUY_GEM, address(dai), address(gem), 0);
+    }
+
+    function test_constructor_allowsZeroConversionFactorForNonBuyGemRoutes() public {
+        // SELL_GEM, DAI_TO_USDS, USDS_TO_DAI should all accept conversionFactor = 0
+        new PSMSwapper(protocol, PSMSwapper.Route.SELL_GEM, address(gem), address(dai), 0);
+        new PSMSwapper(protocol, PSMSwapper.Route.DAI_TO_USDS, address(dai), address(usds), 0);
+        new PSMSwapper(protocol, PSMSwapper.Route.USDS_TO_DAI, address(usds), address(dai), 0);
+    }
+
     // ═══════════════════════════════════════════════════════════
     // SWAP — TOKEN MISMATCH
     // ═══════════════════════════════════════════════════════════
@@ -279,9 +291,7 @@ contract PSMSwapperTest is Test {
         uint256 amountIn = 1000e18;
         dai.mint(address(s), amountIn);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(PSMSwapper.NonOneToOneConversion.selector, amountIn, amountIn - 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PSMSwapper.NonOneToOneConversion.selector, amountIn, amountIn - 1));
         s.swap(address(dai), address(usds), amountIn, 0, receiver);
     }
 
@@ -299,9 +309,7 @@ contract PSMSwapperTest is Test {
         uint256 amountIn = 1000e18;
         usds.mint(address(s), amountIn);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(PSMSwapper.NonOneToOneConversion.selector, amountIn, amountIn - 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PSMSwapper.NonOneToOneConversion.selector, amountIn, amountIn - 1));
         s.swap(address(usds), address(dai), amountIn, 0, receiver);
     }
 }
