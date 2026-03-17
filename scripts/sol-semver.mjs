@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 
 const BUMP_RANK = {
   none: 0,
@@ -36,6 +36,42 @@ function run(cmd, args, opts = {}) {
   }
 
   return (result.stdout || "").trim();
+}
+
+function runAsync(cmd, args, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd: opts.cwd,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            [
+              `Command failed: ${cmd} ${args.join(" ")}`,
+              opts.cwd ? `cwd: ${opts.cwd}` : "",
+              stderr.trim() ? `stderr: ${stderr.trim()}` : "",
+              stdout.trim() ? `stdout: ${stdout.trim()}` : ""
+            ]
+              .filter(Boolean)
+              .join("\n")
+          )
+        );
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+    child.on("error", reject);
+  });
 }
 
 function runJson(cmd, args, opts = {}) {
@@ -130,51 +166,59 @@ function toStorageFingerprint(entry, types) {
   };
 }
 
+/**
+ * Compare storage layouts from two Forge inspect outputs.
+ *
+ * Known limitation: Forge's storage output only includes statically-allocated
+ * slots (fixed-size state variables). Mappings and dynamic arrays use keccak256-
+ * hashed slots and are invisible to this comparison. Changes to mapping key/value
+ * types or dynamic array element types will not be detected here and must be
+ * caught by ABI-level review or manual inspection.
+ */
 function compareStorage(oldStorageRaw, newStorageRaw) {
   const oldEntries = sortStorageEntries(oldStorageRaw.storage || []);
   const newEntries = sortStorageEntries(newStorageRaw.storage || []);
   const oldTypes = oldStorageRaw.types || {};
   const newTypes = newStorageRaw.types || {};
 
-  const reasons = [];
+  const majorReasons = [];
+  const minorReasons = [];
 
   if (newEntries.length < oldEntries.length) {
-    reasons.push("storage entries were removed");
-    return { bump: "major", reasons };
+    majorReasons.push("storage entries were removed");
   }
 
-  for (let i = 0; i < oldEntries.length; i += 1) {
+  const compareCount = Math.min(oldEntries.length, newEntries.length);
+  for (let i = 0; i < compareCount; i += 1) {
     const oldFingerprint = toStorageFingerprint(oldEntries[i], oldTypes);
     const newFingerprint = toStorageFingerprint(newEntries[i], newTypes);
 
-    if (!newFingerprint) {
-      reasons.push("storage entries were removed");
-      return { bump: "major", reasons };
-    }
-
     if (oldFingerprint.slot !== newFingerprint.slot || oldFingerprint.offset !== newFingerprint.offset) {
-      reasons.push(
+      majorReasons.push(
         `storage position changed at index ${i} (old slot=${oldFingerprint.slot},offset=${oldFingerprint.offset}; new slot=${newFingerprint.slot},offset=${newFingerprint.offset})`
       );
-      return { bump: "major", reasons };
-    }
-
-    if (
+    } else if (
       oldFingerprint.typeId !== newFingerprint.typeId ||
       oldFingerprint.encoding !== newFingerprint.encoding ||
       oldFingerprint.label !== newFingerprint.label ||
       oldFingerprint.numberOfBytes !== newFingerprint.numberOfBytes
     ) {
-      reasons.push(
+      majorReasons.push(
         `storage type changed at slot=${oldFingerprint.slot},offset=${oldFingerprint.offset} (${oldFingerprint.label} -> ${newFingerprint.label})`
       );
-      return { bump: "major", reasons };
     }
   }
 
   if (newEntries.length > oldEntries.length) {
-    reasons.push(`new storage entries appended (${newEntries.length - oldEntries.length})`);
-    return { bump: "minor", reasons };
+    minorReasons.push(`new storage entries appended (${newEntries.length - oldEntries.length})`);
+  }
+
+  if (majorReasons.length > 0) {
+    return { bump: "major", reasons: majorReasons };
+  }
+
+  if (minorReasons.length > 0) {
+    return { bump: "minor", reasons: minorReasons };
   }
 
   return { bump: "none", reasons: ["storage layout is identical"] };
@@ -313,9 +357,18 @@ function maxBump(...bumps) {
   return current;
 }
 
+function isBytecodeOnlyChange(storageLayer, abiLayer, bytecodeLayer) {
+  return storageLayer.bump === "none" && abiLayer.bump === "none" && bytecodeLayer.bump !== "none";
+}
+
 function deriveRecommendedBump(storageLayer, abiLayer, bytecodeLayer) {
   const raw = maxBump(storageLayer.bump, abiLayer.bump, bytecodeLayer.bump);
-  return { raw, recommended: raw };
+  const bytecodeOnly = isBytecodeOnlyChange(storageLayer, abiLayer, bytecodeLayer);
+  return {
+    raw,
+    recommended: bytecodeOnly ? "none" : raw,
+    bytecode_only_advisory: bytecodeOnly
+  };
 }
 
 function parseSemver(version) {
@@ -524,6 +577,12 @@ function prepareWorktree(worktreeDir) {
   run("forge", ["build", "--skip", "test", "--skip", "script"], { cwd: worktreeDir });
 }
 
+async function prepareWorktreeAsync(worktreeDir) {
+  await runAsync("forge", ["soldeer", "install"], { cwd: worktreeDir });
+  await runAsync("forge", ["clean"], { cwd: worktreeDir });
+  await runAsync("forge", ["build", "--skip", "test", "--skip", "script"], { cwd: worktreeDir });
+}
+
 function inspectAbi(worktreeDir, contractId) {
   return runJson("forge", ["inspect", contractId, "abi", "--json"], { cwd: worktreeDir });
 }
@@ -615,7 +674,8 @@ function analyzeContract(worktrees, contractId, opts = {}) {
     declared_version_old: declaredVersionOld,
     declared_version_new: declaredVersionNew,
     expected_minimum_version: null,
-    removed_in_new_ref: !oldSnapshot.missing && newSnapshot.missing
+    removed_in_new_ref: !oldSnapshot.missing && newSnapshot.missing,
+    bytecode_only_advisory: recommendation.bytecode_only_advisory || false
   };
 }
 
@@ -629,6 +689,9 @@ function parseContractsOption(rawContracts) {
     .filter(Boolean);
 }
 
+// Lock file support: the --lock-file flag enables pinned version tracking
+// per contract. Pre-built for future adoption; the workflow does not pass
+// --lock-file yet, and no semver-lock.json exists in the repo.
 function loadLockFile(worktreeDir, lockFilePath) {
   if (!lockFilePath) {
     return { version: 1, contracts: {} };
@@ -1137,6 +1200,14 @@ function buildCheckReport(opts, worktrees) {
       checks: []
     };
 
+    if (result.bytecode_only_advisory) {
+      contractStatus.checks.push({
+        name: "bytecode-only-advisory",
+        ok: true,
+        reason: "bytecode changed but ABI and storage are identical; version bump is advisory"
+      });
+    }
+
     if (changed || changedInPr) {
       const oldLocked = lockFilePath ? oldLock.contracts[contractId] : null;
       const underBump = result.removed_in_new_ref
@@ -1267,12 +1338,65 @@ function buildCheckReport(opts, worktrees) {
   };
 }
 
-function printAndExit(payload, exitCode) {
-  console.log(JSON.stringify(payload, null, 2));
-  process.exit(exitCode);
+function writeSummary(report) {
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (!summaryPath) {
+    return;
+  }
+
+  const lines = [];
+
+  if (report.error) {
+    lines.push("## Contract Semver Check: ERROR");
+    lines.push("");
+    lines.push(`**Error:** ${report.error}`);
+    fs.appendFileSync(summaryPath, lines.join("\n") + "\n");
+    return;
+  }
+
+  if (!report.results) {
+    return;
+  }
+
+  const hasFails = report.failures && report.failures.length > 0;
+  lines.push(`## Contract Semver Check: ${hasFails ? "FAIL" : "PASS"}`);
+  lines.push("");
+  lines.push(`Comparing \`${report.old_ref}\` to \`${report.new_ref}\``);
+  lines.push("");
+
+  if (report.results.length > 0) {
+    lines.push("| Contract | Changed | Recommended bump | Declared version | Status |");
+    lines.push("|----------|---------|------------------|------------------|--------|");
+
+    for (const entry of report.results) {
+      const r = entry.result || {};
+      const changed = entry.changed ? "yes" : "no";
+      const advisory = r.bytecode_only_advisory ? " (advisory)" : "";
+      const bump = (r.raw_recommended_bump || "none") + advisory;
+      const version = r.declared_version_new || "n/a";
+      const failedChecks = (entry.checks || []).filter((c) => !c.ok);
+      const status = failedChecks.length > 0 ? "FAIL" : "pass";
+      lines.push(`| \`${entry.contract}\` | ${changed} | ${bump} | ${version} | ${status} |`);
+    }
+    lines.push("");
+  } else {
+    lines.push("No contracts analyzed.");
+    lines.push("");
+  }
+
+  if (hasFails) {
+    lines.push("### Failures");
+    lines.push("");
+    for (const failure of report.failures) {
+      lines.push(`- ${failure}`);
+    }
+    lines.push("");
+  }
+
+  fs.appendFileSync(summaryPath, lines.join("\n") + "\n");
 }
 
-function main() {
+async function main() {
   const opts = parseArgs(process.argv);
   ensureCommand(opts);
 
@@ -1284,32 +1408,50 @@ function main() {
   }
 
   let worktrees;
+  let exitPayload;
+  let exitCode = 0;
 
   try {
     worktrees = createTempWorktrees(oldRef, newRef);
-    prepareWorktree(worktrees.old);
-    prepareWorktree(worktrees.new);
+
+    // Parallelize the two independent worktree builds.
+    // Per-contract targeted builds are not supported by forge today;
+    // parallelization is the main lever for reducing CI wall-clock time.
+    const buildResults = await Promise.allSettled([
+      prepareWorktreeAsync(worktrees.old),
+      prepareWorktreeAsync(worktrees.new)
+    ]);
+    const buildFailure = buildResults.find((r) => r.status === "rejected");
+    if (buildFailure) {
+      throw buildFailure.reason;
+    }
 
     if (opts.command === "diff") {
       const contractId = opts.contract;
       ensureContractId(contractId);
-      const report = analyzeContract(worktrees, contractId);
-      printAndExit(report, 0);
+      exitPayload = analyzeContract(worktrees, contractId);
+      exitCode = 0;
+    } else {
+      const report = buildCheckReport(opts, worktrees);
+      writeSummary(report);
+      exitPayload = report;
+      exitCode = report.failures.length > 0 ? 1 : 0;
     }
-
-    const report = buildCheckReport(opts, worktrees);
-    if (report.failures.length > 0) {
-      printAndExit(report, 1);
-    }
-    printAndExit(report, 0);
   } catch (error) {
-    const payload = {
+    exitPayload = {
       error: error instanceof Error ? error.message : String(error)
     };
-    printAndExit(payload, 1);
+    writeSummary(exitPayload);
+    exitCode = 1;
   } finally {
     cleanupTempWorktrees(worktrees);
   }
+
+  console.log(JSON.stringify(exitPayload, null, 2));
+  process.exit(exitCode);
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

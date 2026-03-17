@@ -42,3 +42,6 @@ jobs:
           node scripts/sol-semver.mjs check \
             --old-ref "$MERGE_BASE" \
             --new-ref "$HEAD_REF"
+          # TODO: pass --lock-file semver-lock.json once the lock file workflow
+          # is adopted. Lock validation in sol-semver.mjs is ready but no
+          # semver-lock.json exists in the repo yet.
