@@ -59,15 +59,22 @@ contract YFTest is YFSetup {
         // Set shares to 0
         _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, 0);
 
+        // Write sentinel to detect any redeem call, including redeem(0, ...).
+        // Without this, a regression removing the early return guard would call
+        // redeem(0, ...) which writes lastRedeemShares = 0, indistinguishable
+        // from the "never called" default.
+        uint256 sentinel = type(uint256).max;
+        _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, sentinel);
+
         vm.prank(_keeper);
         uint256 assets = forwarder.reportAndForward(address(mockStrategy), 0);
 
         // Assert: returned 0
         assertEq(assets, 0);
 
-        // Assert: redeem was never called (lastRedeemShares still 0)
+        // Assert: redeem was never called (sentinel preserved)
         uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
-        assertEq(lastShares, 0);
+        assertEq(lastShares, sentinel);
     }
 
     /// @notice Return value of reportAndForward equals the value returned by redeem

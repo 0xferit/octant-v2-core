@@ -66,19 +66,26 @@ contract SYFTest is SYFSetup {
         // Set shares to 0
         _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, 0);
 
+        // Write sentinels to detect any call to redeem or swap, including
+        // redeem(0, ...) which would be indistinguishable from "never called"
+        // if the default were 0.
+        uint256 sentinel = type(uint256).max;
+        _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, sentinel);
+        _storeUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT, sentinel);
+
         vm.prank(_keeper);
         uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
 
         // Assert: returned 0
         assertEq(assetsOut, 0);
 
-        // Assert: swap was never called (lastSwapReceiver still address(0))
-        address lastSwapReceiver = _loadAddress(address(mockSwapper), MSWP_LAST_RECEIVER_SLOT);
-        assertEq(lastSwapReceiver, address(0));
+        // Assert: swap was never called (sentinel preserved)
+        uint256 lastAmountIn = _loadUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT);
+        assertEq(lastAmountIn, sentinel);
 
-        // Assert: redeem was never called
+        // Assert: redeem was never called (sentinel preserved)
         uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
-        assertEq(lastShares, 0);
+        assertEq(lastShares, sentinel);
     }
 
     /// @notice When redeem returns 0 assets (but shares > 0), returns 0 without swap
