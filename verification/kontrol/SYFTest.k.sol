@@ -61,10 +61,11 @@ contract SYFTest is SYFSetup {
         assertEq(forwarderBalance, 0);
     }
 
-    /// @notice When shares == 0, returns 0 without calling swap or redeem
+    /// @notice When shares == 0, report still runs and the function returns 0 without swap or redeem
     function testReportSwapAndForwardZeroSharesPassthrough() public {
         // Set shares to 0
         _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, 0);
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
 
         // Write sentinels to detect any call to redeem or swap, including
         // redeem(0, ...) which would be indistinguishable from "never called"
@@ -78,6 +79,10 @@ contract SYFTest is SYFSetup {
 
         // Assert: returned 0
         assertEq(assetsOut, 0);
+
+        // Assert: report still ran before the zero-share early return
+        address lastReportCaller = _loadAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT);
+        assertEq(lastReportCaller, address(syfForwarder));
 
         // Assert: swap was never called (sentinel preserved)
         uint256 lastAmountIn = _loadUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT);
@@ -116,9 +121,11 @@ contract SYFTest is SYFSetup {
         vm.assume(shares > 0);
         uint256 redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
         vm.assume(redeemReturn > 0);
+        uint256 maxLoss = freshUInt256Bounded();
+        uint256 minAmountOut = freshUInt256Bounded();
 
         vm.prank(_keeper);
-        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), maxLoss, minAmountOut);
 
         // Assert: tokenIn == sourceAsset (strategy's underlying)
         address lastTokenIn = _loadAddress(address(mockSwapper), MSWP_LAST_TOKEN_IN_SLOT);
@@ -131,6 +138,20 @@ contract SYFTest is SYFSetup {
         // Assert: amountIn == redeemReturn
         uint256 lastAmountIn = _loadUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT);
         assertEq(lastAmountIn, redeemReturn);
+
+        // Assert: minAmountOut is forwarded unchanged to the swapper
+        uint256 lastMinAmountOut = _loadUInt256(address(mockSwapper), MSWP_LAST_MIN_AMOUNT_OUT_SLOT);
+        assertEq(lastMinAmountOut, minAmountOut);
+
+        // Assert: redeem is executed on behalf of and back into the forwarder
+        address lastRedeemReceiver = _loadAddress(address(mockStrategy), MFS_LAST_RECEIVER_SLOT);
+        assertEq(lastRedeemReceiver, address(syfForwarder));
+
+        address lastRedeemOwner = _loadAddress(address(mockStrategy), MFS_LAST_OWNER_SLOT);
+        assertEq(lastRedeemOwner, address(syfForwarder));
+
+        uint256 lastRedeemMaxLoss = _loadUInt256(address(mockStrategy), MFS_LAST_MAX_LOSS_SLOT);
+        assertEq(lastRedeemMaxLoss, maxLoss);
     }
 
     /// @notice Inherited reportAndForward() on SwappingYieldForwarder still enforces keeper check

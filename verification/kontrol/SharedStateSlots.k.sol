@@ -128,6 +128,10 @@ uint256 constant MFS_REDEEM_RETURN_SLOT = 1;
 uint256 constant MFS_ASSET_SLOT = 2;
 uint256 constant MFS_LAST_RECEIVER_SLOT = 3;
 uint256 constant MFS_LAST_SHARES_SLOT = 4;
+uint256 constant MFS_LAST_REPORT_CALLER_SLOT = 5;
+uint256 constant MFS_EXPECTED_BALANCE_OF_ACCOUNT_SLOT = 6;
+uint256 constant MFS_LAST_OWNER_SLOT = 7;
+uint256 constant MFS_LAST_MAX_LOSS_SLOT = 8;
 
 // ============================================
 // MockForwarderSwapper (MSWP_) constants
@@ -138,3 +142,4 @@ uint256 constant MSWP_LAST_RECEIVER_SLOT = 1;
 uint256 constant MSWP_LAST_TOKEN_IN_SLOT = 2;
 uint256 constant MSWP_LAST_TOKEN_OUT_SLOT = 3;
 uint256 constant MSWP_LAST_AMOUNT_IN_SLOT = 4;
+uint256 constant MSWP_LAST_MIN_AMOUNT_OUT_SLOT = 5;

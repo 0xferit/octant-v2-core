@@ -13,6 +13,10 @@ pragma solidity ^0.8.0;
  *        slot 2: mockAsset          -- returned by asset()
  *        slot 3: lastRedeemReceiver -- captures receiver arg from redeem()
  *        slot 4: lastRedeemShares   -- captures shares arg from redeem()
+ *        slot 5: lastReportCaller   -- captures msg.sender from report()
+ *        slot 6: expectedBalanceOfAccount -- only this account has shares
+ *        slot 7: lastRedeemOwner    -- captures owner arg from redeem()
+ *        slot 8: lastRedeemMaxLoss  -- captures maxLoss arg from redeem()
  */
 contract MockForwarderStrategy {
     uint256 public mockShareBalance;
@@ -20,23 +24,32 @@ contract MockForwarderStrategy {
     address public mockAsset;
     address public lastRedeemReceiver;
     uint256 public lastRedeemShares;
+    address public lastReportCaller;
+    address public expectedBalanceOfAccount;
+    address public lastRedeemOwner;
+    uint256 public lastRedeemMaxLoss;
 
-    /// @notice No-op report; strategy report logic is verified by existing YD/YS Kontrol proofs
-    /// @dev Self-assignment prevents pure/view optimization to match real IReportable mutability
+    /// @notice No-op report that still records the caller
     function report() external returns (uint256, uint256) {
-        mockShareBalance = mockShareBalance;
+        lastReportCaller = msg.sender;
         return (0, 0);
     }
 
-    /// @notice Returns the controllable mock share balance for any address
-    function balanceOf(address) external view returns (uint256) {
+    /// @notice Returns shares only for the configured forwarder account
+    function balanceOf(address account) external view returns (uint256) {
+        if (account != expectedBalanceOfAccount) {
+            return 0;
+        }
+
         return mockShareBalance;
     }
 
     /// @notice Mock redeem that captures arguments and zeroes share balance
-    function redeem(uint256 shares, address receiver, address, uint256) external returns (uint256) {
+    function redeem(uint256 shares, address receiver, address owner, uint256 maxLoss) external returns (uint256) {
         lastRedeemShares = shares;
         lastRedeemReceiver = receiver;
+        lastRedeemOwner = owner;
+        lastRedeemMaxLoss = maxLoss;
         mockShareBalance = 0;
         return mockRedeemReturn;
     }

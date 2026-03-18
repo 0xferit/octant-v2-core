@@ -31,13 +31,20 @@ contract YFTest is YFSetup {
         // Pre-condition: shares exist to trigger the redeem path
         uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
         vm.assume(shares > 0);
+        uint256 maxLoss = freshUInt256Bounded();
 
         vm.prank(_keeper);
-        forwarder.reportAndForward(address(mockStrategy), 0);
+        forwarder.reportAndForward(address(mockStrategy), maxLoss);
 
-        // Assert: redeem was called with receiver == forwarder.receiver()
+        // Assert: redeem was called with the expected receiver, owner, and maxLoss.
         address lastReceiver = _loadAddress(address(mockStrategy), MFS_LAST_RECEIVER_SLOT);
         assertEq(lastReceiver, _receiver);
+
+        address lastOwner = _loadAddress(address(mockStrategy), MFS_LAST_OWNER_SLOT);
+        assertEq(lastOwner, address(forwarder));
+
+        uint256 lastMaxLoss = _loadUInt256(address(mockStrategy), MFS_LAST_MAX_LOSS_SLOT);
+        assertEq(lastMaxLoss, maxLoss);
     }
 
     /// @notice After reportAndForward, forwarder holds 0 shares on the strategy
@@ -54,10 +61,11 @@ contract YFTest is YFSetup {
         assertEq(postShares, 0);
     }
 
-    /// @notice When shares == 0, returns 0 and redeem is never called
+    /// @notice When shares == 0, report still runs, returns 0, and redeem is never called
     function testReportAndForwardZeroSharesPassthrough() public {
         // Set shares to 0
         _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, 0);
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
 
         // Write sentinel to detect any redeem call, including redeem(0, ...).
         // Without this, a regression removing the early return guard would call
@@ -71,6 +79,10 @@ contract YFTest is YFSetup {
 
         // Assert: returned 0
         assertEq(assets, 0);
+
+        // Assert: report still ran before the zero-share early return
+        address lastReportCaller = _loadAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT);
+        assertEq(lastReportCaller, address(forwarder));
 
         // Assert: redeem was never called (sentinel preserved)
         uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);

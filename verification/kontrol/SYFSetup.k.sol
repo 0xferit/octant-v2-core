@@ -52,6 +52,7 @@ contract SYFSetup is KontrolTest {
 
         // Restore concrete asset address to the real ERC20
         _storeAddress(address(mockStrategy), MFS_ASSET_SLOT, address(sourceAsset));
+        _storeAddress(address(mockStrategy), MFS_EXPECTED_BALANCE_OF_ACCOUNT_SLOT, address(syfForwarder));
 
         // Set symbolic share balance and redeem return
         uint256 shareBalance = freshUInt256Bounded();
@@ -63,6 +64,9 @@ contract SYFSetup is KontrolTest {
         // Clear argument capture slots
         _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, 0);
         _storeAddress(address(mockStrategy), MFS_LAST_RECEIVER_SLOT, address(0));
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
+        _storeAddress(address(mockStrategy), MFS_LAST_OWNER_SLOT, address(0));
+        _storeUInt256(address(mockStrategy), MFS_LAST_MAX_LOSS_SLOT, 0);
 
         // ============================================
         // MAKE MOCK SWAPPER STORAGE SYMBOLIC
@@ -78,6 +82,7 @@ contract SYFSetup is KontrolTest {
         _storeAddress(address(mockSwapper), MSWP_LAST_TOKEN_IN_SLOT, address(0));
         _storeAddress(address(mockSwapper), MSWP_LAST_TOKEN_OUT_SLOT, address(0));
         _storeUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT, 0);
+        _storeUInt256(address(mockSwapper), MSWP_LAST_MIN_AMOUNT_OUT_SLOT, 0);
 
         // ============================================
         // PRE-LOAD FORWARDER ERC20 BALANCE

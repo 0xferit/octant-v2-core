@@ -41,6 +41,7 @@ contract YFSetup is KontrolTest {
         // Restore concrete asset address (needed for SYF safeTransfer path)
         // Using address(0xA55E7) as a deterministic mock asset address
         _storeAddress(address(mockStrategy), MFS_ASSET_SLOT, address(0xA55E7));
+        _storeAddress(address(mockStrategy), MFS_EXPECTED_BALANCE_OF_ACCOUNT_SLOT, address(forwarder));
 
         // Set symbolic share balance and redeem return
         uint256 shareBalance = freshUInt256Bounded();
@@ -52,6 +53,9 @@ contract YFSetup is KontrolTest {
         // Clear argument capture slots (so we can detect if redeem was called)
         _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, 0);
         _storeAddress(address(mockStrategy), MFS_LAST_RECEIVER_SLOT, address(0));
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
+        _storeAddress(address(mockStrategy), MFS_LAST_OWNER_SLOT, address(0));
+        _storeUInt256(address(mockStrategy), MFS_LAST_MAX_LOSS_SLOT, 0);
 
         // ============================================
         // SET FORWARDER REENTRANCY GUARD TO NOT_ENTERED

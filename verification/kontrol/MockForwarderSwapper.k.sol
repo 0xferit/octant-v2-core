@@ -12,6 +12,7 @@ pragma solidity ^0.8.0;
  *        slot 2: lastTokenIn       -- captures tokenIn arg
  *        slot 3: lastTokenOut      -- captures tokenOut arg
  *        slot 4: lastAmountIn      -- captures amountIn arg
+ *        slot 5: lastMinAmountOut  -- captures minAmountOut arg
  */
 contract MockForwarderSwapper {
     uint256 public mockSwapReturn;
@@ -19,18 +20,20 @@ contract MockForwarderSwapper {
     address public lastTokenIn;
     address public lastTokenOut;
     uint256 public lastAmountIn;
+    uint256 public lastMinAmountOut;
 
     /// @notice Mock swap that captures arguments and returns controllable output
     function swap(
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
-        uint256,
+        uint256 minAmountOut,
         address receiver
     ) external returns (uint256) {
         lastTokenIn = tokenIn;
         lastTokenOut = tokenOut;
         lastAmountIn = amountIn;
+        lastMinAmountOut = minAmountOut;
         lastSwapReceiver = receiver;
         return mockSwapReturn;
     }
