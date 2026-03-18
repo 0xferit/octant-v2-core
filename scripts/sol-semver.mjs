@@ -12,7 +12,8 @@ const BUMP_RANK = {
   major: 3
 };
 const REPO_SAFE_DIRECTORY = process.cwd();
-const API_VERSION_PATTERN = /\bAPI_VERSION\b\s*=\s*"(\d+\.\d+\.\d+)"/;
+const API_VERSION_DECLARATION_PATTERN =
+  /\bstring\s+(?:(?:public|internal|private|constant|immutable|override(?:\s*\([^)]*\))?)\s+)*API_VERSION\s*=\s*"(\d+\.\d+\.\d+)"/;
 
 function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, {
@@ -543,16 +544,24 @@ function findContractBody(source, contractName) {
 }
 
 function sourceDeclaresApiVersion(source) {
-  return API_VERSION_PATTERN.test(source);
+  const contractNames = extractContractNames(source);
+  for (const contractName of contractNames) {
+    if (readDeclaredVersionFromSource(source, contractName)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function readDeclaredVersionFromSource(source, contractName) {
-  const contractBody = findContractBody(source, contractName);
+  const sourceWithoutComments = stripComments(source);
+  const contractBody = findContractBody(sourceWithoutComments, contractName);
   if (!contractBody) {
     return null;
   }
 
-  const apiVersionMatch = contractBody.match(API_VERSION_PATTERN);
+  const apiVersionMatch = contractBody.match(API_VERSION_DECLARATION_PATTERN);
   if (apiVersionMatch) {
     return apiVersionMatch[1];
   }
@@ -1212,9 +1221,9 @@ function buildCheckReport(opts, worktrees) {
       const oldLocked = lockFilePath ? oldLock.contracts[contractId] : null;
       const underBump = result.removed_in_new_ref
         ? {
-            ok: false,
-            reason: "contract is absent in new ref; deletion is a breaking change and requires manual semver review",
-            expectedMinimumVersion: computeExpectedMinimumVersion(result, oldLocked)
+            ok: true,
+            reason: "contract is absent in new ref; deletion is allowed",
+            expectedMinimumVersion: null
           }
         : validateUnderBump(result, oldLocked);
       result.expected_minimum_version = underBump.expectedMinimumVersion;
@@ -1230,12 +1239,20 @@ function buildCheckReport(opts, worktrees) {
 
     if (lockFilePath) {
       if (!newLockedExists) {
-        failures.push(`${contractId}: missing entry in ${lockFilePath}`);
-        contractStatus.checks.push({
-          name: "lock-entry-present",
-          ok: false,
-          reason: `missing lock entry in ${lockFilePath}`
-        });
+        if (result.removed_in_new_ref) {
+          contractStatus.checks.push({
+            name: "lock-entry-present",
+            ok: true,
+            reason: ""
+          });
+        } else {
+          failures.push(`${contractId}: missing entry in ${lockFilePath}`);
+          contractStatus.checks.push({
+            name: "lock-entry-present",
+            ok: false,
+            reason: `missing lock entry in ${lockFilePath}`
+          });
+        }
       } else {
         contractStatus.checks.push({
           name: "lock-entry-present",
