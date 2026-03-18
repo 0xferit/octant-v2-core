@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { YieldForwarder } from "src/core/YieldForwarder.sol";
+
+import { SYFSetup } from "test/kontrol/SYFSetup.k.sol";
+import "test/kontrol/SharedStateSlots.k.sol";
+
+/**
+ * @title SYFTest
+ * @notice Kontrol formal verification proofs for SwappingYieldForwarder
+ * @dev Proves 7 behavioral properties of the SwappingYieldForwarder contract:
+ *      1. Access control on reportSwapAndForward
+ *      2. Swap output routed to hardcoded receiver
+ *      3. No residual source asset after swap
+ *      4. Zero-share passthrough (no swap/redeem)
+ *      5. Zero-redeem passthrough (no swap when redeem returns 0)
+ *      6. Correct token routing through swapper
+ *      7. Inherited reportAndForward access control still works
+ */
+contract SYFTest is SYFSetup {
+    /// @notice Non-keeper address always reverts with OnlyKeeper on reportSwapAndForward
+    function testReportSwapAndForwardOnlyKeeper() public {
+        address nonKeeper = makeAddr("NON_KEEPER");
+
+        vm.prank(nonKeeper);
+        vm.expectRevert(YieldForwarder.OnlyKeeper.selector);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+    }
+
+    /// @notice swap() is always called with the hardcoded receiver as output recipient
+    function testReportSwapAndForwardReceiverGuarantee() public {
+        // Pre-conditions: shares exist and redeem returns non-zero
+        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(shares > 0);
+        uint256 redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
+        vm.assume(redeemReturn > 0);
+
+        vm.prank(_keeper);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+
+        // Assert: swap was called with receiver == forwarder.receiver()
+        address lastReceiver = _loadAddress(address(mockSwapper), MSWP_LAST_RECEIVER_SLOT);
+        assertEq(lastReceiver, _receiver);
+    }
+
+    /// @notice After reportSwapAndForward, forwarder holds 0 of source asset
+    function testReportSwapAndForwardNoResidualSourceAsset() public {
+        // Pre-conditions: shares exist and redeem returns non-zero
+        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(shares > 0);
+        uint256 redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
+        vm.assume(redeemReturn > 0);
+
+        vm.prank(_keeper);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+
+        // Assert: forwarder's source asset balance is 0 (all transferred to swapper)
+        uint256 forwarderBalance = sourceAsset.balanceOf(address(syfForwarder));
+        assertEq(forwarderBalance, 0);
+    }
+
+    /// @notice When shares == 0, returns 0 without calling swap or redeem
+    function testReportSwapAndForwardZeroSharesPassthrough() public {
+        // Set shares to 0
+        _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, 0);
+
+        vm.prank(_keeper);
+        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+
+        // Assert: returned 0
+        assertEq(assetsOut, 0);
+
+        // Assert: swap was never called (lastSwapReceiver still address(0))
+        address lastSwapReceiver = _loadAddress(address(mockSwapper), MSWP_LAST_RECEIVER_SLOT);
+        assertEq(lastSwapReceiver, address(0));
+
+        // Assert: redeem was never called
+        uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastShares, 0);
+    }
+
+    /// @notice When redeem returns 0 assets (but shares > 0), returns 0 without swap
+    function testReportSwapAndForwardZeroRedeemPassthrough() public {
+        // Set shares > 0 but redeem return to 0
+        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(shares > 0);
+        _storeUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT, 0);
+
+        // Also zero out the forwarder's pre-loaded ERC20 balance (matches 0 redeem)
+        _storeMappingUInt256(address(sourceAsset), ERC20_BALANCES_SLOT, uint256(uint160(address(syfForwarder))), 0, 0);
+
+        vm.prank(_keeper);
+        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+
+        // Assert: returned 0
+        assertEq(assetsOut, 0);
+
+        // Assert: swap was never called
+        address lastSwapReceiver = _loadAddress(address(mockSwapper), MSWP_LAST_RECEIVER_SLOT);
+        assertEq(lastSwapReceiver, address(0));
+    }
+
+    /// @notice swap() is called with tokenIn = strategy.asset() and tokenOut = targetAsset
+    function testReportSwapAndForwardCorrectTokenRouting() public {
+        // Pre-conditions: shares exist and redeem returns non-zero
+        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(shares > 0);
+        uint256 redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
+        vm.assume(redeemReturn > 0);
+
+        vm.prank(_keeper);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+
+        // Assert: tokenIn == sourceAsset (strategy's underlying)
+        address lastTokenIn = _loadAddress(address(mockSwapper), MSWP_LAST_TOKEN_IN_SLOT);
+        assertEq(lastTokenIn, address(sourceAsset));
+
+        // Assert: tokenOut == targetAsset (forwarder's configured target)
+        address lastTokenOut = _loadAddress(address(mockSwapper), MSWP_LAST_TOKEN_OUT_SLOT);
+        assertEq(lastTokenOut, address(targetAsset));
+
+        // Assert: amountIn == redeemReturn
+        uint256 lastAmountIn = _loadUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT);
+        assertEq(lastAmountIn, redeemReturn);
+    }
+
+    /// @notice Inherited reportAndForward() on SwappingYieldForwarder still enforces keeper check
+    function testInheritedReportAndForwardAccessControl() public {
+        address nonKeeper = makeAddr("NON_KEEPER");
+
+        vm.prank(nonKeeper);
+        vm.expectRevert(YieldForwarder.OnlyKeeper.selector);
+        syfForwarder.reportAndForward(address(mockStrategy), 0);
+    }
+}
