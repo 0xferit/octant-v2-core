@@ -32,4 +32,4 @@ jobs:
           path: docs/
 
       - name: Check NatSpec coverage
-        run: bash scripts/check-natspec.sh
+        run: bash script/check-natspec.sh

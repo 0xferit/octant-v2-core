@@ -1,11 +1,21 @@
 # Scripts used by Octant v2
 
-This directory contains scripts used by Octant v2.
+This directory contains all scripts used by Octant v2: both Foundry Solidity scripts (`.s.sol`) and bash shell utilities (`.sh`).
 
-Script directories:
+There is no separate `scripts/` directory. Everything lives here.
 
-- `demo` - TBD
-- `deploy` - scripts used by deployments
-- `deployment` - scripts used to deploy on CD envs
-- `helpers` - TBD
-- `prod` - TBD
+## Solidity script directories
+
+- `demo` - demo and testing scripts
+- `deploy` - deployment scripts
+- `deployment` - CD environment deployment scripts
+- `helpers` - shared helper contracts for scripts
+- `prod` - production deployment scripts
+- `verify` - contract verification scripts
+
+## Shell utilities
+
+- `check-natspec.sh` - validates NatSpec documentation coverage on public/external functions
+- `combine-proxy-abis.sh` - merges strategy + wrapper ABIs for proxy consumption
+- `coverage.sh` - runs forge coverage with Hats Protocol patching workaround
+- `storage.sh` - generates and validates storage layout snapshots
