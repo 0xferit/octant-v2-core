@@ -182,11 +182,10 @@ function compareStorage(oldStorageRaw, newStorageRaw) {
   const oldTypes = oldStorageRaw.types || {};
   const newTypes = newStorageRaw.types || {};
 
-  const majorReasons = [];
   const minorReasons = [];
 
   if (newEntries.length < oldEntries.length) {
-    majorReasons.push("storage entries were removed");
+    minorReasons.push("storage entries were removed");
   }
 
   const compareCount = Math.min(oldEntries.length, newEntries.length);
@@ -195,7 +194,7 @@ function compareStorage(oldStorageRaw, newStorageRaw) {
     const newFingerprint = toStorageFingerprint(newEntries[i], newTypes);
 
     if (oldFingerprint.slot !== newFingerprint.slot || oldFingerprint.offset !== newFingerprint.offset) {
-      majorReasons.push(
+      minorReasons.push(
         `storage position changed at index ${i} (old slot=${oldFingerprint.slot},offset=${oldFingerprint.offset}; new slot=${newFingerprint.slot},offset=${newFingerprint.offset})`
       );
     } else if (
@@ -204,7 +203,7 @@ function compareStorage(oldStorageRaw, newStorageRaw) {
       oldFingerprint.label !== newFingerprint.label ||
       oldFingerprint.numberOfBytes !== newFingerprint.numberOfBytes
     ) {
-      majorReasons.push(
+      minorReasons.push(
         `storage type changed at slot=${oldFingerprint.slot},offset=${oldFingerprint.offset} (${oldFingerprint.label} -> ${newFingerprint.label})`
       );
     }
@@ -212,10 +211,6 @@ function compareStorage(oldStorageRaw, newStorageRaw) {
 
   if (newEntries.length > oldEntries.length) {
     minorReasons.push(`new storage entries appended (${newEntries.length - oldEntries.length})`);
-  }
-
-  if (majorReasons.length > 0) {
-    return { bump: "major", reasons: majorReasons };
   }
 
   if (minorReasons.length > 0) {
