@@ -38,7 +38,14 @@ contract UniswapV4SwapperAdapterTest is Test {
 
     function test_constructor_setsImmutables() public {
         UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
-            address(pm), FEE, TICK_SPACING, address(0), address(baseToken), FEE_OUT, TICK_SPACING_OUT, address(0)
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(baseToken),
+            FEE_OUT,
+            TICK_SPACING_OUT,
+            address(0)
         );
         assertEq(s.poolManager(), address(pm));
         assertEq(s.fee(), FEE);
@@ -63,21 +70,44 @@ contract UniswapV4SwapperAdapterTest is Test {
     function test_constructor_revertsOnZeroTickSpacingOutWithBase() public {
         vm.expectRevert(UniswapV4SwapperAdapter.InvalidTickSpacing.selector);
         new UniswapV4SwapperAdapter(
-            address(pm), FEE, TICK_SPACING, address(0), address(baseToken), FEE_OUT, 0, address(0)
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(baseToken),
+            FEE_OUT,
+            0,
+            address(0)
         );
     }
 
     function test_constructor_allowsZeroBase() public {
         // base == address(0) is valid — means direct swap
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
         assertEq(s.base(), address(0));
     }
 
     function test_constructor_allowsZeroTickSpacingOutWhenNoBase() public {
         // tickSpacingOut == 0 is fine when base == address(0) (second hop not used)
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
         assertEq(s.tickSpacingOut(), 0);
     }
 
@@ -86,15 +116,31 @@ contract UniswapV4SwapperAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════
 
     function test_swap_revertsOnZeroTokenIn() public {
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
         vm.expectRevert(UniswapV4SwapperAdapter.InvalidToken.selector);
         s.swap(address(0), address(tokenB), 100, 0, receiver);
     }
 
     function test_swap_revertsOnZeroTokenOut() public {
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
         vm.expectRevert(UniswapV4SwapperAdapter.InvalidToken.selector);
         s.swap(address(tokenA), address(0), 100, 0, receiver);
     }
@@ -104,8 +150,16 @@ contract UniswapV4SwapperAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════
 
     function test_unlockCallback_revertsUnauthorized() public {
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
 
         // Call unlockCallback directly (not from poolManager)
         vm.expectRevert(UniswapV4SwapperAdapter.UnauthorizedCallback.selector);
@@ -117,8 +171,16 @@ contract UniswapV4SwapperAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════
 
     function test_swap_singleHop_noBase() public {
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
 
         uint256 amountIn = 1000e18;
         tokenA.mint(address(s), amountIn);
@@ -137,7 +199,14 @@ contract UniswapV4SwapperAdapterTest is Test {
 
     function test_swap_singleHop_tokenOutIsBase() public {
         UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
-            address(pm), FEE, TICK_SPACING, address(0), address(baseToken), FEE_OUT, TICK_SPACING_OUT, address(0)
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(baseToken),
+            FEE_OUT,
+            TICK_SPACING_OUT,
+            address(0)
         );
 
         uint256 amountIn = 500e18;
@@ -159,7 +228,14 @@ contract UniswapV4SwapperAdapterTest is Test {
 
     function test_swap_singleHop_tokenInIsBase() public {
         UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
-            address(pm), FEE, TICK_SPACING, address(0), address(baseToken), FEE_OUT, TICK_SPACING_OUT, address(0)
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(baseToken),
+            FEE_OUT,
+            TICK_SPACING_OUT,
+            address(0)
         );
 
         uint256 amountIn = 500e18;
@@ -181,7 +257,14 @@ contract UniswapV4SwapperAdapterTest is Test {
 
     function test_swap_multiHop() public {
         UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
-            address(pm), FEE, TICK_SPACING, address(0), address(baseToken), FEE_OUT, TICK_SPACING_OUT, address(0)
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(baseToken),
+            FEE_OUT,
+            TICK_SPACING_OUT,
+            address(0)
         );
 
         uint256 amountIn = 1000e18;
@@ -200,8 +283,16 @@ contract UniswapV4SwapperAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════
 
     function test_swap_revertsOnInsufficientOutput() public {
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
 
         uint256 amountIn = 1000e18;
         tokenA.mint(address(s), amountIn);
@@ -217,8 +308,16 @@ contract UniswapV4SwapperAdapterTest is Test {
     // ═══════════════════════════════════════════════════════════
 
     function test_swap_correctZeroForOne() public {
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
 
         uint256 amountIn = 100e18;
 
@@ -235,8 +334,16 @@ contract UniswapV4SwapperAdapterTest is Test {
     }
 
     function test_swap_correctNotZeroForOne() public {
-        UniswapV4SwapperAdapter s =
-            new UniswapV4SwapperAdapter(address(pm), FEE, TICK_SPACING, address(0), address(0), 0, 0, address(0));
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(0),
+            0,
+            0,
+            address(0)
+        );
 
         uint256 amountIn = 100e18;
 
@@ -320,7 +427,7 @@ contract MockV4PoolManager {
     }
 
     /// @dev No-op for mock — balance snapshot
-    function sync(address /* currency */ ) external { }
+    function sync(address /* currency */) external {}
 
     /// @dev No-op for mock — settlement accounting
     function settle() external payable returns (uint256) {

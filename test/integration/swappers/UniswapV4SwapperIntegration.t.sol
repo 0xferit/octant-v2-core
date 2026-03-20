@@ -191,7 +191,14 @@ contract UniswapV4MultiHopTest is Test {
     /// @notice Multi-hop with minAmountOut slippage protection
     function test_multiHop_respectsMinAmountOut() public {
         UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
-            V4_POOL_MANAGER, FEE_USDC_WETH, TS_USDC_WETH, address(0), WETH, FEE_WETH_DAI, TS_WETH_DAI, address(0)
+            V4_POOL_MANAGER,
+            FEE_USDC_WETH,
+            TS_USDC_WETH,
+            address(0),
+            WETH,
+            FEE_WETH_DAI,
+            TS_WETH_DAI,
+            address(0)
         );
 
         deal(USDC, address(this), SWAP_AMOUNT_USDC);
@@ -205,7 +212,14 @@ contract UniswapV4MultiHopTest is Test {
     /// @notice Multi-hop config is correctly set
     function test_multiHop_config() public {
         UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
-            V4_POOL_MANAGER, FEE_USDC_WETH, TS_USDC_WETH, address(0), WETH, FEE_WETH_DAI, TS_WETH_DAI, address(0)
+            V4_POOL_MANAGER,
+            FEE_USDC_WETH,
+            TS_USDC_WETH,
+            address(0),
+            WETH,
+            FEE_WETH_DAI,
+            TS_WETH_DAI,
+            address(0)
         );
 
         assertEq(adapter.poolManager(), V4_POOL_MANAGER);
@@ -301,12 +315,20 @@ contract UniswapV4MultiHopTest is Test {
     function test_forwarder_multiHop_USDC_WETH_DAI() public {
         // Deploy full stack with multi-hop swapper
         UniswapV4SwapperAdapter multiHopAdapter = new UniswapV4SwapperAdapter(
-            V4_POOL_MANAGER, FEE_USDC_WETH, TS_USDC_WETH, address(0), WETH, FEE_WETH_DAI, TS_WETH_DAI, address(0)
+            V4_POOL_MANAGER,
+            FEE_USDC_WETH,
+            TS_USDC_WETH,
+            address(0),
+            WETH,
+            FEE_WETH_DAI,
+            TS_WETH_DAI,
+            address(0)
         );
 
         // Deploy implementation + factory + strategy + forwarder
-        YieldDonatingTokenizedStrategy impl =
-            new YieldDonatingTokenizedStrategy{ salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1") }();
+        YieldDonatingTokenizedStrategy impl = new YieldDonatingTokenizedStrategy{
+            salt: keccak256("OCT_YIELD_SKIMMING_STRATEGY_V1")
+        }();
         vm.etch(MorphoTestConfig.TOKENIZED_STRATEGY_ADDRESS, address(impl).code);
 
         address mgmt = address(0xA1);
@@ -315,8 +337,9 @@ contract UniswapV4MultiHopTest is Test {
 
         SwappingYieldForwarder fwd = new SwappingYieldForwarder(recv, keeper, DAI, address(multiHopAdapter));
 
-        MorphoCompounderStrategyFactory fac =
-            new MorphoCompounderStrategyFactory{ salt: keccak256("OCT_MORPHO_COMPOUNDER_STRATEGY_VAULT_FACTORY_V1") }();
+        MorphoCompounderStrategyFactory fac = new MorphoCompounderStrategyFactory{
+            salt: keccak256("OCT_MORPHO_COMPOUNDER_STRATEGY_VAULT_FACTORY_V1")
+        }();
 
         vm.startPrank(mgmt);
         address stratAddr = fac.createStrategy(

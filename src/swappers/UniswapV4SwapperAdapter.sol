@@ -27,9 +27,11 @@ interface IV4PoolManager {
 
     /// @dev Returns BalanceDelta (a packed int256: upper 128 bits = amount0, lower 128 bits = amount1).
     ///      Negative = caller must settle (pay), Positive = caller may take (receive).
-    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
-        external
-        returns (int256 swapDelta);
+    function swap(
+        PoolKey memory key,
+        SwapParams memory params,
+        bytes calldata hookData
+    ) external returns (int256 swapDelta);
 
     function sync(address currency) external;
     function settle() external payable returns (uint256 paid);
@@ -185,8 +187,10 @@ contract UniswapV4SwapperAdapter is ISwapper {
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         if (msg.sender != poolManager) revert UnauthorizedCallback();
 
-        (address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address receiver) =
-            abi.decode(data, (address, address, uint256, uint256, address));
+        (address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address receiver) = abi.decode(
+            data,
+            (address, address, uint256, uint256, address)
+        );
 
         uint256 amountOut;
 
@@ -214,11 +218,7 @@ contract UniswapV4SwapperAdapter is ISwapper {
     // ============================================
 
     /// @dev Execute a single-hop exact-input swap and return the output amount
-    function _singleHop(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn
-    ) internal returns (uint256 amountOut) {
+    function _singleHop(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256 amountOut) {
         // Select pool config: if tokenIn IS the base, use second-hop config
         uint24 poolFee = (base != address(0) && tokenIn == base) ? feeOut : fee;
         int24 poolTickSpacing = (base != address(0) && tokenIn == base) ? tickSpacingOut : tickSpacing;
@@ -245,22 +245,14 @@ contract UniswapV4SwapperAdapter is ISwapper {
 
     /// @dev Execute a two-hop exact-input swap: tokenIn → base → tokenOut
     ///      Base token deltas net to zero within the PoolManager's accounting.
-    function _multiHop(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn
-    ) internal returns (uint256 amountOut) {
+    function _multiHop(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256 amountOut) {
         // ── Hop 1: tokenIn → base ──
         bool zfo1 = tokenIn < base;
         (address c0_1, address c1_1) = zfo1 ? (tokenIn, base) : (base, tokenIn);
 
         int256 delta1 = IV4PoolManager(poolManager).swap(
             IV4PoolManager.PoolKey(c0_1, c1_1, fee, tickSpacing, hooks),
-            IV4PoolManager.SwapParams(
-                zfo1,
-                -int256(amountIn),
-                zfo1 ? MIN_SQRT_PRICE_LIMIT : MAX_SQRT_PRICE_LIMIT
-            ),
+            IV4PoolManager.SwapParams(zfo1, -int256(amountIn), zfo1 ? MIN_SQRT_PRICE_LIMIT : MAX_SQRT_PRICE_LIMIT),
             ""
         );
 
@@ -273,11 +265,7 @@ contract UniswapV4SwapperAdapter is ISwapper {
 
         int256 delta2 = IV4PoolManager(poolManager).swap(
             IV4PoolManager.PoolKey(c0_2, c1_2, feeOut, tickSpacingOut, hooksOut),
-            IV4PoolManager.SwapParams(
-                zfo2,
-                -int256(baseAmount),
-                zfo2 ? MIN_SQRT_PRICE_LIMIT : MAX_SQRT_PRICE_LIMIT
-            ),
+            IV4PoolManager.SwapParams(zfo2, -int256(baseAmount), zfo2 ? MIN_SQRT_PRICE_LIMIT : MAX_SQRT_PRICE_LIMIT),
             ""
         );
 
