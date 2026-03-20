@@ -3,7 +3,7 @@ pragma solidity ^0.8.25;
 
 import { Script, console } from "forge-std/Script.sol";
 
-import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
+import { YieldForwarderFactory } from "src/factories/YieldForwarderFactory.sol";
 import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
 
 /// @notice Minimal interface for wstETH conversion functions
@@ -25,7 +25,7 @@ interface IWstETH {
  * @dev Run with: forge script partners/nouns_dao/script/GenerateProposalCalldata.s.sol --fork-url $ETH_RPC_URL -vvvv
  *
  *      This script outputs ready-to-use data for the Nouns DAO UI (nouns.wtf/vote):
- *      - Transaction 1: Deploy PaymentSplitter via Factory
+ *      - Transaction 1: Deploy YieldForwarder via Factory
  *      - Transaction 2: Deploy LidoStrategy via Factory
  *      - Transaction 3: Approve wstETH to Strategy
  *      - Transaction 4: Deposit wstETH into Strategy
@@ -39,6 +39,7 @@ interface IWstETH {
  *
  *      PREREQUISITES:
  *      - LidoStrategyFactory must be deployed to mainnet (update LIDO_STRATEGY_FACTORY)
+ *      - YieldForwarderFactory must be deployed to mainnet (update YIELD_FORWARDER_FACTORY)
  *      - Update all placeholder addresses before production use
  */
 contract GenerateProposalCalldata is Script {
@@ -49,8 +50,9 @@ contract GenerateProposalCalldata is Script {
     /// @notice Nouns DAO Treasury (Executor/Timelock) - DO NOT CHANGE
     address constant NOUNS_TREASURY = 0xb1a32FC9F9D8b2cf86C068Cae13108809547ef71;
 
-    /// @notice PaymentSplitter Factory (already deployed on mainnet) - DO NOT CHANGE
-    address constant PAYMENT_SPLITTER_FACTORY = 0x5711765E0756B45224fc1FdA1B41ab344682bBcb;
+    /// @notice YieldForwarder Factory address
+    /// @dev Placeholder - update when deployed to mainnet
+    address constant YIELD_FORWARDER_FACTORY = 0x5711765E0756B45224fc1FdA1B41ab344682bBcb;
 
     /// @notice wstETH token address on Ethereum mainnet - DO NOT CHANGE
     address constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
@@ -65,13 +67,14 @@ contract GenerateProposalCalldata is Script {
     /// @notice LidoStrategyFactory address - PRODUCTION
     address constant LIDO_STRATEGY_FACTORY = 0xB248Df1fc187Fdb6C89bDc30071e68D235DeC3c2;
 
-    /// @notice Dragon Funding Pool recipient address
-    /// @dev For testing: using deployer address. Update for production.
-    address constant DRAGON_FUNDING_POOL = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
+    /// @notice Nouns Payer contract address (receives forwarded wstETH yield)
+    /// @dev Placeholder - update with actual Nouns Payer contract address
+    address constant NOUNS_PAYER = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
 
-    /// @notice Keeper bot address for calling report()
+    /// @notice Keeper bot EOA that triggers YieldForwarder.reportAndForward()
     /// @dev For testing: using deployer address. Update for production.
     /// @dev CRITICAL: Do NOT use Treasury - would require governance vote for each harvest
+    /// @dev The strategy's keeper will be the YieldForwarder itself (not this EOA directly)
     address constant KEEPER_BOT = 0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200;
 
     /// @notice Emergency admin address
@@ -89,10 +92,10 @@ contract GenerateProposalCalldata is Script {
     /// @dev The actual wstETH amount deposited depends on the stETH/wstETH exchange rate at execution time
     uint256 constant TARGET_ETH_VALUE = 1000 ether;
 
-    /// @notice Salt for deterministic PaymentSplitter deployment
+    /// @notice Salt for deterministic YieldForwarder deployment
     /// @dev Using an explicit salt avoids race conditions where the deployment count
     ///      could change between proposal creation and execution
-    bytes32 constant PAYMENT_SPLITTER_SALT = keccak256("NounsDAO-LidoStrategy-PaymentSplitter-v1");
+    bytes32 constant YIELD_FORWARDER_SALT = keccak256("NounsDAO-LidoStrategy-YieldForwarder-v1");
 
     // ══════════════════════════════════════════════════════════════════════════════
     // MAIN SCRIPT
@@ -107,14 +110,14 @@ contract GenerateProposalCalldata is Script {
         _printHeader();
 
         // Precompute deterministic addresses
-        (address predictedPS, address predictedStrategy) = getPrecomputedAddresses();
+        (address predictedYF, address predictedStrategy) = getPrecomputedAddresses();
 
         _printConfiguration();
-        _printPrecomputedAddresses(predictedPS, predictedStrategy);
+        _printPrecomputedAddresses(predictedYF, predictedStrategy);
 
         // Generate and print all 4 transactions
-        _printTransaction1_DeployPaymentSplitter();
-        _printTransaction2_DeployStrategy(predictedPS);
+        _printTransaction1_DeployYieldForwarder();
+        _printTransaction2_DeployStrategy(predictedYF);
         _printTransaction3_ApproveWstETH(predictedStrategy);
         _printTransaction4_DepositWstETH(predictedStrategy);
 
@@ -129,14 +132,14 @@ contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Get precomputed CREATE2 addresses for PaymentSplitter and Strategy
-     * @return predictedPaymentSplitter The deterministic address where PaymentSplitter will deploy
+     * @notice Get precomputed CREATE2 addresses for YieldForwarder and Strategy
+     * @return predictedYieldForwarder The deterministic address where YieldForwarder will deploy
      * @return predictedStrategy The deterministic address where LidoStrategy will deploy
      */
     function getPrecomputedAddresses()
         public
         view
-        returns (address predictedPaymentSplitter, address predictedStrategy)
+        returns (address predictedYieldForwarder, address predictedStrategy)
     {
         return _computeAddresses();
     }
@@ -159,18 +162,18 @@ contract GenerateProposalCalldata is Script {
             bytes[] memory calldatas
         )
     {
-        (address predictedPS, address predictedStrategy) = _computeAddresses();
+        (address predictedYF, address predictedStrategy) = _computeAddresses();
 
         targets = new address[](4);
         values = new uint256[](4);
         signatures = new string[](4);
         calldatas = new bytes[](4);
 
-        // TX 1: Deploy PaymentSplitter
-        (targets[0], values[0], signatures[0], calldatas[0]) = _getTransaction1_DeployPaymentSplitter();
+        // TX 1: Deploy YieldForwarder
+        (targets[0], values[0], signatures[0], calldatas[0]) = _getTransaction1_DeployYieldForwarder();
 
         // TX 2: Deploy LidoStrategy
-        (targets[1], values[1], signatures[1], calldatas[1]) = _getTransaction2_DeployStrategy(predictedPS);
+        (targets[1], values[1], signatures[1], calldatas[1]) = _getTransaction2_DeployStrategy(predictedYF);
 
         // TX 3: Approve wstETH to Strategy
         (targets[2], values[2], signatures[2], calldatas[2]) = _getTransaction3_ApproveWstETH(predictedStrategy);
@@ -209,31 +212,27 @@ contract GenerateProposalCalldata is Script {
     // INTERNAL HELPERS
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function _computeAddresses() internal view returns (address predictedPS, address predictedStrategy) {
-        // Build payees and shares for salt-based prediction
-        address[] memory payees = new address[](1);
-        payees[0] = DRAGON_FUNDING_POOL;
-        uint256[] memory shares = new uint256[](1);
-        shares[0] = 100;
-
-        // Predict PaymentSplitter address with explicit salt (avoids race conditions in governance)
-        predictedPS = PaymentSplitterFactory(PAYMENT_SPLITTER_FACTORY).predictDeterministicAddressWithSalt(
-            NOUNS_TREASURY,
-            payees,
-            shares,
-            PAYMENT_SPLITTER_SALT
+    function _computeAddresses() internal view returns (address predictedYF, address predictedStrategy) {
+        // Predict YieldForwarder address with explicit salt (avoids race conditions in governance)
+        predictedYF = YieldForwarderFactory(YIELD_FORWARDER_FACTORY).computeYieldForwarderAddress(
+            NOUNS_PAYER,
+            KEEPER_BOT,
+            YIELD_FORWARDER_SALT,
+            NOUNS_TREASURY
         );
 
         // Predict Strategy address using LidoStrategyFactory.computeStrategyAddress()
+        // NOTE: Strategy's _keeper is the YieldForwarder (so it can call report())
+        //       Strategy's _donationAddress is also the YieldForwarder (receives profit shares)
         predictedStrategy = LidoStrategyFactory(LIDO_STRATEGY_FACTORY).computeStrategyAddress(
             WSTETH, // _vault
             WSTETH, // _asset
             STRATEGY_NAME,
             STRATEGY_SYMBOL,
             NOUNS_TREASURY, // _management
-            KEEPER_BOT, // _keeper
+            predictedYF, // _keeper = YieldForwarder (calls report())
             EMERGENCY_ADMIN, // _emergencyAdmin
-            predictedPS, // _donationAddress
+            predictedYF, // _donationAddress = YieldForwarder (receives profit shares)
             false, // _enableBurning
             TOKENIZED_STRATEGY, // _tokenizedStrategyAddress
             NOUNS_TREASURY // _deployer (Treasury will deploy via governance)
@@ -245,40 +244,33 @@ contract GenerateProposalCalldata is Script {
     // ══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Get TX 1 data: Deploy PaymentSplitter
+     * @notice Get TX 1 data: Deploy YieldForwarder
      * @return target Contract address to call
      * @return value ETH value (0)
      * @return signature Function signature
      * @return calldataParams ABI-encoded parameters
      */
-    function _getTransaction1_DeployPaymentSplitter()
+    function _getTransaction1_DeployYieldForwarder()
         internal
         pure
         returns (address target, uint256 value, string memory signature, bytes memory calldataParams)
     {
-        address[] memory payees = new address[](1);
-        payees[0] = DRAGON_FUNDING_POOL;
-        string[] memory payeeNames = new string[](1);
-        payeeNames[0] = "NounsGrants";
-        uint256[] memory shares = new uint256[](1);
-        shares[0] = 100;
-
-        target = PAYMENT_SPLITTER_FACTORY;
+        target = YIELD_FORWARDER_FACTORY;
         value = 0;
-        signature = "createPaymentSplitterWithSalt(address[],string[],uint256[],bytes32)";
-        calldataParams = abi.encode(payees, payeeNames, shares, PAYMENT_SPLITTER_SALT);
+        signature = "createYieldForwarder(address,address,bytes32)";
+        calldataParams = abi.encode(NOUNS_PAYER, KEEPER_BOT, YIELD_FORWARDER_SALT);
     }
 
     /**
      * @notice Get TX 2 data: Deploy LidoStrategy
-     * @param paymentSplitter The predicted PaymentSplitter address
+     * @param yieldForwarder The predicted YieldForwarder address
      * @return target Contract address to call
      * @return value ETH value (0)
      * @return signature Function signature
      * @return calldataParams ABI-encoded parameters
      */
     function _getTransaction2_DeployStrategy(
-        address paymentSplitter
+        address yieldForwarder
     ) internal pure returns (address target, uint256 value, string memory signature, bytes memory calldataParams) {
         target = LIDO_STRATEGY_FACTORY;
         value = 0;
@@ -287,9 +279,9 @@ contract GenerateProposalCalldata is Script {
             STRATEGY_NAME,
             STRATEGY_SYMBOL,
             NOUNS_TREASURY,
-            KEEPER_BOT,
+            yieldForwarder, // _keeper = YieldForwarder (calls report())
             EMERGENCY_ADMIN,
-            paymentSplitter,
+            yieldForwarder, // _donationAddress = YieldForwarder (receives profit shares)
             false,
             TOKENIZED_STRATEGY
         );
@@ -333,17 +325,17 @@ contract GenerateProposalCalldata is Script {
     // TRANSACTION PRINTERS - Use _getTransaction* for data, then print
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function _printTransaction1_DeployPaymentSplitter() internal pure {
+    function _printTransaction1_DeployYieldForwarder() internal pure {
         (
             address target,
             ,
             string memory signature,
             bytes memory calldataParams
-        ) = _getTransaction1_DeployPaymentSplitter();
+        ) = _getTransaction1_DeployYieldForwarder();
 
         console.log("");
         console.log("================================================================================");
-        console.log("TRANSACTION 1: Deploy PaymentSplitter");
+        console.log("TRANSACTION 1: Deploy YieldForwarder");
         console.log("================================================================================");
         console.log("");
         console.log("TARGET (copy this):");
@@ -356,19 +348,18 @@ contract GenerateProposalCalldata is Script {
         console.log("  ", signature);
         console.log("");
         console.log("PARAMETERS:");
-        console.log("  payees:     [", DRAGON_FUNDING_POOL, "]");
-        console.log('  payeeNames: ["NounsGrants"]');
-        console.log("  shares:     [100]");
-        console.log("  salt:       ");
-        console.logBytes32(PAYMENT_SPLITTER_SALT);
+        console.log("  receiver: ", NOUNS_PAYER);
+        console.log("  keeper:   ", KEEPER_BOT);
+        console.log("  salt:     ");
+        console.logBytes32(YIELD_FORWARDER_SALT);
         console.log("");
         console.log("CALLDATA (copy this - parameters only, no selector):");
         console.logBytes(calldataParams);
     }
 
-    function _printTransaction2_DeployStrategy(address paymentSplitter) internal pure {
+    function _printTransaction2_DeployStrategy(address yieldForwarder) internal pure {
         (address target, , string memory signature, bytes memory calldataParams) = _getTransaction2_DeployStrategy(
-            paymentSplitter
+            yieldForwarder
         );
 
         console.log("");
@@ -389,9 +380,9 @@ contract GenerateProposalCalldata is Script {
         console.log("  _name:                     %s", STRATEGY_NAME);
         console.log("  _symbol:                   %s", STRATEGY_SYMBOL);
         console.log("  _management:               ", NOUNS_TREASURY);
-        console.log("  _keeper:                   ", KEEPER_BOT);
+        console.log("  _keeper:                   ", yieldForwarder);
         console.log("  _emergencyAdmin:           ", EMERGENCY_ADMIN);
-        console.log("  _donationAddress:          ", paymentSplitter);
+        console.log("  _donationAddress:          ", yieldForwarder);
         console.log("  _enableBurning:            false");
         console.log("  _tokenizedStrategyAddress: ", TOKENIZED_STRATEGY);
         console.log("");
@@ -468,10 +459,10 @@ contract GenerateProposalCalldata is Script {
         console.log("Add these 4 transactions in order on nouns.wtf/vote:");
         console.log("");
         console.log("--------------------------------------------------------------------------------");
-        console.log("TX 1 - Deploy PaymentSplitter");
+        console.log("TX 1 - Deploy YieldForwarder");
         console.log("--------------------------------------------------------------------------------");
-        console.log("Target:   ", PAYMENT_SPLITTER_FACTORY);
-        console.log("Function: createPaymentSplitterWithSalt(address[],string[],uint256[],bytes32)");
+        console.log("Target:   ", YIELD_FORWARDER_FACTORY);
+        console.log("Function: createYieldForwarder(address,address,bytes32)");
         console.log("");
         console.log("--------------------------------------------------------------------------------");
         console.log("TX 2 - Deploy LidoStrategy");
@@ -510,26 +501,26 @@ contract GenerateProposalCalldata is Script {
         uint256 depositAmount = getDepositAmount();
         console.log("CONFIGURATION:");
         console.log("--------------------------------------------------------------------------------");
-        console.log("  Treasury (Management):    ", NOUNS_TREASURY);
-        console.log("  PaymentSplitter Factory:  ", PAYMENT_SPLITTER_FACTORY);
-        console.log("  LidoStrategy Factory:     ", LIDO_STRATEGY_FACTORY);
-        console.log("  Dragon Funding Pool:      ", DRAGON_FUNDING_POOL);
-        console.log("  Keeper Bot:               ", KEEPER_BOT);
-        console.log("  Emergency Admin:          ", EMERGENCY_ADMIN);
-        console.log("  wstETH Token:             ", WSTETH);
-        console.log("  Tokenized Strategy Impl:  ", TOKENIZED_STRATEGY);
-        console.log("  Strategy Name:             %s", STRATEGY_NAME);
-        console.log("  Strategy Symbol:           %s", STRATEGY_SYMBOL);
-        console.log("  Target ETH Value:          %s ETH", TARGET_ETH_VALUE / 1e18);
-        console.log("  Deposit Amount:            %s wstETH (at current rate)", depositAmount / 1e18);
+        console.log("  Treasury (Management):      ", NOUNS_TREASURY);
+        console.log("  YieldForwarder Factory:     ", YIELD_FORWARDER_FACTORY);
+        console.log("  LidoStrategy Factory:       ", LIDO_STRATEGY_FACTORY);
+        console.log("  Nouns Payer:                ", NOUNS_PAYER);
+        console.log("  Keeper Bot:                 ", KEEPER_BOT);
+        console.log("  Emergency Admin:            ", EMERGENCY_ADMIN);
+        console.log("  wstETH Token:               ", WSTETH);
+        console.log("  Tokenized Strategy Impl:    ", TOKENIZED_STRATEGY);
+        console.log("  Strategy Name:               %s", STRATEGY_NAME);
+        console.log("  Strategy Symbol:             %s", STRATEGY_SYMBOL);
+        console.log("  Target ETH Value:            %s ETH", TARGET_ETH_VALUE / 1e18);
+        console.log("  Deposit Amount:              %s wstETH (at current rate)", depositAmount / 1e18);
         console.log("");
     }
 
-    function _printPrecomputedAddresses(address predictedPS, address predictedStrategy) internal pure {
+    function _printPrecomputedAddresses(address predictedYF, address predictedStrategy) internal pure {
         console.log("PRECOMPUTED ADDRESSES (via CREATE2):");
         console.log("--------------------------------------------------------------------------------");
-        console.log("  PaymentSplitter: ", predictedPS);
-        console.log("  Strategy:        ", predictedStrategy);
+        console.log("  YieldForwarder: ", predictedYF);
+        console.log("  Strategy:       ", predictedStrategy);
         console.log("");
         console.log("NOTE: These addresses are deterministic. The contracts will deploy to these");
         console.log("exact addresses when the proposal executes.");
@@ -542,10 +533,10 @@ contract GenerateProposalCalldata is Script {
         console.log("================================================================================");
         console.log("");
         console.log("1. Update placeholder addresses in this script:");
-        console.log("   - LIDO_STRATEGY_FACTORY: Deploy LidoStrategyFactory to mainnet");
-        console.log("   - DRAGON_FUNDING_POOL:   Get actual grant recipient address");
-        console.log("   - KEEPER_BOT:            Set up dedicated keeper EOA/bot");
-        console.log("   - EMERGENCY_ADMIN:       Decide on emergency admin (Treasury or multisig)");
+        console.log("   - YIELD_FORWARDER_FACTORY: Deploy YieldForwarderFactory to mainnet");
+        console.log("   - NOUNS_PAYER:             Get actual Nouns Payer contract address");
+        console.log("   - KEEPER_BOT:              Set up dedicated keeper EOA/bot");
+        console.log("   - EMERGENCY_ADMIN:         Decide on emergency admin (Treasury or multisig)");
         console.log("");
         console.log("2. Re-run this script to generate production calldata");
         console.log("");

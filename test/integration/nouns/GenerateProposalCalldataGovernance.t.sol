@@ -8,9 +8,10 @@ import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 // Import the actual script we're testing
 import { GenerateProposalCalldata } from "partners/nouns_dao/script/GenerateProposalCalldata.s.sol";
 
-// Import factories for event definitions
+// Import factories for event definitions and bytecode etching
 import { LidoStrategyFactory } from "src/factories/LidoStrategyFactory.sol";
-import { PaymentSplitterFactory } from "src/factories/PaymentSplitterFactory.sol";
+import { YieldForwarderFactory } from "src/factories/YieldForwarderFactory.sol";
+import { YieldForwarder } from "src/core/YieldForwarder.sol";
 
 /// @notice Nouns DAO Governor interface (minimal)
 interface INounsDAOProxy {
@@ -56,7 +57,7 @@ interface IWstETH {
  *      2. Calls getProposalTransactions() to get the EXACT calldata
  *      3. Creates a Nouns DAO proposal with that calldata
  *      4. Executes full governance flow: propose → vote → queue → execute
- *      5. Verifies: PaymentSplitter deployed, Strategy deployed, Treasury has shares
+ *      5. Verifies: YieldForwarder deployed, Strategy deployed, Treasury has shares
  *
  *      If the script changes, this test automatically uses the new values.
  */
@@ -74,8 +75,8 @@ contract GenerateProposalCalldataGovernanceTest is Test {
     /// @notice wstETH token address
     address public constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
-    /// @notice PaymentSplitterFactory mainnet address (needs bytecode etch for new salt-based methods)
-    address public constant PAYMENT_SPLITTER_FACTORY = 0x5711765E0756B45224fc1FdA1B41ab344682bBcb;
+    /// @notice YieldForwarderFactory address (same placeholder as script for bytecode etching)
+    address public constant YIELD_FORWARDER_FACTORY = 0x5711765E0756B45224fc1FdA1B41ab344682bBcb;
 
     /// @notice Vote type: For
     uint8 public constant VOTE_FOR = 1;
@@ -103,7 +104,7 @@ contract GenerateProposalCalldataGovernanceTest is Test {
     uint256 public depositAmount;
 
     /// @notice Actual deployed addresses (captured from events after execution)
-    address public deployedPaymentSplitter;
+    address public deployedYieldForwarder;
     address public deployedStrategy;
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -117,12 +118,11 @@ contract GenerateProposalCalldataGovernanceTest is Test {
 
         // ════════════════════════════════════════════════════════════════════════
         // ETCH UPDATED FACTORY BYTECODE
-        // The mainnet-deployed PaymentSplitterFactory doesn't have the new
-        // salt-based methods yet. Deploy a fresh instance and etch its
-        // runtime bytecode onto the mainnet address.
+        // The mainnet address doesn't have the YieldForwarderFactory yet.
+        // Deploy a fresh instance and etch its runtime bytecode onto the address.
         // ════════════════════════════════════════════════════════════════════════
-        PaymentSplitterFactory updatedFactory = new PaymentSplitterFactory();
-        vm.etch(PAYMENT_SPLITTER_FACTORY, address(updatedFactory).code);
+        YieldForwarderFactory updatedFactory = new YieldForwarderFactory();
+        vm.etch(YIELD_FORWARDER_FACTORY, address(updatedFactory).code);
 
         // ════════════════════════════════════════════════════════════════════════
         // INSTANTIATE THE SCRIPT - This is the key part!
@@ -275,8 +275,8 @@ contract GenerateProposalCalldataGovernanceTest is Test {
 
         // Event signatures
         bytes32 strategyDeploySelector = keccak256("StrategyDeploy(address,address,address,string)");
-        bytes32 paymentSplitterCreatedSelector = keccak256(
-            "PaymentSplitterCreatedWithSalt(address,address,bytes32,address[],string[],uint256[])"
+        bytes32 yieldForwarderCreatedSelector = keccak256(
+            "YieldForwarderCreated(address,address,bytes32,address,address)"
         );
 
         for (uint256 i = 0; i < logs.length; i++) {
@@ -284,23 +284,33 @@ contract GenerateProposalCalldataGovernanceTest is Test {
                 // StrategyDeploy: topic1=deployer, topic2=donationAddress, topic3=strategyAddress
                 deployedStrategy = address(uint160(uint256(logs[i].topics[3])));
                 vm.label(deployedStrategy, "DeployedStrategy");
-            } else if (logs[i].topics[0] == paymentSplitterCreatedSelector) {
-                // PaymentSplitterCreated: topic1=deployer, topic2=paymentSplitter
-                deployedPaymentSplitter = address(uint160(uint256(logs[i].topics[2])));
-                vm.label(deployedPaymentSplitter, "DeployedPaymentSplitter");
+            } else if (logs[i].topics[0] == yieldForwarderCreatedSelector) {
+                // YieldForwarderCreated: topic1=deployer, topic2=forwarderAddress
+                deployedYieldForwarder = address(uint160(uint256(logs[i].topics[2])));
+                vm.label(deployedYieldForwarder, "DeployedYieldForwarder");
             }
         }
 
         // Verify we found both addresses
         require(deployedStrategy != address(0), "StrategyDeploy event not found");
-        require(deployedPaymentSplitter != address(0), "PaymentSplitterCreated event not found");
+        require(deployedYieldForwarder != address(0), "YieldForwarderCreated event not found");
     }
 
     function _verifyExecution() internal view {
         // ════════════════════════════════════════════════════════════════════════
-        // VERIFY: PaymentSplitter deployed (address captured from event)
+        // VERIFY: YieldForwarder deployed and receiver matches expected Payer
         // ════════════════════════════════════════════════════════════════════════
-        assertTrue(deployedPaymentSplitter.code.length > 0, "PaymentSplitter should have bytecode deployed");
+        assertTrue(deployedYieldForwarder.code.length > 0, "YieldForwarder should have bytecode deployed");
+        assertEq(
+            YieldForwarder(deployedYieldForwarder).receiver(),
+            0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200,
+            "YieldForwarder receiver should match Nouns Payer"
+        );
+        assertEq(
+            YieldForwarder(deployedYieldForwarder).keeper(),
+            0x0eCC079C20DaA9fDE0e26b6d745c0b38479ff200,
+            "YieldForwarder keeper should match Keeper Bot"
+        );
 
         // ════════════════════════════════════════════════════════════════════════
         // VERIFY: LidoStrategy deployed (address captured from event)
