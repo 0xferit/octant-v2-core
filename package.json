@@ -26,7 +26,7 @@
   "scripts": {
     "format": "prettier --config .prettierrc --plugin=prettier-plugin-solidity '{script,src,test,verification}/**/*.sol' -w",
     "format:check": "prettier --config .prettierrc --plugin=prettier-plugin-solidity '{script,src,test,verification}/**/*.sol' -c",
-    "lint": "solhint './{src,test}/**/*.sol'",
+    "lint": "solhint './{src,test}/**/*.sol' && solhint --config script/solhint.config.js './script/**/*.sol'",
     "precommit": "lint-staged",
     "build": "forge clean && forge compile --sizes --skip test --skip script",
     "build:contracts": "forge clean && forge compile --sizes --skip test --skip script && ./script/combine-proxy-abis.sh",
