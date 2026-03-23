@@ -129,20 +129,20 @@ contract UniswapV4SwapperIntegrationTest is BaseSwapperIntegrationTest {
 /// @title UniswapV4MultiHopTest
 /// @notice Tests all three routing paths in UniswapV4SwapperAdapter on a mainnet fork
 /// @dev Standalone adapter tests (no forwarder) to exercise:
-///      1. Multi-hop:           USDC --(3000/60)--> WETH --(3000/60)--> LINK
-///      2. tokenOut == base:    USDC --(3000/60)--> WETH  (single-hop, uses fee/tickSpacing)
-///      3. tokenIn == base:     WETH --(3000/60)--> LINK  (single-hop, uses feeOut/tickSpacingOut)
+///      1. Multi-hop:           WETH --(3000/60)--> USDC --(100/1)--> DAI
+///      2. tokenOut == base:    WETH --(3000/60)--> USDC  (single-hop, uses fee/tickSpacing)
+///      3. tokenIn == base:     USDC --(100/1)---> DAI   (single-hop, uses feeOut/tickSpacingOut)
 contract UniswapV4MultiHopTest is Test {
     address internal constant V4_POOL_MANAGER = 0x000000000004444c5dc75cB358380D2e3dE08A90;
-    address internal constant LINK = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
     address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address internal constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
 
-    // Pool params: USDC/WETH (first hop) and LINK/WETH (second hop)
-    uint24 internal constant FEE_USDC_WETH = 3000; // 0.3%
-    int24 internal constant TS_USDC_WETH = 60;
-    uint24 internal constant FEE_LINK_WETH = 3000; // 0.3%
-    int24 internal constant TS_LINK_WETH = 60;
+    // Pool params: WETH/USDC (first hop) and USDC/DAI (second hop)
+    uint24 internal constant FEE_WETH_USDC = 3000; // 0.3%
+    int24 internal constant TS_WETH_USDC = 60;
+    uint24 internal constant FEE_USDC_DAI = 100; // 0.01%
+    int24 internal constant TS_USDC_DAI = 1;
 
     uint256 internal constant SWAP_AMOUNT_USDC = 10_000e6; // 10k USDC
     uint256 internal constant SWAP_AMOUNT_WETH = 1e18; // 1 WETH
@@ -155,133 +155,133 @@ contract UniswapV4MultiHopTest is Test {
         vm.selectFork(mainnetFork);
 
         vm.label(V4_POOL_MANAGER, "V4PoolManager");
-        vm.label(LINK, "LINK");
         vm.label(WETH, "WETH");
         vm.label(USDC, "USDC");
+        vm.label(DAI, "DAI");
         vm.label(swapReceiver, "SwapReceiver");
     }
 
     // ═══════════════════════════════════════════════════════════
-    // MULTI-HOP: USDC → WETH → LINK (neither token is base)
+    // MULTI-HOP: WETH → USDC → DAI (neither token is base)
     // ═══════════════════════════════════════════════════════════
 
-    /// @notice Multi-hop swap: USDC → WETH → LINK via two V4 pools
-    function test_multiHop_USDC_WETH_DAI() public {
+    /// @notice Multi-hop swap: WETH → USDC → DAI via two V4 pools
+    function test_multiHop_WETH_USDC_DAI() public {
         UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
             V4_POOL_MANAGER,
-            FEE_USDC_WETH,
-            TS_USDC_WETH,
+            FEE_WETH_USDC,
+            TS_WETH_USDC,
             address(0), // hooks
-            WETH, // base
-            FEE_LINK_WETH,
-            TS_LINK_WETH,
+            USDC, // base
+            FEE_USDC_DAI,
+            TS_USDC_DAI,
             address(0) // hooksOut
         );
 
-        deal(USDC, address(this), SWAP_AMOUNT_USDC);
-        IERC20(USDC).transfer(address(adapter), SWAP_AMOUNT_USDC);
+        deal(WETH, address(this), SWAP_AMOUNT_WETH);
+        IERC20(WETH).transfer(address(adapter), SWAP_AMOUNT_WETH);
 
-        uint256 amountOut = adapter.swap(USDC, LINK, SWAP_AMOUNT_USDC, 0, swapReceiver);
+        uint256 amountOut = adapter.swap(WETH, DAI, SWAP_AMOUNT_WETH, 0, swapReceiver);
 
-        assertGt(amountOut, 0, "Multi-hop should produce nonzero LINK");
-        assertEq(ERC20(LINK).balanceOf(swapReceiver), amountOut, "Receiver should get exact LINK output");
-        assertEq(ERC20(USDC).balanceOf(address(adapter)), 0, "Adapter should hold no USDC");
+        assertGt(amountOut, 0, "Multi-hop should produce nonzero DAI");
+        assertEq(ERC20(DAI).balanceOf(swapReceiver), amountOut, "Receiver should get exact DAI output");
+        assertEq(ERC20(WETH).balanceOf(address(adapter)), 0, "Adapter should hold no WETH");
     }
 
     /// @notice Multi-hop with minAmountOut slippage protection
     function test_multiHop_respectsMinAmountOut() public {
         UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
             V4_POOL_MANAGER,
-            FEE_USDC_WETH,
-            TS_USDC_WETH,
+            FEE_WETH_USDC,
+            TS_WETH_USDC,
             address(0),
-            WETH,
-            FEE_LINK_WETH,
-            TS_LINK_WETH,
-            address(0)
-        );
-
-        deal(USDC, address(this), SWAP_AMOUNT_USDC);
-        IERC20(USDC).transfer(address(adapter), SWAP_AMOUNT_USDC);
-
-        // Unreasonably high minAmountOut should revert
-        vm.expectRevert();
-        adapter.swap(USDC, LINK, SWAP_AMOUNT_USDC, type(uint256).max, swapReceiver);
-    }
-
-    /// @notice Multi-hop config is correctly set
-    function test_multiHop_config() public {
-        UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
-            V4_POOL_MANAGER,
-            FEE_USDC_WETH,
-            TS_USDC_WETH,
-            address(0),
-            WETH,
-            FEE_LINK_WETH,
-            TS_LINK_WETH,
-            address(0)
-        );
-
-        assertEq(adapter.poolManager(), V4_POOL_MANAGER);
-        assertEq(adapter.fee(), FEE_USDC_WETH);
-        assertEq(adapter.tickSpacing(), TS_USDC_WETH);
-        assertEq(adapter.base(), WETH);
-        assertEq(adapter.feeOut(), FEE_LINK_WETH);
-        assertEq(adapter.tickSpacingOut(), TS_LINK_WETH);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // SINGLE-HOP FALLBACK: tokenOut == base (USDC → WETH)
-    // Uses `fee`/`tickSpacing` for the pool
-    // ═══════════════════════════════════════════════════════════
-
-    /// @notice When tokenOut == base, falls back to single-hop using fee/tickSpacing
-    function test_singleHop_tokenOutIsBase_USDC_WETH() public {
-        UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
-            V4_POOL_MANAGER,
-            FEE_USDC_WETH,
-            TS_USDC_WETH,
-            address(0), // hooks
-            WETH, // base
-            FEE_LINK_WETH,
-            TS_LINK_WETH,
-            address(0) // hooksOut
-        );
-
-        deal(USDC, address(this), SWAP_AMOUNT_USDC);
-        IERC20(USDC).transfer(address(adapter), SWAP_AMOUNT_USDC);
-
-        uint256 amountOut = adapter.swap(USDC, WETH, SWAP_AMOUNT_USDC, 0, swapReceiver);
-
-        assertGt(amountOut, 0, "Single-hop (tokenOut==base) should produce nonzero WETH");
-        assertEq(ERC20(WETH).balanceOf(swapReceiver), amountOut, "Receiver should get exact WETH output");
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // SINGLE-HOP FALLBACK: tokenIn == base (WETH → LINK)
-    // Uses `feeOut`/`tickSpacingOut` for the pool
-    // ═══════════════════════════════════════════════════════════
-
-    /// @notice When tokenIn == base, falls back to single-hop using feeOut/tickSpacingOut
-    function test_singleHop_tokenInIsBase_WETH_DAI() public {
-        UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
-            V4_POOL_MANAGER,
-            FEE_USDC_WETH,
-            TS_USDC_WETH,
-            address(0),
-            WETH,
-            FEE_LINK_WETH,
-            TS_LINK_WETH,
+            USDC,
+            FEE_USDC_DAI,
+            TS_USDC_DAI,
             address(0)
         );
 
         deal(WETH, address(this), SWAP_AMOUNT_WETH);
         IERC20(WETH).transfer(address(adapter), SWAP_AMOUNT_WETH);
 
-        uint256 amountOut = adapter.swap(WETH, LINK, SWAP_AMOUNT_WETH, 0, swapReceiver);
+        // Unreasonably high minAmountOut should revert
+        vm.expectRevert();
+        adapter.swap(WETH, DAI, SWAP_AMOUNT_WETH, type(uint256).max, swapReceiver);
+    }
 
-        assertGt(amountOut, 0, "Single-hop (tokenIn==base) should produce nonzero LINK");
-        assertEq(ERC20(LINK).balanceOf(swapReceiver), amountOut, "Receiver should get exact LINK output");
+    /// @notice Multi-hop config is correctly set
+    function test_multiHop_config() public {
+        UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
+            V4_POOL_MANAGER,
+            FEE_WETH_USDC,
+            TS_WETH_USDC,
+            address(0),
+            USDC,
+            FEE_USDC_DAI,
+            TS_USDC_DAI,
+            address(0)
+        );
+
+        assertEq(adapter.poolManager(), V4_POOL_MANAGER);
+        assertEq(adapter.fee(), FEE_WETH_USDC);
+        assertEq(adapter.tickSpacing(), TS_WETH_USDC);
+        assertEq(adapter.base(), USDC);
+        assertEq(adapter.feeOut(), FEE_USDC_DAI);
+        assertEq(adapter.tickSpacingOut(), TS_USDC_DAI);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SINGLE-HOP FALLBACK: tokenOut == base (WETH → USDC)
+    // Uses `fee`/`tickSpacing` for the pool
+    // ═══════════════════════════════════════════════════════════
+
+    /// @notice When tokenOut == base, falls back to single-hop using fee/tickSpacing
+    function test_singleHop_tokenOutIsBase_WETH_USDC() public {
+        UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
+            V4_POOL_MANAGER,
+            FEE_WETH_USDC,
+            TS_WETH_USDC,
+            address(0), // hooks
+            USDC, // base
+            FEE_USDC_DAI,
+            TS_USDC_DAI,
+            address(0) // hooksOut
+        );
+
+        deal(WETH, address(this), SWAP_AMOUNT_WETH);
+        IERC20(WETH).transfer(address(adapter), SWAP_AMOUNT_WETH);
+
+        uint256 amountOut = adapter.swap(WETH, USDC, SWAP_AMOUNT_WETH, 0, swapReceiver);
+
+        assertGt(amountOut, 0, "Single-hop (tokenOut==base) should produce nonzero USDC");
+        assertEq(ERC20(USDC).balanceOf(swapReceiver), amountOut, "Receiver should get exact USDC output");
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SINGLE-HOP FALLBACK: tokenIn == base (USDC → DAI)
+    // Uses `feeOut`/`tickSpacingOut` for the pool
+    // ═══════════════════════════════════════════════════════════
+
+    /// @notice When tokenIn == base, falls back to single-hop using feeOut/tickSpacingOut
+    function test_singleHop_tokenInIsBase_USDC_DAI() public {
+        UniswapV4SwapperAdapter adapter = new UniswapV4SwapperAdapter(
+            V4_POOL_MANAGER,
+            FEE_WETH_USDC,
+            TS_WETH_USDC,
+            address(0),
+            USDC,
+            FEE_USDC_DAI,
+            TS_USDC_DAI,
+            address(0)
+        );
+
+        deal(USDC, address(this), SWAP_AMOUNT_USDC);
+        IERC20(USDC).transfer(address(adapter), SWAP_AMOUNT_USDC);
+
+        uint256 amountOut = adapter.swap(USDC, DAI, SWAP_AMOUNT_USDC, 0, swapReceiver);
+
+        assertGt(amountOut, 0, "Single-hop (tokenIn==base) should produce nonzero DAI");
+        assertEq(ERC20(DAI).balanceOf(swapReceiver), amountOut, "Receiver should get exact DAI output");
     }
 
     /// @notice Verify fee selection: tokenIn==base uses feeOut/tickSpacingOut, not fee/tickSpacing
@@ -293,35 +293,35 @@ contract UniswapV4MultiHopTest is Test {
             10_000, // fee: intentionally wrong — should NOT be used
             200, // tickSpacing: intentionally wrong — should NOT be used
             address(0),
-            WETH,
-            FEE_LINK_WETH, // feeOut: correct — should be used
-            TS_LINK_WETH, // tickSpacingOut: correct — should be used
+            USDC,
+            FEE_USDC_DAI, // feeOut: correct — should be used
+            TS_USDC_DAI, // tickSpacingOut: correct — should be used
             address(0)
         );
 
-        deal(WETH, address(this), SWAP_AMOUNT_WETH);
-        IERC20(WETH).transfer(address(adapter), SWAP_AMOUNT_WETH);
+        deal(USDC, address(this), SWAP_AMOUNT_USDC);
+        IERC20(USDC).transfer(address(adapter), SWAP_AMOUNT_USDC);
 
         // Should succeed because it uses feeOut/tickSpacingOut, not fee/tickSpacing
-        uint256 amountOut = adapter.swap(WETH, LINK, SWAP_AMOUNT_WETH, 0, swapReceiver);
+        uint256 amountOut = adapter.swap(USDC, DAI, SWAP_AMOUNT_USDC, 0, swapReceiver);
         assertGt(amountOut, 0, "Should use feeOut for tokenIn==base path");
     }
 
     // ═══════════════════════════════════════════════════════════
-    // MULTI-HOP END-TO-END WITH FORWARDER
+    // FORWARDER END-TO-END WITH SWAP
     // ═══════════════════════════════════════════════════════════
 
-    /// @notice Full forwarder flow with multi-hop: strategy USDC profit → WETH → LINK → receiver
-    function test_forwarder_multiHop_USDC_WETH_DAI() public {
-        // Deploy full stack with multi-hop swapper (USDC→WETH→LINK)
-        UniswapV4SwapperAdapter multiHopAdapter = new UniswapV4SwapperAdapter(
+    /// @notice Full forwarder flow: strategy USDC profit → swap to DAI → receiver
+    function test_forwarder_swapAndForward_USDC_DAI() public {
+        // Deploy swapper with base=USDC (strategy profit is USDC, so tokenIn==base → single-hop to DAI)
+        UniswapV4SwapperAdapter swapAdapter = new UniswapV4SwapperAdapter(
             V4_POOL_MANAGER,
-            FEE_USDC_WETH,
-            TS_USDC_WETH,
+            FEE_WETH_USDC,
+            TS_WETH_USDC,
             address(0),
-            WETH,
-            FEE_LINK_WETH,
-            TS_LINK_WETH,
+            USDC,
+            FEE_USDC_DAI,
+            TS_USDC_DAI,
             address(0)
         );
 
@@ -335,7 +335,7 @@ contract UniswapV4MultiHopTest is Test {
         address keeper = address(0xCAFE);
         address recv = address(0xBEEF);
 
-        SwappingYieldForwarder fwd = new SwappingYieldForwarder(recv, keeper, LINK, address(multiHopAdapter));
+        SwappingYieldForwarder fwd = new SwappingYieldForwarder(recv, keeper, DAI, address(swapAdapter));
 
         MorphoCompounderStrategyFactory fac = new MorphoCompounderStrategyFactory{
             salt: keccak256("OCT_MORPHO_COMPOUNDER_STRATEGY_VAULT_FACTORY_V1")
@@ -378,12 +378,12 @@ contract UniswapV4MultiHopTest is Test {
         );
         deal(USDC, stratAddr, 1_000e6);
 
-        // Report, swap (multi-hop USDC→WETH→LINK via V4), forward
+        // Report, swap (USDC→DAI via V4), forward
         vm.prank(keeper);
-        uint256 wbtcOut = fwd.reportSwapAndForward(stratAddr, 10_000, 0);
+        uint256 daiOut = fwd.reportSwapAndForward(stratAddr, 10_000, 0);
         vm.clearMockedCalls();
 
-        assertGt(wbtcOut, 0, "Multi-hop through forwarder should produce LINK");
-        assertEq(ERC20(LINK).balanceOf(recv), wbtcOut, "Receiver should get LINK via multi-hop");
+        assertGt(daiOut, 0, "Forwarder should produce DAI via swap");
+        assertEq(ERC20(DAI).balanceOf(recv), daiOut, "Receiver should get DAI");
     }
 }
