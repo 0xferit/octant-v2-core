@@ -84,6 +84,8 @@ contract DeployProtocol is Script {
         lidoStrategyFactoryAddress = addresses.lidoStrategyFactory;
     }
 
+    // This entrypoint intentionally coordinates multiple conditional deployments.
+    // solhint-disable-next-line code-complexity
     function run() public {
         string memory startingBlock = vm.toString(block.number);
 

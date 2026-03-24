@@ -26,6 +26,17 @@ As PRs get bigger, time to review them scales super-linearly. And long-standing 
 - Set aside a time for PR reviews daily
 - Rebase your branch before requesting review to ensure it's up-to-date
 
+## 📁 Project Structure
+
+### Script directory convention
+
+All scripts live under `script/` (singular, following Foundry convention). There is no `scripts/` directory.
+
+- **Solidity scripts** (`.s.sol`): organized in subdirectories (`deploy/`, `verify/`, `helpers/`, `deployment/`, `demo/`, `prod/`)
+- **Bash utilities** (`.sh`): live at the `script/` root level alongside the Solidity subdirectories
+
+Do not create a `scripts/` directory. If you need to add a new script, place it in `script/`.
+
 ## 🧩 Code Quality Principles
 
 ### Simplicity First
