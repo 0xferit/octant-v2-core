@@ -5,7 +5,7 @@ rekompile                  = true
 verbose                    = false
 debug                      = false
 require                    = 'verification/kontrol/octant-lemmas.k'
-module-import              = ['YDStrategyTest:OCTANT-LEMMAS', 'YSStrategyTest:OCTANT-LEMMAS']
+module-import              = ['YDStrategyTest:OCTANT-LEMMAS', 'YSStrategyTest:OCTANT-LEMMAS', 'YFTest:OCTANT-LEMMAS', 'SYFTest:OCTANT-LEMMAS']
 auxiliary-lemmas           = true
 
 [prove.default]
@@ -76,6 +76,24 @@ match-test                 = [
         "YSStrategyTest.testTransferUserToDragon(address,uint256)",
         "YSStrategyTest.testConversionSolventYS(uint256)",
         "YSStrategyTest.testConversionFallbackInsolventYS(uint256)",
+        # ============================================
+        # YieldForwarder proofs (5)
+        # ============================================
+        "YFTest.testReportAndForwardOnlyKeeper()",
+        "YFTest.testReportAndForwardReceiverGuarantee()",
+        "YFTest.testReportAndForwardNoResidualShares()",
+        "YFTest.testReportAndForwardZeroSharesPassthrough()",
+        "YFTest.testReportAndForwardReturnsRedeemAssets()",
+        # ============================================
+        # SwappingYieldForwarder proofs (7)
+        # ============================================
+        "SYFTest.testReportSwapAndForwardOnlyKeeper()",
+        "SYFTest.testReportSwapAndForwardReceiverGuarantee()",
+        "SYFTest.testReportSwapAndForwardNoResidualSourceAsset()",
+        "SYFTest.testReportSwapAndForwardZeroSharesPassthrough()",
+        "SYFTest.testReportSwapAndForwardZeroRedeemPassthrough()",
+        "SYFTest.testReportSwapAndForwardCorrectTokenRouting()",
+        "SYFTest.testInheritedReportAndForwardAccessControl()",
     ]
 
 [show.default]

@@ -110,3 +110,36 @@ uint256 constant MOCK_YS_EXCHANGE_RATE_DECIMALS_SLOT = 3;
 // TestERC20 (OZ ERC20 v5) constants
 // ============================================
 uint256 constant ERC20_BALANCES_SLOT = 0;
+
+// ============================================
+// ReentrancyGuard (OZ v5.3.0, plain storage slot 0)
+// ============================================
+// YieldForwarder / SwappingYieldForwarder inherit ReentrancyGuard
+// which stores _status at slot 0 (NOT ERC-7201 namespaced)
+uint256 constant RG_STATUS_SLOT = 0;
+uint256 constant RG_NOT_ENTERED = 1;
+
+// ============================================
+// MockForwarderStrategy (MFS_) constants
+// ============================================
+// Plain storage slots for the mock strategy used in YieldForwarder Kontrol proofs
+uint256 constant MFS_SHARE_BALANCE_SLOT = 0;
+uint256 constant MFS_REDEEM_RETURN_SLOT = 1;
+uint256 constant MFS_ASSET_SLOT = 2;
+uint256 constant MFS_LAST_RECEIVER_SLOT = 3;
+uint256 constant MFS_LAST_SHARES_SLOT = 4;
+uint256 constant MFS_LAST_REPORT_CALLER_SLOT = 5;
+uint256 constant MFS_EXPECTED_BALANCE_OF_ACCOUNT_SLOT = 6;
+uint256 constant MFS_LAST_OWNER_SLOT = 7;
+uint256 constant MFS_LAST_MAX_LOSS_SLOT = 8;
+
+// ============================================
+// MockForwarderSwapper (MSWP_) constants
+// ============================================
+// Plain storage slots for the mock swapper used in SwappingYieldForwarder Kontrol proofs
+uint256 constant MSWP_RETURN_SLOT = 0;
+uint256 constant MSWP_LAST_RECEIVER_SLOT = 1;
+uint256 constant MSWP_LAST_TOKEN_IN_SLOT = 2;
+uint256 constant MSWP_LAST_TOKEN_OUT_SLOT = 3;
+uint256 constant MSWP_LAST_AMOUNT_IN_SLOT = 4;
+uint256 constant MSWP_LAST_MIN_AMOUNT_OUT_SLOT = 5;

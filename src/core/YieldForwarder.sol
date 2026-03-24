@@ -2,6 +2,7 @@
 pragma solidity ^0.8.25;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @notice Minimal interface for strategy share redemption
 interface IRedeemable {
@@ -43,7 +44,7 @@ interface IReportable {
  *      - Single-purpose: assets can only flow to the hardcoded receiver
  *      - Strategy is passed as a call-time parameter to avoid circular dependencies
  */
-contract YieldForwarder {
+contract YieldForwarder is ReentrancyGuard {
     // ============================================
     // ERRORS
     // ============================================
@@ -111,7 +112,7 @@ contract YieldForwarder {
      * @param maxLoss Maximum acceptable loss in basis points for the redemption
      * @return assets Amount of underlying assets forwarded to receiver (0 if no profit shares)
      */
-    function reportAndForward(address strategy, uint256 maxLoss) external returns (uint256 assets) {
+    function reportAndForward(address strategy, uint256 maxLoss) external nonReentrant returns (uint256 assets) {
         if (msg.sender != keeper) revert OnlyKeeper();
 
         IReportable(strategy).report();

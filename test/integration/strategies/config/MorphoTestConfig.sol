@@ -16,8 +16,8 @@ library MorphoTestConfig {
     /// @notice Morpho Blue vault address
     address internal constant MORPHO_BLUE_VAULT = 0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB;
 
-    /// @notice Fork block number (latest - 90 days)
-    uint256 internal constant FORK_BLOCK = 22508883 - 6500 * 90;
+    /// @notice Fork block number for mainnet fork tests
+    uint256 internal constant FORK_BLOCK = 24_700_000;
 
     /// @notice Minimum deposit amount for fuzz tests (USDC has 6 decimals)
     uint256 internal constant MIN_DEPOSIT = 1e6;
