@@ -162,6 +162,34 @@ For detailed security and quality requirements (what edge cases to test, anti-pa
 
 ---
 
+## 📐 Architectural Decision Records (ADRs)
+
+ADRs capture durable, cross-file design decisions that don't belong in contract NatSpec or ephemeral PR descriptions. They provide a discoverable, versioned record of why the architecture looks the way it does.
+
+### When to Write an ADR
+
+- Introducing new contract architecture or significant structural changes
+- Choosing between competing patterns, libraries, or approaches
+- Making audit-driven redesigns or responding to security findings
+- Decisions that affect multiple contracts or subsystems
+
+### Format and Location
+
+- ADRs live in `doc/adr/`
+- Naming convention: `ADR-NNN-short-title.md` (e.g., `ADR-001-vault-strategy-pattern.md`)
+- Use the template at [`doc/adr/ADR-000-template.md`](doc/adr/ADR-000-template.md)
+- Required sections: **Status**, **Context** (with alternatives considered), **Decision**, **Consequences**
+- ADRs may link related requirements docs, NatSpec, audit reports, or PRs in an optional **References** section
+
+### ADR Lifecycle
+
+- **Proposed**: Under discussion, included in a PR for review
+- **Accepted**: Merged and in effect
+- **Deprecated**: No longer applies; note why in the status
+- **Superseded by ADR-NNN**: Replaced by a newer decision
+
+---
+
 ## 📚 NatSpec Documentation Standards
 
 **The Four Pillars**: Every NatSpec contribution must adhere to:
