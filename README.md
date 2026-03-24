@@ -230,3 +230,6 @@ BaseStrategy (Abstract)
 3. Add strategy-specific tests in `test/unit/core/` or `test/unit/zodiac-core/`
 4. Create factory in `src/factories/` if permissionless deployment needed
 5. Update documentation with strategy-specific details
+
+**Contract semantic versioning checks**:
+See `CONTRIBUTING.md` for semver policy and workflow details.
