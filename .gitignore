@@ -17,9 +17,7 @@ coverage/
 node_modules/
 reports/
 out/
-docs/*
-!docs/*.md
-!docs/.gitignore
+docs/
 
 .secrets
 .env
