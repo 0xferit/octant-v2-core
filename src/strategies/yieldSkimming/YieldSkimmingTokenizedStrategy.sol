@@ -155,6 +155,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         StrategyData storage S = _strategyStorage();
         YieldSkimmingStorage storage YS = _strategyYieldSkimmingStorage();
 
+        // Burn stale dragon shares before pricing user exits to prevent dilution
+        // by unburned junior capital during insolvency
+        if (owner != S.dragonRouter) {
+            _applyDragonLossProtectionIfNeeded(S, YS);
+        }
+
         // Calculate actual value returned for debt tracking (before redemption)
         uint256 valueToReturn = shares; // 1 share = 1 ETH value, except in case of uncovered loss (regardless of actual assets received)
 
@@ -204,6 +210,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
     ) public override nonReentrant returns (uint256 shares) {
         StrategyData storage S = _strategyStorage();
         YieldSkimmingStorage storage YS = _strategyYieldSkimmingStorage();
+
+        // Burn stale dragon shares before pricing user exits to prevent dilution
+        // by unburned junior capital during insolvency
+        if (owner != S.dragonRouter) {
+            _applyDragonLossProtectionIfNeeded(S, YS);
+        }
 
         // Validate inputs and check limits (replaces super.withdraw validation)
         require(assets <= _maxWithdraw(S, owner), "ERC4626: withdraw more than max");
@@ -694,6 +706,29 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             return exchangeRate * 10 ** (27 - exchangeRateDecimals);
         } else {
             return exchangeRate / 10 ** (exchangeRateDecimals - 27);
+        }
+    }
+
+    /**
+     * @dev Lazily burns dragon shares when the vault is insolvent, so that user exits
+     *      are not diluted by stale junior capital in the totalSupply denominator.
+     *      Only mutates state when burning is enabled AND the vault is currently insolvent.
+     * @param S Strategy storage pointer
+     * @param YS Yield skimming storage pointer
+     */
+    function _applyDragonLossProtectionIfNeeded(StrategyData storage S, YieldSkimmingStorage storage YS) internal {
+        if (!S.enableBurning) return;
+        // Only burn when the vault is insolvent (can't cover user debt).
+        // This is the condition that triggers the pro-rata fallback in _convertToAssets,
+        // which is where dragon shares in totalSupply cause dilution.
+        if (!_isVaultInsolvent()) return;
+
+        uint256 currentRate = _currentRateRay();
+        uint256 currentVaultValue = S.totalAssets.mulDiv(currentRate, WadRayMath.RAY);
+        uint256 totalDebt = YS.totalDebtOwedToUserInAssetValue + YS.dragonRouterDebtInAssetValue;
+
+        if (currentVaultValue < totalDebt) {
+            _handleDragonLossProtection(S, YS, totalDebt - currentVaultValue, currentRate);
         }
     }
 
