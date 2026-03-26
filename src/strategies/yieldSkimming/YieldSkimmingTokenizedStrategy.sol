@@ -285,7 +285,9 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
 
     /**
      * @notice Get the maximum amount of assets that can be withdrawn by a user
-     * @dev Dragon router has restrictions based on solvency protection to ensure user debt coverage
+     * @dev Dragon router has restrictions based on solvency protection to ensure user debt coverage.
+     *      For non-dragon users during insolvency, simulates the lazy dragon burn that will occur
+     *      in withdraw() to return the correct post-burn amount (ERC4626 compliance).
      * @param owner Address whose shares would be burned
      * @return Maximum withdraw amount in asset base units
      */
@@ -302,19 +304,32 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             return Math.min(dragonMaxWithdrawAssets, baseMaxWithdraw);
         }
 
+        // Simulate the lazy burn that withdraw() will perform to reflect post-burn pricing.
+        // Without this, maxWithdraw underreports because _convertToAssets uses totalSupply
+        // that still includes dragon shares (which the lazy burn will remove).
+        uint256 burnAmount = _simulateDragonBurnAmount();
+        if (burnAmount > 0) {
+            uint256 postBurnSupply = _totalSupply(S) - burnAmount;
+            if (postBurnSupply == 0) return 0;
+
+            uint256 ownerShares = _balanceOf(S, owner);
+            return ownerShares.mulDiv(S.totalAssets, postBurnSupply, Math.Rounding.Floor);
+        }
+
         return baseMaxWithdraw;
     }
 
     /**
      * @notice Get the maximum amount of shares that can be redeemed by a user
-     * @dev Dragon router has restrictions based on solvency protection to ensure user debt coverage
+     * @dev Dragon router has restrictions based on solvency protection to ensure user debt coverage.
+     *      For non-dragon users, super.maxRedeem returns _balanceOf(owner) because
+     *      availableWithdrawLimit is uncapped — no burn simulation needed here.
      * @param owner Address whose shares would be burned
      * @return Maximum redeem amount in shares
      */
     function maxRedeem(address owner) public view override returns (uint256) {
         StrategyData storage S = _strategyStorage();
 
-        // Get base max redeem from parent
         uint256 baseMaxRedeem = super.maxRedeem(owner);
 
         // Apply dragon-specific restrictions
@@ -707,6 +722,28 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         } else {
             return exchangeRate / 10 ** (exchangeRateDecimals - 27);
         }
+    }
+
+    /**
+     * @dev Simulates how many dragon shares the lazy burn would remove from totalSupply.
+     *      Used by maxWithdraw/maxRedeem view functions to reflect post-burn pricing.
+     * @return burnAmount Number of dragon shares that would be burned (0 if no burn would occur)
+     */
+    function _simulateDragonBurnAmount() internal view returns (uint256 burnAmount) {
+        StrategyData storage S = _strategyStorage();
+        if (!S.enableBurning || !_isVaultInsolvent()) return 0;
+
+        uint256 dragonBalance = _balanceOf(S, S.dragonRouter);
+        if (dragonBalance == 0) return 0;
+
+        YieldSkimmingStorage storage YS = _strategyYieldSkimmingStorage();
+        uint256 currentRate = _currentRateRay();
+        uint256 currentVaultValue = S.totalAssets.mulDiv(currentRate, WadRayMath.RAY);
+        uint256 totalDebt = YS.totalDebtOwedToUserInAssetValue + YS.dragonRouterDebtInAssetValue;
+
+        if (currentVaultValue >= totalDebt) return 0;
+
+        return Math.min(totalDebt - currentVaultValue, dragonBalance);
     }
 
     /**
