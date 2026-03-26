@@ -873,7 +873,10 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
         data.user1Assets = vault.redeem(vault.balanceOf(data.user1), data.user1, data.user1);
         vm.stopPrank();
 
-        assertEq(data.user1Assets, 66666666666666666666, "User1 should receive expected assets");
+        // With lazy dragon burn fix: dragon shares (50e18) are burned before pricing,
+        // so user1 redeems against totalSupply=325 instead of 375:
+        // 100 * 250e18 / 325 = 76923076923076923076
+        assertEq(data.user1Assets, 76923076923076923076, "User1 should receive expected assets");
         assertEq(vault.balanceOf(data.user1), 0, "User1 should have no shares left");
 
         vm.startPrank(keeper);
@@ -882,7 +885,10 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
         data.dragonSharesAfterLoss = vault.balanceOf(donationAddress);
 
         assertEq(data.profit2, 0, "Should report no profit in second report");
-        assertEq(data.loss2, 91666666666666666666, "Should report expected loss");
+        // Loss is smaller now: dragons were already burned during user1's redeem
+        // Remaining: totalAssets=173076923076923076924, totalDebt=225e18
+        // loss = 225e18 - 173076923076923076924 = 51923076923076923076
+        assertEq(data.loss2, 51923076923076923076, "Should report expected loss");
         assertEq(data.dragonSharesAfterLoss, 0, "All dragon shares should be burned");
 
         _clearMocks();
@@ -901,7 +907,9 @@ abstract contract BaseYieldSkimmingIntegrationTest is BaseIntegrationTest {
 
         assertEq(remainingDragonShares, 0, "All dragon shares should be burned");
         assertEq(vault.totalSupply(), 0, "All shares should be withdrawn");
-        assertEq(remainingAssets, 33333333333333333334, "Expected remaining assets from uncovered loss");
+        // User1 got more (76.92 vs 66.67), so less remains for uncovered loss
+        // 173076923076923076924 - 150e18 = 23076923076923076924
+        assertEq(remainingAssets, 23076923076923076924, "Expected remaining assets from uncovered loss");
     }
 
     /// @notice Test dragon router withdrawal followed by rate recovery - user should have no loss

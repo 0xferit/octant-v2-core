@@ -1221,16 +1221,17 @@ contract LidoStrategyTest is Test {
         vm.stopPrank();
 
         // User1 has 100e18 shares
-        // So user1 receives: 100 shares / 375 shares  * 250e18 = 66.666e18 rETH
+        // With lazy dragon burn fix: dragon shares (50e18) burned first, totalSupply=325
+        // So user1 receives: 100 * 250e18 / 325 = 76923076923076923076 rETH
         assertEq(
             data.user1Assets,
-            66666666666666666666,
-            "User1 should receive 66.666e18 rETH (100e18 shares at last rate 1.5)"
+            76923076923076923076,
+            "User1 should receive 76.923e18 rETH (100e18 shares, dragons burned first)"
         );
         assertEq(
             ERC20(WSTETH).balanceOf(data.user1),
-            66666666666666666666,
-            "User1 balance should be 66.666e18 after withdrawal"
+            76923076923076923076,
+            "User1 balance should be 76.923e18 after withdrawal"
         );
         assertEq(vault.balanceOf(data.user1), 0, "User1 should have no shares left");
 
@@ -1253,7 +1254,8 @@ contract LidoStrategyTest is Test {
         // 3. Deficit (loss) = 183.333e18 - 275e18 = -91.666e18 ETH
         // 4. Loss reported = 91.666e18 ETH ÷ 1.0 rate = 91.666e18 rETH
         assertEq(data.profit2, 0, "Should report no profit in second report");
-        assertEq(data.loss2, 91666666666666666666, "Should report 91.666e18 loss");
+        // Loss is smaller: dragons already burned during user1's redeem
+        assertEq(data.loss2, 51923076923076923076, "Should report 51.923e18 loss");
 
         // Dragon shares burning to cover loss:
         // - Loss to cover: 91.666e18 ETH
@@ -1313,7 +1315,8 @@ contract LidoStrategyTest is Test {
         // This 33.333e18 rETH represents the uncovered portion of the 91.666e18 ETH loss
         // that couldn't be covered by the 50e18 dragon shares that were burned
         console.log("Expected behavior: Assets remain due to uncovered loss");
-        assertEq(remainingAssets, 33333333333333333334, "Expected 33.333e18 rETH to remain from uncovered loss");
+        // User1 got more (76.923 vs 66.667), so less uncovered loss remains
+        assertEq(remainingAssets, 23076923076923076924, "Expected 23.077e18 rETH to remain from uncovered loss");
 
         // lets call report
         vm.startPrank(keeper);
