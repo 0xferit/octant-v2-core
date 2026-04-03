@@ -62,19 +62,11 @@ jobs:
     if: github.head_ref != 'main'
     timeout-minutes: 5
     runs-on: ubuntu-latest
-    container:
-      image: *node_extended_image
-      credentials:
-        username: _json_key_base64
-        password: ${{ secrets.GCP_DOCKER_IMAGES_REGISTRY_SERVICE_ACCOUNT }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Mark workspace as safe
-        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
       - name: Fetch base branch
         run: git fetch origin ${{ github.base_ref }}
@@ -319,20 +311,9 @@ jobs:
     if: github.head_ref != 'main'
     timeout-minutes: 15
     runs-on: ubuntu-latest
-    container:
-      image: *node_extended_image
-      credentials:
-        username: _json_key_base64
-        password: ${{ secrets.GCP_DOCKER_IMAGES_REGISTRY_SERVICE_ACCOUNT }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-
-      - name: LFS checkout
-        run: |
-          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
-          git lfs install --local
-          git -c "http.${GITHUB_SERVER_URL}/storage/lfs/.extraHeader=" lfs pull
 
       - name: Trivy Scan
         uses: golemfoundation/github-actions/octant/trivy-scan@0.4.7
