@@ -1,25 +1,30 @@
 {
-  "$schema": "https://unpkg.com/release-it@18/schema/release-it.json",
-  "git": {
-    "commitMessage": "chore: release v${version}",
-    "commitArgs": ["-S"],
-    "tagArgs": ["-s"]
+  "$schema": "https://unpkg.com/release-it/schema/release-it.json",
+  "plugins": {
+    "./.release-it-custom-version.mjs": {}
   },
-  "github": {
-    "release": true
+  "git": {
+    "changelog": "echo -n ''",
+    "commitMessage": "chore(release): ${version} [skip ci]",
+    "tagName": "${version}",
+    "tagAnnotation": "Release ${version}",
+    "push": true,
+    "pushArgs": ["--follow-tags"],
+    "requireBranch": false,
+    "commit": true,
+    "tag": true
   },
   "npm": {
     "publish": false
   },
-  "hooks": {
-    "after:bump": "yarn build:contracts",
-    "after:github:release": "yarn npm publish"
+  "github": {
+    "release": true,
+    "releaseName": "Release ${version}",
+    "releaseNotes": "git-cliff --tag ${version} --config .cliff.toml -- $CHANGELOG_FROM..HEAD",
+    "autoGenerate": false
   },
-  "plugins": {
-    "@release-it/conventional-changelog": {
-      "preset": "conventionalcommits",
-      "strictSemVer": true,
-      "infile": "CHANGELOG.md"
-    }
+  "hooks": {
+    "before:init": "git fetch --all --tags",
+    "after:bump": "git-cliff --tag ${version} --prepend CHANGELOG.md --config .cliff.toml -- $CHANGELOG_FROM..HEAD"
   }
 }

@@ -1,0 +1,204 @@
+name: '🚀 Production Release'
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Dev tag (e.g., 1.2.0-develop.5) or "main" for hotfix'
+        required: true
+        type: string
+
+concurrency:
+  group: version-release
+  cancel-in-progress: false
+
+env:
+  SERVICE_NAME: octant-v2-core
+  X-GITHUB_ENVIRONMENT: &GITHUB_ENVIRONMENT actions
+  MASTER_BRANCH_NAME: master
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: PREPARE
+  # ─────────────────────────────────────────────────────────────────────────────
+  prepare:
+    name: Calculate release info
+    runs-on: ubuntu-latest
+    environment: *GITHUB_ENVIRONMENT
+    outputs:
+      source-type: ${{ steps.prepare.outputs.source-type }}
+      source-ref: ${{ steps.prepare.outputs.source-ref }}
+      last-release: ${{ steps.prepare.outputs.last-release }}
+      proposed-version: ${{ steps.prepare.outputs.proposed-version }}
+      bump-type: ${{ steps.prepare.outputs.bump-type }}
+      changelog: ${{ steps.prepare.outputs.changelog }}
+    steps:
+      - name: Checkout source code
+        uses: golemfoundation/github-actions/octant/git-checkout-lfs@0.4.7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.HOUSEKEEPER_TOKEN }}
+
+      - name: Setup Node.js and Yarn
+        uses: golemfoundation/github-actions/octant/node-yarn-setup@0.4.7
+        with:
+          npm-auth-token: ${{ secrets.HOUSEKEEPER_PAT_OCTANT_V2_PACKAGES }}
+
+      - name: Prepare release
+        id: prepare
+        uses: golemfoundation/github-actions/octant/release-prepare@0.4.7
+        with:
+          source: ${{ inputs.source }}
+          master-branch: ${{ env.MASTER_BRANCH_NAME }}
+          github-token: ${{ secrets.HOUSEKEEPER_TOKEN }}
+
+      - name: Write job summary
+        uses: golemfoundation/github-actions/octant/write-release-summary@0.4.7
+        with:
+          type: preview
+          source: ${{ inputs.source }}
+          source-type: ${{ steps.prepare.outputs.source-type }}
+          current-version: ${{ steps.prepare.outputs.last-release }}
+          proposed-version: ${{ steps.prepare.outputs.proposed-version }}
+          bump-type: ${{ steps.prepare.outputs.bump-type }}
+          changelog: ${{ steps.prepare.outputs.changelog }}
+          github-repository: ${{ github.repository }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: NOTIFY PENDING
+  # ─────────────────────────────────────────────────────────────────────────────
+  notify-pending:
+    name: Notify pending approval
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: *GITHUB_ENVIRONMENT
+    steps:
+      - name: Notify Mattermost
+        uses: golemfoundation/github-actions/octant/mattermost-notify@0.4.7
+        with:
+          webhook-url: ${{ secrets.MATTERMOST_NOTIFIER_WEBHOOK_PROD }}
+          status: pending
+          title: "Production release pending approval"
+          mention: "@channel"
+          message: |
+            **${{ env.SERVICE_NAME }}** production release is waiting for approval.
+
+            * Source: `${{ inputs.source }}` (${{ needs.prepare.outputs.source-type }})
+            * Proposed Version: `${{ needs.prepare.outputs.proposed-version }}`
+            * Bump Type: `${{ needs.prepare.outputs.bump-type }}`
+            * [Review and Approve](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            **Changelog:**
+            ${{ needs.prepare.outputs.changelog }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: RELEASE AND PUBLISH
+  # ─────────────────────────────────────────────────────────────────────────────
+  release-and-publish:
+    name: Release and publish
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: *GITHUB_ENVIRONMENT
+    outputs:
+      target-tag: ${{ steps.create-release.outputs.tag_name }}
+      sync-pr-url: ${{ steps.sync-pr.outputs.pr_url }}
+    steps:
+      - name: Checkout source code
+        uses: golemfoundation/github-actions/octant/git-checkout-lfs@0.4.7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.HOUSEKEEPER_TOKEN }}
+
+      - name: Setup Node.js and Yarn
+        uses: golemfoundation/github-actions/octant/node-yarn-setup@0.4.7
+        with:
+          npm-auth-token: ${{ secrets.HOUSEKEEPER_PAT_OCTANT_V2_PACKAGES }}
+
+      - name: Configure git
+        uses: golemfoundation/github-actions/octant/git-configure@0.4.7
+        with:
+          gpg-key-base64: ${{ secrets.HOUSEKEEPER_SIGNING_KEY_B64 }}
+          gpg-key-id: ${{ vars.HOUSEKEEPER_SIGNING_KEY_ID }}
+
+      # ─── RELEASE PHASE ───────────────────────────────────────────────────────
+
+      - name: Create release tag
+        id: create-release
+        uses: golemfoundation/github-actions/octant/release-create-tag@0.4.7
+        with:
+          source-type: ${{ needs.prepare.outputs.source-type }}
+          source-ref: ${{ needs.prepare.outputs.source-ref }}
+          version: ${{ needs.prepare.outputs.proposed-version }}
+          master-branch: ${{ env.MASTER_BRANCH_NAME }}
+          github-token: ${{ secrets.HOUSEKEEPER_TOKEN }}
+          changelog-from: ${{ needs.prepare.outputs.last-release }}
+
+      - name: Create sync PR
+        id: sync-pr
+        uses: golemfoundation/github-actions/octant/create-sync-pr@0.4.7
+        with:
+          version: ${{ needs.prepare.outputs.proposed-version }}
+          source: ${{ inputs.source }}
+          source-type: ${{ needs.prepare.outputs.source-type }}
+          github-token: ${{ secrets.HOUSEKEEPER_TOKEN }}
+          github-repository: ${{ github.repository }}
+
+      # ─── PUBLISH PHASE ───────────────────────────────────────────────────────
+
+      - name: Publish package
+        uses: golemfoundation/github-actions/octant/package-publish@0.4.7
+        with:
+          build-command: 'yarn build'
+
+      - name: Write job summary
+        uses: golemfoundation/github-actions/octant/write-release-summary@0.4.7
+        with:
+          type: complete
+          source: ${{ inputs.source }}
+          source-type: ${{ needs.prepare.outputs.source-type }}
+          proposed-version: ${{ needs.prepare.outputs.proposed-version }}
+          service-name: ${{ env.SERVICE_NAME }}
+          sync-pr-url: ${{ steps.sync-pr.outputs.pr_url }}
+          github-repository: ${{ github.repository }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 4: NOTIFY COMPLETE
+  # ─────────────────────────────────────────────────────────────────────────────
+  notify-complete:
+    name: Notify completion
+    needs:
+      - prepare
+      - release-and-publish
+    runs-on: ubuntu-latest
+    environment: *GITHUB_ENVIRONMENT
+    if: always()
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [[ "${{ needs.release-and-publish.result }}" == "success" ]]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=Production release completed. Merge the sync PR to update develop." >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=Production release failed. Check workflow logs for details." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Mattermost
+        uses: golemfoundation/github-actions/octant/mattermost-notify@0.4.7
+        with:
+          webhook-url: ${{ secrets.MATTERMOST_NOTIFIER_WEBHOOK_PROD }}
+          status: ${{ steps.status.outputs.status }}
+          title: "${{ env.SERVICE_NAME }} production release ${{ steps.status.outputs.status }}"
+          message: ${{ steps.status.outputs.message }}
+          fields: |
+            [
+              {"title": "Source", "value": "`${{ inputs.source }}`", "short": true},
+              {"title": "Version", "value": "`${{ needs.prepare.outputs.proposed-version }}`", "short": true},
+              {"title": "Sync PR", "value": "[master -> develop](${{ needs.release-and-publish.outputs.sync-pr-url }})", "short": true},
+              {"title": "Workflow", "value": "[Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "short": true}
+            ]
