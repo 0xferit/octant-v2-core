@@ -72,7 +72,7 @@ jobs:
         run: git fetch origin ${{ github.base_ref }}
 
       - name: Check conventional commits
-        uses: golemfoundation/github-actions/octant/conventional-commits-check@0.4.7
+        uses: golemfoundation/github-actions/octant/conventional-commits-check@0.4.9
         with:
           base-ref: origin/${{ github.base_ref }}
           head-ref: ${{ github.event.pull_request.head.sha }}
@@ -316,7 +316,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Trivy Scan
-        uses: golemfoundation/github-actions/octant/trivy-scan@0.4.7
+        uses: golemfoundation/github-actions/octant/trivy-scan@0.4.9
 
   natspec:
     name: NatSpec Documentation Check
