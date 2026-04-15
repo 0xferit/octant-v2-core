@@ -802,8 +802,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             uint256 dragonBurn = Math.min(lossValue, dragonBalance);
             _burn(S, S.dragonRouter, dragonBurn);
 
-            // update the dragon value debt
-            YS.dragonRouterDebtInAssetValue -= dragonBurn;
+            // Saturating subtraction: dragon-balance and dragon-debt should stay in sync,
+            // but if accounting drifts (e.g. balance > debt) the raw `-=` would underflow
+            // and brick loss protection. Match the defensive pattern used in redeem/withdraw.
+            YS.dragonRouterDebtInAssetValue = YS.dragonRouterDebtInAssetValue > dragonBurn
+                ? YS.dragonRouterDebtInAssetValue - dragonBurn
+                : 0;
 
             emit DonationBurned(S.dragonRouter, dragonBurn, currentRate.rayToWad());
         }
