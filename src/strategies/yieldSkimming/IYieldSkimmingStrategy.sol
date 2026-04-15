@@ -38,21 +38,21 @@ interface IYieldSkimmingStrategy {
     function getCurrentRateRay() external view returns (uint256 currentRateRay);
 
     /**
-     * @notice Total ETH-value debt owed to users (excludes dragon router)
+     * @notice Total underlying-asset-value debt owed to users (excludes dragon router)
      * @dev Units: value-shares where 1 share = 1 unit of asset value
      * @return userDebtInAssetValue Users’ combined value debt
      */
     function gettotalDebtOwedToUserInAssetValue() external view returns (uint256 userDebtInAssetValue);
 
     /**
-     * @notice Total ETH-value debt owed to dragon router
+     * @notice Total underlying-asset-value debt owed to dragon router
      * @dev Increases on profit mints, decreases on loss burns or debt rebalancing
      * @return dragonDebtInAssetValue Dragon router value debt
      */
     function getDragonRouterDebtInAssetValue() external view returns (uint256 dragonDebtInAssetValue);
 
     /**
-     * @notice Combined ETH-value debt owed to users and dragon router
+     * @notice Combined underlying-asset-value debt owed to users and dragon router
      * @return totalDebtInAssetValue Users + dragon value debt
      */
     function getTotalValueDebtInAssetValue() external view returns (uint256 totalDebtInAssetValue);
