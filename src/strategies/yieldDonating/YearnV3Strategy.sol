@@ -150,6 +150,10 @@ contract YearnV3Strategy is BaseHealthCheck {
     /**
      * @dev Emergency withdrawal after strategy shutdown
      * @param _amount Amount of assets to withdraw in asset base units
+     * @custom:security Delegates to `_freeFunds`, which calls the Yearn v3 vault
+     *                  with `maxLoss = 10_000` BPS (100%). This preserves the
+     *                  shared `emergencyWithdraw(uint256)` ABI; emergency admins
+     *                  must assess acceptable Yearn loss off-chain before calling.
      */
     function _emergencyWithdraw(uint256 _amount) internal override {
         _freeFunds(_amount);
