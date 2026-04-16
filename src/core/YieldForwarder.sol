@@ -3,6 +3,7 @@ pragma solidity ^0.8.25;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @notice Minimal interface for strategy share redemption
@@ -14,6 +15,14 @@ interface IRedeemable {
     /// @param maxLoss Maximum acceptable loss in basis points
     /// @return assets Amount of assets returned
     function redeem(uint256 shares, address receiver, address owner, uint256 maxLoss) external returns (uint256 assets);
+}
+
+/// @notice Minimal interface for ERC-4626 maxRedeem
+interface IMaxRedeem {
+    /// @notice Maximum shares redeemable by `owner` right now (ERC-4626)
+    /// @param owner Address whose redeem headroom is queried
+    /// @return maxShares Upper bound on shares redeemable by `owner`
+    function maxRedeem(address owner) external view returns (uint256 maxShares);
 }
 
 /// @notice Minimal interface for triggering a strategy report
@@ -173,16 +182,28 @@ contract YieldForwarder is ReentrancyGuard {
      *      If report() produces no profit shares, the function returns 0 without reverting
      *      (the report itself may still be useful for loss accounting).
      *
+     *      The inner redemption is capped at `strategy.maxRedeem(this)` so that a tight
+     *      external vault (idle + vaultMax shrinking below the forwarder's share balance)
+     *      cannot roll back `report()`. Residual shares remain at the forwarder and are
+     *      picked up on a later call; `report()`'s side effects always commit.
      * @param strategy Address of the strategy contract (must implement IReportable, IRedeemable, IERC20)
      * @param maxLoss Maximum acceptable loss in basis points for the redemption
      * @return assets Amount of underlying assets forwarded to receiver (0 if no profit shares)
+     * @custom:security Only callable by the immutable `keeper`; destination is the immutable `receiver`
      */
     function reportAndForward(address strategy, uint256 maxLoss) external nonReentrant returns (uint256 assets) {
         if (msg.sender != keeper) revert OnlyKeeper();
 
         IReportable(strategy).report();
 
-        uint256 shares = IERC20(strategy).balanceOf(address(this));
+        uint256 balance = IERC20(strategy).balanceOf(address(this));
+        if (balance == 0) return 0;
+
+        // Cap at strategy.maxRedeem so the inner redeem does not revert when external
+        // vault liquidity (idle + vaultMax) shrinks below the forwarder's share balance.
+        // Residual shares stay at the forwarder and are picked up on a later report once
+        // headroom recovers; the report() side effects above still commit.
+        uint256 shares = Math.min(balance, IMaxRedeem(strategy).maxRedeem(address(this)));
         if (shares == 0) return 0;
 
         assets = IRedeemable(strategy).redeem(shares, receiver, address(this), maxLoss);
