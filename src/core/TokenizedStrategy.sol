@@ -1464,7 +1464,18 @@ abstract contract TokenizedStrategy {
     /**
      * @notice Sets whether to enable burning shares from dragon router during loss protection.
      * @dev Can only be called by the current `management`.
+     *
+     *      Operator note -- dragon-router compatibility: when `dragonRouter` is a
+     *      contract that drains its own share balance on every `report()` (for
+     *      example a YieldForwarder), burn-based loss absorption is best-effort at
+     *      best. Residual balances held by the dragon at loss time are not
+     *      guaranteed, so burns may absorb little or nothing and the shortfall is
+     *      socialized across depositors via PPS reduction. Operators who need to
+     *      rely on `enableBurning = true` should point `dragonRouter` at an EOA,
+     *      multisig, or a splitter that retains balance between reports, not at a
+     *      self-draining forwarder.
      * @param _enableBurning Whether to enable the burning mechanism.
+     * @custom:security Only callable by the current `management`
      */
     function setEnableBurning(bool _enableBurning) external onlyManagement {
         _strategyStorage().enableBurning = _enableBurning;

@@ -43,6 +43,19 @@ interface IReportable {
  *      - Keeper-gated: only the designated keeper can trigger
  *      - Single-purpose: assets can only flow to the hardcoded receiver
  *      - Strategy is passed as a call-time parameter to avoid circular dependencies
+ *
+ *      COMPATIBILITY NOTE -- `enableBurning` loss absorption:
+ *      A YieldForwarder is not a reliable `dragonRouter` for loss absorption.
+ *      `reportAndForward` tries to drain the forwarder's share balance after every
+ *      report, but the redemption is only best-effort: it is capped at
+ *      `strategy.maxRedeem(forwarder)` (residual shares remain when external vault
+ *      headroom is tight) and it is skipped entirely when `convertToAssets(shares)`
+ *      rounds to zero on a loss-impaired strategy (dust share balances remain).
+ *      Under `enableBurning = true`, only whatever happens to be sitting at the
+ *      forwarder at loss time can be burned, and that amount is not guaranteed.
+ *      Operators who want to actually rely on burn-based loss protection must use
+ *      a non-forwarder dragon (EOA, multisig, or a splitter that retains balance
+ *      between reports).
  */
 contract YieldForwarder is ReentrancyGuard {
     // ============================================
