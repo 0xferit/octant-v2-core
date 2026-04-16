@@ -64,9 +64,41 @@ interface IReportable {
  *      `reportAndForward` (and, for the swapping variant, `reportSwapAndForward`).
  *      Management must retain an operational channel (multisig, automation key,
  *      etc.) to call those keeper-gated strategy functions directly. For airdrops
- *      routed through `sweepAirdrop`, management should immediately follow up
- *      with `YieldForwarder.forwardToken(airdropToken)` to move the swept balance
- *      onward to the hardcoded receiver.
+ *      routed through `sweepAirdrop`, management should coordinate an immediate
+ *      keeper call to `YieldForwarder.forwardToken(airdropToken)` to move the
+ *      swept balance onward to the hardcoded receiver.
+ *
+ *      MIGRATION NOTE -- 14-day dragon-router cooldown:
+ *      Because this contract is intended to act as both `keeper` and
+ *      `dragonRouter`, migrating a strategy to or away from a forwarder is
+ *      coupled to the TokenizedStrategy dragon-router cooldown. On
+ *      TokenizedStrategy, `setKeeper(address)` takes effect immediately, but
+ *      `setDragonRouter(address)` only enqueues the change -- it emits
+ *      `PendingDragonRouterChange` and starts a 14-day timer, and the new
+ *      router only becomes active once anyone calls
+ *      `finalizeDragonRouterChange()` after the cooldown has elapsed. In
+ *      practice every forwarder swap is a >=14-day operation. The delay is an
+ *      intentional security invariant of the yield-skim design and is not
+ *      bypassable by design.
+ *
+ *      For compromised-keeper incident response, the correct posture is:
+ *        1. Call `setKeeper(newKeeper)` on the strategy (onlyManagement).
+ *           This takes effect immediately and neutralises the compromised
+ *           forwarder: the forwarder's `reportAndForward` (and
+ *           `reportSwapAndForward`) now revert inside `strategy.report()`
+ *           because the strategy no longer recognises the old forwarder as a
+ *           keeper. No 14-day wait is involved in this step.
+ *        2. Concurrently call `setDragonRouter(newRouter)` on the strategy
+ *           to queue the donation-address change and start the 14-day
+ *           cooldown.
+ *        3. After 14 days, call `finalizeDragonRouterChange()` on the
+ *           strategy to activate the new dragon router.
+ *        4. Optional: `shutdownStrategy()` can be used at any point during
+ *           the response to block new deposits and mints. It does NOT stop
+ *           `report()`, `tend()`, or donation-share minting on profit --
+ *           those continue to work post-shutdown -- so shutdown is a
+ *           deposit-inflow brake, not a way to neutralise a compromised
+ *           keeper. Use step 1 for that.
  */
 contract YieldForwarder is ReentrancyGuard {
     // ============================================
