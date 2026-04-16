@@ -56,6 +56,17 @@ interface IReportable {
  *      Operators who want to actually rely on burn-based loss protection must use
  *      a non-forwarder dragon (EOA, multisig, or a splitter that retains balance
  *      between reports).
+ *
+ *      OPERATIONAL NOTE -- airdrop / keeper-only strategy APIs:
+ *      When this contract is wired in as a strategy's `keeper`, any strategy
+ *      function gated by `onlyKeepers` (for example SparkStrategy.sweepAirdrop)
+ *      cannot be invoked by this contract -- this forwarder only exposes
+ *      `reportAndForward` (and, for the swapping variant, `reportSwapAndForward`).
+ *      Management must retain an operational channel (multisig, automation key,
+ *      etc.) to call those keeper-gated strategy functions directly. For airdrops
+ *      routed through `sweepAirdrop`, management should immediately follow up
+ *      with `YieldForwarder.forwardToken(airdropToken)` to move the swept balance
+ *      onward to the hardcoded receiver.
  */
 contract YieldForwarder is ReentrancyGuard {
     // ============================================
