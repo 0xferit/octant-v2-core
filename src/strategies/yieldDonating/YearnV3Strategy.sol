@@ -126,23 +126,24 @@ contract YearnV3Strategy is BaseHealthCheck {
      */
     function _deployFunds(uint256 _amount) internal override {
         IERC20(asset).forceApprove(yearnVault, _amount);
-        ITokenizedStrategy(yearnVault).deposit(_amount, address(this));
+        // Assert the target vault credited shares. A zero-share outcome (e.g., high PPS combined
+        // with a tiny deposit, or a misbehaving downstream vault) would consume the asset without
+        // recognising a position, silently stranding funds.
+        uint256 shares = ITokenizedStrategy(yearnVault).deposit(_amount, address(this));
+        require(shares > 0, "YearnV3Strategy: zero shares minted");
         IERC20(asset).forceApprove(yearnVault, 0);
     }
 
     /**
      * @dev Withdraws assets from Yearn v3 vault
      * @param _amount Amount of assets to withdraw in asset base units
-     * @custom:security maxLoss set to 100% (10_000 BPS) to prevent revert cascades
-     *                  MultistrategyVault enforces actual loss limits via updateDebt
+     * @custom:security Target `withdraw` returns shares burned, not assets received.
+     *                  `TokenizedStrategy._withdraw` measures the post-call asset
+     *                  balance and applies the caller's max-loss limit. The Yearn
+     *                  call accepts 100% target-vault loss so the outer accounting
+     *                  can observe and enforce the realised result.
      */
     function _freeFunds(uint256 _amount) internal override {
-        // NOTE: maxLoss is set to 10_000 (100%) to ensure withdrawals don't revert when the Yearn vault
-        // has unrealized losses. This is necessary because:
-        // 1. When the TokenizedStrategy needs funds, it calls freeFunds() to withdraw from the underlying Yearn vault
-        // 2. Without accepting losses here, any slippage/loss in Yearn would cause the withdrawal to fail
-        // 3. The MultistrategyVault performs its own loss checks after withdrawal via updateDebt's maxLoss parameter
-        // This allows the strategy to always provide liquidity while loss protection is enforced at the vault level.
         ITokenizedStrategy(yearnVault).withdraw(_amount, address(this), address(this), 10_000);
     }
 

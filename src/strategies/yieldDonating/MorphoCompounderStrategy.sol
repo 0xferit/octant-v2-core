@@ -129,15 +129,20 @@ contract MorphoCompounderStrategy is BaseHealthCheck {
      */
     function _deployFunds(uint256 _amount) internal override {
         IERC20(asset).forceApprove(compounderVault, _amount);
-        ITokenizedStrategy(compounderVault).deposit(_amount, address(this));
+        // Assert the target vault credited shares. A zero-share outcome (e.g., high PPS combined
+        // with a tiny deposit, or a misbehaving downstream vault) would consume the asset without
+        // recognising a position, silently stranding funds.
+        uint256 shares = ITokenizedStrategy(compounderVault).deposit(_amount, address(this));
+        require(shares > 0, "MorphoCompounderStrategy: zero shares minted");
         IERC20(asset).forceApprove(compounderVault, 0);
     }
 
     /**
      * @dev Withdraws assets from Morpho compounder vault
      * @param _amount Amount of assets to withdraw in asset base units
-     * @custom:security maxLoss set to 100% (10_000 BPS) to prevent revert cascades
-     *                  MultistrategyVault enforces actual loss limits via updateDebt
+     * @custom:security Target `withdraw` returns shares burned, not assets received.
+     *                  `TokenizedStrategy._withdraw` measures the post-call asset
+     *                  balance and applies the caller's max-loss limit.
      */
     function _freeFunds(uint256 _amount) internal override {
         ITokenizedStrategy(compounderVault).withdraw(_amount, address(this), address(this), 10_000);

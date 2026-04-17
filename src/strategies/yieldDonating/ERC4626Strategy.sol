@@ -113,16 +113,22 @@ contract ERC4626Strategy is BaseHealthCheck {
      */
     function _deployFunds(uint256 _amount) internal override {
         IERC20(asset).forceApprove(targetVault, _amount);
-        IERC4626(targetVault).deposit(_amount, address(this));
+        // Assert the target vault credited shares. A zero-share outcome (e.g., high PPS combined
+        // with a tiny deposit, or a misbehaving downstream vault) would consume the asset without
+        // recognising a position, silently stranding funds.
+        uint256 shares = IERC4626(targetVault).deposit(_amount, address(this));
+        require(shares > 0, "ERC4626Strategy: zero shares minted");
         IERC20(asset).forceApprove(targetVault, 0);
     }
 
     /**
      * @dev Withdraws assets from ERC4626 vault
      * @param _amount Amount of assets to withdraw in asset base units
+     * @custom:security `withdraw` returns shares burned, not assets received.
+     *                  `TokenizedStrategy._withdraw` measures the post-call
+     *                  asset balance and applies the caller's max-loss limit.
      */
     function _freeFunds(uint256 _amount) internal override {
-        // Withdraw the requested amount from the vault
         IERC4626(targetVault).withdraw(_amount, address(this), address(this));
     }
 
