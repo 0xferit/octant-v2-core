@@ -23,7 +23,26 @@ import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
  *      - Works with any standard ERC4626 vault (Spark, Yearn v3, etc.)
  *      - Vault must have manipulation-resistant convertToAssets implementation
  *
+ *      INTEGRATOR WARNING — per-target audit required:
+ *      ERC-4626 compliance is a spec-level claim. Several production vaults that
+ *      advertise conformance still have edge cases that break the semantics this
+ *      strategy relies on (in particular `availableDepositLimit` /
+ *      `availableWithdrawLimit`, which trust the target vault's `maxDeposit` /
+ *      `maxWithdraw` at face value):
+ *        - MetaMorpho-style vaults can return `maxDeposit == 0` as a normal
+ *          operating state while their curator reallocates liquidity across
+ *          markets. Deposits must be expected to fail with "deposit more than
+ *          max" during those windows even though the strategy code is correct.
+ *        - Euler-V2-style vaults' `max*` values can be inaccurate once hooks are
+ *          installed on the vault — the vault's own documentation notes that
+ *          "some hook configurations may cause the vault to not be fully
+ *          ERC-4626 compliant".
+ *      Every target vault MUST be studied and audited individually before this
+ *      strategy is deployed against it. Do not treat ERC-4626 conformance as a
+ *      blanket security guarantee.
+ *
  * @custom:security ERC4626 vault convertToAssets must be manipulation-resistant
+ * @custom:security Target vault must be audited individually before deployment
  */
 contract ERC4626Strategy is BaseHealthCheck {
     using SafeERC20 for IERC20;
