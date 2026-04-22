@@ -11,6 +11,10 @@ import { MockERC20 } from "test/mocks/MockERC20.sol";
 import { BaseYieldDonatingIntegrationTest } from "./base/BaseYieldDonatingIntegrationTest.sol";
 import { SparkSUsdsTestConfig } from "../config/SparkSUsdsTestConfig.sol";
 
+interface ISUsdsLike {
+    function ssr() external view returns (uint256);
+}
+
 /// @title Spark sUSDS Yield Donating Test
 /// @author Octant
 /// @notice Integration tests for the yield-donating SparkStrategy against the Spark sUSDS
@@ -23,6 +27,8 @@ contract SparkSUsdsDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
     SparkStrategy public strategy;
     SparkStrategyFactory public factory;
+
+    uint256 internal constant RAY = 1e27;
 
     // Mock airdrop tokens for sweepAirdrop tests
     MockERC20 public airdropToken;
@@ -345,9 +351,7 @@ contract SparkSUsdsDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
     // ========== SSR ACCRUAL (sUSDS-SPECIFIC) ==========
 
-    /// @notice Verify that warping time accrues Sky Savings Rate (SSR) yield on the strategy's
-    ///         sUSDS position. Uses the vault's own drip() if present, otherwise relies on
-    ///         convertToAssets being time-sensitive on the live contract.
+    /// @notice Verify that warping time accrues Sky Savings Rate (SSR) yield on the strategy's sUSDS position.
     function testSUsdsSSRAccrual() public {
         uint256 depositAmount = _ssrTestDeposit();
 
@@ -362,19 +366,24 @@ contract SparkSUsdsDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
         uint256 shares = IERC4626(_compounderVault()).balanceOf(address(strategy));
         uint256 assetsBefore = IERC4626(_compounderVault()).convertToAssets(shares);
+        uint256 ssr = ISUsdsLike(_compounderVault()).ssr();
 
         vm.warp(block.timestamp + 365 days);
 
-        // Poke the rate accumulator if the vault exposes drip(); ignore if it doesn't.
+        // sUSDS exposes drip() to fold accumulated rate into chi. Require success so a
+        // future rename/removal is caught here rather than silently skipping the accrual check.
         (bool success, ) = _compounderVault().call(abi.encodeWithSignature("drip()"));
-        if (success) {
-            uint256 assetsAfter = IERC4626(_compounderVault()).convertToAssets(shares);
-            assertGe(assetsAfter, assetsBefore, "sUSDS should accrue SSR yield over time");
-        }
+        assertTrue(success, "sUSDS drip() must succeed - vault interface changed");
+
+        uint256 assetsAfter = IERC4626(_compounderVault()).convertToAssets(shares);
+        assertGe(assetsAfter, assetsBefore, "sUSDS share value must never decrease over time");
+        if (ssr <= RAY) vm.skip(true);
+
+        assertGt(assetsAfter, assetsBefore, "sUSDS share value should increase when SSR is active");
     }
 
     /// @notice Fast-forward + keeper report should surface SSR-accrued yield as donation shares
-    ///         WITHOUT any mocking of convertToAssets.
+    ///         without mocking target-vault accounting.
     function testSSRAccrualSurfacesAsDonationOnReport() public {
         uint256 depositAmount = _ssrTestDeposit();
 
@@ -389,11 +398,12 @@ contract SparkSUsdsDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
         uint256 donationBefore = ERC20(address(vault)).balanceOf(donationAddress);
         uint256 totalAssetsBefore = vault.totalAssets();
+        uint256 ssr = ISUsdsLike(_compounderVault()).ssr();
 
         // Warp a year and drip the vault so the SSR has something to accumulate into.
         vm.warp(block.timestamp + 365 days);
         (bool dripOk, ) = _compounderVault().call(abi.encodeWithSignature("drip()"));
-        dripOk; // ignored: drip() is a no-op / absent on some vault versions
+        assertTrue(dripOk, "sUSDS drip() must succeed - vault interface changed");
 
         vm.startPrank(keeper);
         (uint256 profit, uint256 loss) = vault.report();
@@ -403,11 +413,13 @@ contract SparkSUsdsDonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         // Otherwise this asserts the no-loss invariant only (still a meaningful gate).
         assertEq(loss, 0, "SSR accrual must never produce loss");
 
-        if (profit > 0) {
-            uint256 donationAfter = ERC20(address(vault)).balanceOf(donationAddress);
-            assertGt(donationAfter, donationBefore, "SSR profit should mint shares to donation address");
-            assertGt(vault.totalAssets(), totalAssetsBefore, "Total assets should grow with SSR");
-        }
+        if (ssr <= RAY) vm.skip(true);
+
+        uint256 donationAfter = ERC20(address(vault)).balanceOf(donationAddress);
+
+        assertGt(profit, 0, "Active SSR should surface as profit");
+        assertGt(donationAfter, donationBefore, "SSR profit should mint shares to donation address");
+        assertGt(vault.totalAssets(), totalAssetsBefore, "Total assets should grow with SSR");
     }
 
     /// @notice Test deposit cap handling
