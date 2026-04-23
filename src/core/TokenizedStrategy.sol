@@ -599,7 +599,7 @@ abstract contract TokenizedStrategy {
         // Set decimals based off the `asset`.
         S.decimals = ERC20(_asset).decimals();
 
-        // Set last report to this block.
+        // Set last report to the current block timestamp.
         S.lastReport = uint96(block.timestamp);
 
         // Set the default management address. Can't be 0.
