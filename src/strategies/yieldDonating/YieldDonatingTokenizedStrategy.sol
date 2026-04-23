@@ -92,9 +92,14 @@ contract YieldDonatingTokenizedStrategy is TokenizedStrategy {
             }
             uint256 sharesToMint = _convertToShares(S, profit, Math.Rounding.Floor);
 
-            // mint the shares to the dragon router
-            _mint(S, _dragonRouter, sharesToMint);
-            emit DonationMinted(_dragonRouter, sharesToMint);
+            // Floor rounding can map dust profit to zero shares; skip the no-op mint and
+            // DonationMinted emission so off-chain indexers do not see a donation event
+            // without a corresponding supply change.
+            if (sharesToMint != 0) {
+                // mint the shares to the dragon router
+                _mint(S, _dragonRouter, sharesToMint);
+                emit DonationMinted(_dragonRouter, sharesToMint);
+            }
         } else {
             unchecked {
                 loss = oldTotalAssets - newTotalAssets;
