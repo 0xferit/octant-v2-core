@@ -39,7 +39,8 @@ contract YearnV3Strategy is BaseHealthCheck {
 
     /**
      * @notice Initializes the Yearn v3 strategy
-     * @dev Validates asset matches Yearn vault's asset and approves max allowance
+     * @dev Validates asset matches Yearn vault's asset. Approval is granted per-deposit
+     *      in `_deployFunds` and explicitly cleared after the Yearn vault call.
      * @param _yearnVault Address of the Yearn v3 vault this strategy deposits into
      * @param _asset Address of the underlying asset (must match Yearn vault's asset)
      * @param _name Strategy display name (e.g., "Octant Yearn USDC Strategy")
@@ -77,7 +78,6 @@ contract YearnV3Strategy is BaseHealthCheck {
     {
         // make sure asset is Yearn vault's asset
         require(ITokenizedStrategy(_yearnVault).asset() == _asset, "Asset mismatch with compounder vault");
-        IERC20(_asset).forceApprove(_yearnVault, type(uint256).max);
         yearnVault = _yearnVault;
     }
 
@@ -116,9 +116,14 @@ contract YearnV3Strategy is BaseHealthCheck {
     /**
      * @dev Deposits idle assets into Yearn v3 vault
      * @param _amount Amount of assets to deploy in asset base units
+     * @custom:security Approves exactly `_amount` and clears the allowance after
+     *                  `deposit`, leaving no standing claim against the strategy's
+     *                  idle balance even if a target vault under-pulls.
      */
     function _deployFunds(uint256 _amount) internal override {
+        IERC20(asset).forceApprove(yearnVault, _amount);
         ITokenizedStrategy(yearnVault).deposit(_amount, address(this));
+        IERC20(asset).forceApprove(yearnVault, 0);
     }
 
     /**
