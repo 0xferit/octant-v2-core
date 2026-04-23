@@ -224,8 +224,15 @@ abstract contract TokenizedStrategy {
         // ============================================
         
         /// @notice The underlying ERC20 asset token
-        /// @dev Must be ERC20-compliant. Set once during initialize() and never changes
-        ///      Strategy deposits/withdraws this token to/from yield sources
+        /// @dev Must be ERC20-compliant. Set once during initialize() and never changes.
+        ///      Strategy deposits/withdraws this token to/from yield sources.
+        ///      Fee-on-transfer (FOT) and rebasing tokens are NOT supported:
+        ///      `deposit` / `mint` route the declared `assets` amount through the
+        ///      accounting math without a pre-/post-balance reconciliation, so a
+        ///      token that transfers less than it claims (transfer fee) or that
+        ///      rebases its balance between accounting events would leave the
+        ///      tracked `totalAssets` out of sync with the on-chain balance and
+        ///      corrupt every ERC-4626 conversion that depends on PPS.
         ERC20 asset;
         
         /// @notice Human-readable name of the strategy share token
