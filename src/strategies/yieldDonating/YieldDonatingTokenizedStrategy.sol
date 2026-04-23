@@ -36,6 +36,23 @@ contract YieldDonatingTokenizedStrategy is TokenizedStrategy {
      * @notice Reports strategy performance and distributes profits as donations
      * @dev Mints profit-derived shares to dragon router when newTotalAssets > oldTotalAssets; on loss, attempts
      *      dragon share burning if enabled. Residual loss reduces PPS (no tracked-loss bucket).
+     *
+     *      Keeper trust assumption: report() timing is at the keeper's discretion and directly controls
+     *      when dragon shares mint (on profit) and burn (on loss). A compromised keeper can time calls
+     *      adversarially — for example, call report() during a temporary dip to burn dragon shares at
+     *      the depressed PPS and then call again on recovery so the rebound is captured as fresh
+     *      dragon-mint profit rather than offsetting the earlier dip; or delay report() through a real
+     *      loss to let users exit at a stale, inflated PPS and socialise the loss across remaining
+     *      holders. These paths are bounded by the dragon router's share balance and degrade yield
+     *      quality rather than drain funds, but they are genuine keeper-side risks.
+     *
+     *      The keeper is a SEMI-TRUSTED role. Mitigation is operational: keeper key custody under
+     *      multisig / MPC, off-chain alerting on report() calls during volatility spikes, and the
+     *      no-cooldown `setKeeper()` rotation path if the key is compromised. `shutdownStrategy`
+     *      can be used as containment to halt new deposits/mints while rotation and assessment
+     *      happen, but it does not block tend() or report(). No on-chain cap on reporting cadence
+     *      is enforced — that would constrain legitimate operation for a threat the trust model
+     *      already accepts.
      */
     function report()
         public
