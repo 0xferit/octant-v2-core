@@ -367,6 +367,78 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
     }
 
     /**
+     * @notice Preview the shares that would be minted for a deposit of `assets`.
+     * @dev Returns 0 when the vault is insolvent or the exchange rate is 0. The real
+     *      `deposit` path reverts via `_requireVaultSolvency`, so an inherited preview
+     *      would lie to ERC-4626 integrators that expect `previewDeposit` to match the
+     *      call they are about to make. In the solvent branch the inherited
+     *      `_convertToShares` override already uses the same rate-based math as
+     *      `deposit`, so delegating to `super.previewDeposit` is accurate.
+     * @param assets Amount of assets hypothetically deposited
+     * @return shares Shares a depositor would receive (0 when a real deposit would revert)
+     */
+    function previewDeposit(uint256 assets) public view virtual override returns (uint256 shares) {
+        if (_currentRateRay() == 0 || _isVaultInsolvent()) return 0;
+        return super.previewDeposit(assets);
+    }
+
+    /**
+     * @notice Preview the assets required to mint exactly `shares`.
+     * @dev Mirror of `previewDeposit`: returns 0 when the real `mint` path would revert
+     *      (vault insolvent or exchange rate missing). Solvent branch uses the same
+     *      Ceil-rounded conversion as `mint`.
+     * @param shares Amount of shares hypothetically minted
+     * @return assets Assets a minter would deposit (0 when a real mint would revert)
+     */
+    function previewMint(uint256 shares) public view virtual override returns (uint256 assets) {
+        if (_currentRateRay() == 0 || _isVaultInsolvent()) return 0;
+        return super.previewMint(shares);
+    }
+
+    /**
+     * @notice Preview the shares burned to withdraw `assets`.
+     * @dev The real `withdraw` path applies the lazy dragon burn before pricing the
+     *      exit, so the post-burn `totalSupply` is the correct denominator in the
+     *      insolvent branch. Simulate that burn via `_simulateDragonBurnAmount` and
+     *      mirror the parent pro-rata math (Ceil rounding) against the reduced supply.
+     *      When no burn is pending, the inherited `_convertToShares` override already
+     *      matches `withdraw`, so `super.previewWithdraw` is accurate.
+     * @param assets Amount of assets hypothetically withdrawn
+     * @return shares Shares that would be burned (reflects pending dragon burn)
+     */
+    function previewWithdraw(uint256 assets) public view virtual override returns (uint256 shares) {
+        uint256 burnAmount = _simulateDragonBurnAmount();
+        if (burnAmount == 0) return super.previewWithdraw(assets);
+
+        StrategyData storage S = _strategyStorage();
+        if (S.totalAssets == 0) return 0;
+        uint256 postBurnSupply = _totalSupply(S) - burnAmount;
+        return assets.mulDiv(postBurnSupply, S.totalAssets, Math.Rounding.Ceil);
+    }
+
+    /**
+     * @notice Preview the assets returned for redeeming `shares`.
+     * @dev Mirror of `previewWithdraw`. Dragon-share burning never changes `totalAssets`
+     *      or `totalDebtOwedToUserInAssetValue`, so `_isVaultInsolvent` stays true after
+     *      the simulated burn and the parent pro-rata branch is the one that will fire
+     *      in `redeem`. Floor rounding matches `redeem`'s `_convertToAssets` call.
+     *      The preview is owner-agnostic by ERC-4626 shape; it models the non-dragon
+     *      redemption path because that is where the lazy burn applies. Dragon-owner
+     *      redemptions use `maxRedeem` for sizing, which already has its own override.
+     * @param shares Amount of shares hypothetically redeemed
+     * @return assets Assets a redeemer would receive (reflects pending dragon burn)
+     */
+    function previewRedeem(uint256 shares) public view virtual override returns (uint256 assets) {
+        uint256 burnAmount = _simulateDragonBurnAmount();
+        if (burnAmount == 0) return super.previewRedeem(shares);
+
+        StrategyData storage S = _strategyStorage();
+        uint256 postBurnSupply = _totalSupply(S) - burnAmount;
+        if (postBurnSupply == 0) return 0;
+        return shares.mulDiv(S.totalAssets, postBurnSupply, Math.Rounding.Floor);
+    }
+
+    /**
      * @notice Transfer shares with dragon solvency protection and debt rebalancing
      * @dev Special behaviors for dragon router:
      *      - Dragon cannot transfer to itself (reverts)

@@ -842,37 +842,43 @@ abstract contract TokenizedStrategy {
      * @param assets Amount of assets to deposit
      * @return shares_ Expected shares to be minted
      */
-    function previewDeposit(uint256 assets) external view returns (uint256) {
+    function previewDeposit(uint256 assets) public view virtual returns (uint256) {
         return _convertToShares(_strategyStorage(), assets, Math.Rounding.Floor);
     }
 
     /**
      * @notice Previews assets required to mint exact shares
-     * @dev Uses Ceil rounding
+     * @dev Uses Ceil rounding. Marked `virtual` so strategies that gate the real
+     *      `mint` path (e.g. yield-skimming on insolvency) can mirror the gate in
+     *      the preview and stay ERC-4626-compliant.
      * @param shares Amount of shares to mint
      * @return assets_ Required assets for mint
      */
-    function previewMint(uint256 shares) external view returns (uint256) {
+    function previewMint(uint256 shares) public view virtual returns (uint256) {
         return _convertToAssets(_strategyStorage(), shares, Math.Rounding.Ceil);
     }
 
     /**
      * @notice Previews shares that would be burned for a withdrawal
-     * @dev Uses Ceil rounding
+     * @dev Uses Ceil rounding. Marked `virtual` so strategies that apply logic
+     *      before the real `withdraw` priced conversion (e.g. a lazy dragon burn
+     *      in yield-skimming) can mirror the post-gate state in the preview.
      * @param assets Amount of assets to withdraw
      * @return shares_ Expected shares to be burned
      */
-    function previewWithdraw(uint256 assets) external view returns (uint256) {
+    function previewWithdraw(uint256 assets) public view virtual returns (uint256) {
         return _convertToShares(_strategyStorage(), assets, Math.Rounding.Ceil);
     }
 
     /**
      * @notice Previews assets that would be returned for redeeming shares
-     * @dev Uses Floor rounding
+     * @dev Uses Floor rounding. Marked `virtual` so strategies that apply logic
+     *      before the real `redeem` priced conversion (e.g. a lazy dragon burn
+     *      in yield-skimming) can mirror the post-gate state in the preview.
      * @param shares Amount of shares to redeem
      * @return assets_ Expected assets to be returned
      */
-    function previewRedeem(uint256 shares) external view returns (uint256) {
+    function previewRedeem(uint256 shares) public view virtual returns (uint256) {
         return _convertToAssets(_strategyStorage(), shares, Math.Rounding.Floor);
     }
 
