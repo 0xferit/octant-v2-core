@@ -128,8 +128,8 @@ contract PrivilegedMorphoCompounderStrategyTest is BasePrivilegedYieldDonatingIn
         _testDepositRevertsWhenSenderNotPrivileged();
     }
 
-    function testDepositRevertsWhenReceiverNotPrivileged() public {
-        _testDepositRevertsWhenReceiverNotPrivileged();
+    function testDepositSucceedsToNonPrivilegedReceiver() public {
+        _testDepositSucceedsToNonPrivilegedReceiver();
     }
 
     function testDepositSucceedsWhenBothPrivileged() public {
@@ -140,8 +140,8 @@ contract PrivilegedMorphoCompounderStrategyTest is BasePrivilegedYieldDonatingIn
         _testMintRevertsWhenSenderNotPrivileged();
     }
 
-    function testMintRevertsWhenReceiverNotPrivileged() public {
-        _testMintRevertsWhenReceiverNotPrivileged();
+    function testMintSucceedsToNonPrivilegedReceiver() public {
+        _testMintSucceedsToNonPrivilegedReceiver();
     }
 
     function testMintSucceedsWhenBothPrivileged() public {

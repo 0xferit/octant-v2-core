@@ -124,8 +124,8 @@ contract PrivilegedRocketPoolStrategyTest is BasePrivilegedYieldSkimmingIntegrat
         _testDepositRevertsWhenSenderNotPrivileged();
     }
 
-    function testDepositRevertsWhenReceiverNotPrivileged() public {
-        _testDepositRevertsWhenReceiverNotPrivileged();
+    function testDepositSucceedsToNonPrivilegedReceiver() public {
+        _testDepositSucceedsToNonPrivilegedReceiver();
     }
 
     function testDepositSucceedsWhenBothPrivileged() public {
@@ -136,8 +136,8 @@ contract PrivilegedRocketPoolStrategyTest is BasePrivilegedYieldSkimmingIntegrat
         _testMintRevertsWhenSenderNotPrivileged();
     }
 
-    function testMintRevertsWhenReceiverNotPrivileged() public {
-        _testMintRevertsWhenReceiverNotPrivileged();
+    function testMintSucceedsToNonPrivilegedReceiver() public {
+        _testMintSucceedsToNonPrivilegedReceiver();
     }
 
     function testMintSucceedsWhenBothPrivileged() public {

@@ -171,8 +171,12 @@ abstract contract BasePrivilegedIntegrationTest is Test {
         vm.stopPrank();
     }
 
-    /// @notice Test that deposit reverts when receiver is not privileged
-    function _testDepositRevertsWhenReceiverNotPrivileged() internal {
+    /// @notice Test that deposit from a privileged sender succeeds even when the receiver
+    ///         is not privileged. The caller-side check is the real trust boundary; a
+    ///         receiver-side check would be redundant because ERC-20 transfers are ungated,
+    ///         so mint-to-contract flows (splitters, aggregators, integrator vaults) must
+    ///         not be blocked at the mint step.
+    function _testDepositSucceedsToNonPrivilegedReceiver() internal {
         uint256 depositAmount = _minDeposit();
         address privileged = _privilegedUser();
         address nonPrivileged = _nonPrivilegedUser();
@@ -181,9 +185,12 @@ abstract contract BasePrivilegedIntegrationTest is Test {
 
         vm.startPrank(privileged);
         ERC20(_asset()).approve(address(_vault()), depositAmount);
-        vm.expectRevert("!privileged");
-        _vault().deposit(depositAmount, nonPrivileged); // Sender is privileged, but receiver is not
+        uint256 shares = _vault().deposit(depositAmount, nonPrivileged);
         vm.stopPrank();
+
+        assertGt(shares, 0, "Should receive shares");
+        assertEq(_vault().balanceOf(nonPrivileged), shares, "Non-privileged receiver should hold the shares");
+        assertEq(_vault().balanceOf(privileged), 0, "Sender should not have any shares");
     }
 
     /// @notice Test that deposit works when both sender and receiver are privileged
@@ -219,8 +226,10 @@ abstract contract BasePrivilegedIntegrationTest is Test {
         vm.stopPrank();
     }
 
-    /// @notice Test that mint reverts when receiver is not privileged
-    function _testMintRevertsWhenReceiverNotPrivileged() internal {
+    /// @notice Test that mint from a privileged sender succeeds even when the receiver is
+    ///         not privileged. Mirror of the deposit helper so ERC-4626 `mint` matches
+    ///         `deposit` on the caller-only gate.
+    function _testMintSucceedsToNonPrivilegedReceiver() internal {
         uint256 shareAmount = _minDeposit();
         address privileged = _privilegedUser();
         address nonPrivileged = _nonPrivilegedUser();
@@ -230,9 +239,12 @@ abstract contract BasePrivilegedIntegrationTest is Test {
 
         vm.startPrank(privileged);
         ERC20(_asset()).approve(address(_vault()), type(uint256).max);
-        vm.expectRevert("!privileged");
-        _vault().mint(shareAmount, nonPrivileged);
+        uint256 assets = _vault().mint(shareAmount, nonPrivileged);
         vm.stopPrank();
+
+        assertGt(assets, 0, "Should consume assets");
+        assertEq(_vault().balanceOf(nonPrivileged), shareAmount, "Non-privileged receiver should hold the shares");
+        assertEq(_vault().balanceOf(privileged), 0, "Sender should not have any shares");
     }
 
     /// @notice Test that mint works when both sender and receiver are privileged
