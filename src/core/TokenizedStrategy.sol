@@ -1760,6 +1760,15 @@ abstract contract TokenizedStrategy {
      * For more information on the signature format, see the
      * https://eips.ethereum.org/EIPS/eip-2612#specification[relevant EIP
      * section].
+     *
+     * @dev Mempool-grief caveat: like standard ERC-2612 permit, the signature is
+     *      permissionless. Any observer of a signed payload in the mempool can
+     *      front-run the owner's own submission with the same calldata — the
+     *      allowance still lands correctly, but the owner's original transaction
+     *      reverts on a stale nonce and they pay for the revert gas plus the
+     *      cost of producing a fresh signature. This is an accepted property of
+     *      EIP-2612; integrators that must recover from a griefed permit should
+     *      catch the revert, re-read `nonces(owner)`, and resign.
      */
     function permit(
         address owner,
