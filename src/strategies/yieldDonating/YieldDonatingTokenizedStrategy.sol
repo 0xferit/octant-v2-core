@@ -18,6 +18,23 @@ import { IBaseStrategy } from "src/core/interfaces/IBaseStrategy.sol";
  *      - Profit donations are realized via share mints at the time of report
  *      - Losses first attempt dragon share burning when enabled; residual losses decrease PPS
  *      - Dragon router change follows TokenizedStrategy cooldown and two-step finalization
+ *
+ * Terminal-state recovery (operator-managed):
+ *      - After a catastrophic loss that reduces `totalAssets` to 0 while `totalSupply`
+ *        remains positive (all dragon shares burned and residual loss socialized), the
+ *        strategy enters a terminal state: `_convertToShares` returns 0 at the new PPS,
+ *        so deposit() and mint() revert until accounting is restored by a future report
+ *        and conversions no longer round to zero.
+ *      - External donations of the underlying asset are not a dedicated recovery
+ *        mechanism. A donated balance can raise `totalAssets` when report() records it,
+ *        but the value flows proportionally to existing shareholders. At the terminal
+ *        ratio the dragon-mint floors to 0, so no new profit shares accrue to the dragon
+ *        router or donation receiver.
+ *      - This contract does not implement an automatic recovery flow for that state.
+ *        Recovery is operator-managed: call `shutdownStrategy` to stop new deposits while
+ *        operators assess the position and migrate users to a fresh deployment if needed.
+ *        Avoiding a donation-based rescue path prevents reintroducing first-depositor
+ *        dust-extraction style issues.
  */
 
 contract YieldDonatingTokenizedStrategy is TokenizedStrategy {
