@@ -76,6 +76,15 @@ contract KpkERC4626StrategyTest is BaseYieldDonatingIntegrationTest {
 
     // ========== SETUP ==========
 
+    /// @dev Pin the mainnet fork to a block where all four KPK vaults have non-zero
+    ///      `maxDeposit`. Karpatkey periodically caps the MetaMorpho Prime vaults to 0 during
+    ///      rebalances, which would otherwise make these tests flake against mainnet `latest`.
+    ///      See `KpkTestConfig.FORK_BLOCK` for the rationale and how to refresh the pin.
+    function _setupFork() internal virtual override {
+        mainnetFork = vm.createFork("mainnet", KpkTestConfig.FORK_BLOCK);
+        vm.selectFork(mainnetFork);
+    }
+
     function _etchImplementation() internal override {
         implementation = new YieldDonatingTokenizedStrategy{ salt: keccak256("OCT_YIELD_DONATING_STRATEGY_V1") }();
         bytes memory tokenizedStrategyBytecode = address(implementation).code;
