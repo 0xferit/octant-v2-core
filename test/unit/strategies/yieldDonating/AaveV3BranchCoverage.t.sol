@@ -99,6 +99,7 @@ contract AaveV3BranchCoverageTest is Test {
         vm.expectRevert("Zero addressesProvider");
         new AaveV3Strategy(
             address(0), // zero addressesProvider
+            address(0), // rewardsController unused for this revert path
             address(asset),
             "Test Aave",
             "tsAAVE",
@@ -121,6 +122,7 @@ contract AaveV3BranchCoverageTest is Test {
         vm.expectRevert("Asset not supported by pool");
         new AaveV3Strategy(
             address(provider),
+            address(0), // rewardsController unused for this revert path
             address(asset),
             "Test Aave",
             "tsAAVE",
@@ -143,6 +145,7 @@ contract AaveV3BranchCoverageTest is Test {
 
         AaveV3Strategy strategy = new AaveV3Strategy(
             address(provider),
+            address(0), // rewardsController not exercised in cap tests
             address(asset),
             "Test Aave",
             "tsAAVE",

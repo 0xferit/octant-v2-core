@@ -96,6 +96,17 @@ interface IPoolAddressesProvider {
     function getPoolDataProvider() external view returns (address);
 }
 
+interface IRewardsController {
+    /// @notice Claims all accrued rewards across the supplied assets to `to`.
+    /// @dev On Aave V3 mainnet (`0x8164cc65827dcFe994AB23944CBC90e0aa80bFcb`) this is
+    ///      callable from any contract -- there is no permission gate. When no rewards
+    ///      are configured for the supplied assets the call is effectively a no-op.
+    function claimAllRewards(
+        address[] calldata assets,
+        address to
+    ) external returns (address[] memory rewardsList, uint256[] memory claimedAmounts);
+}
+
 /**
  * @title AaveV3Strategy
  * @author [Golem Foundation](https://golem.foundation)
@@ -130,10 +141,26 @@ contract AaveV3Strategy is BaseHealthCheck {
     /// @notice Address of the aToken for the underlying asset
     address public immutable aToken;
 
+    /// @notice Address of Aave V3's RewardsController for liquidity-mining incentives.
+    /// @dev Wired at construction so the strategy can claim supply-side emissions if/when
+    ///      Aave governance enables them on a market we use. May be `address(0)` for
+    ///      chains/markets where no RewardsController exists; in that case
+    ///      `claimAaveRewards` reverts with a clear message instead of silently no-op'ing
+    ///      on a zero target.
+    IRewardsController public immutable rewardsController;
+
+    /// @notice Emitted on a successful `claimAaveRewards` call.
+    event AaveRewardsClaimed(address indexed to, address[] rewardsList, uint256[] amounts);
+
+    /// @notice Emitted on a successful `sweepAirdrop` call.
+    event TokenSwept(address indexed token, uint256 amount, address indexed recipient);
+
     /**
      * @notice Initializes the Aave V3 strategy
-     * @dev Sets up connections to Aave V3 pool and derives aToken from pool registry
+     * @dev Sets up connections to Aave V3 pool, derives aToken from pool registry, and wires the
+     *      optional RewardsController for incentive claims.
      * @param _addressesProvider Address of Aave V3 addresses provider
+     * @param _rewardsController Address of Aave V3 RewardsController (may be `address(0)` to disable)
      * @param _asset Address of the underlying asset (must be supported by Aave pool)
      * @param _name Strategy display name (e.g., "Octant Aave V3 USDC Strategy")
      * @param _symbol Strategy share token symbol (e.g., "osAAVE")
@@ -146,6 +173,7 @@ contract AaveV3Strategy is BaseHealthCheck {
      */
     constructor(
         address _addressesProvider,
+        address _rewardsController,
         address _asset,
         string memory _name,
         string memory _symbol,
@@ -172,6 +200,8 @@ contract AaveV3Strategy is BaseHealthCheck {
 
         addressesProvider = IPoolAddressesProvider(_addressesProvider);
         pool = IPool(addressesProvider.getPool());
+        // _rewardsController may be address(0) — see `claimAaveRewards` for the explicit guard.
+        rewardsController = IRewardsController(_rewardsController);
 
         // Do NOT cache the data provider as immutable. Aave's `addressesProvider`
         // rotates the `PoolDataProvider` over time (the Pool itself is a transparent
@@ -183,6 +213,53 @@ contract AaveV3Strategy is BaseHealthCheck {
         (address _aToken, , ) = initialDataProvider.getReserveTokensAddresses(_asset);
         require(_aToken != address(0), "Asset not supported by pool");
         aToken = _aToken;
+    }
+
+    /**
+     * @notice Claims all accrued Aave V3 supply-side rewards on this strategy's aToken
+     *         position and forwards them directly to the dragon router.
+     * @dev The hook is keeper-callable so it can be folded into the same cron that calls
+     *      `report()`. When no emissions are configured for the aToken the call is a no-op
+     *      (returns empty arrays). Off-chain Merit/Merkl claims are out of scope -- those
+     *      rely on Merkle proofs against an external curator and must be handled by the
+     *      Octant multisig, not the strategy.
+     *
+     *      Reverts on `address(0)` rewardsController so a misconfigured deployment is
+     *      surfaced loudly instead of silently swallowing claim attempts.
+     *
+     *      The dragon router used as `to` MUST be capable of accepting arbitrary
+     *      ERC-20s. EOA / splitter routers are fine; an immutable single-asset router
+     *      would lose any non-asset reward token.
+     * @return rewardsList Reward token addresses claimed (may be empty)
+     * @return amounts     Reward amounts transferred to the dragon router
+     */
+    function claimAaveRewards() external onlyKeepers returns (address[] memory rewardsList, uint256[] memory amounts) {
+        require(address(rewardsController) != address(0), "AaveV3Strategy: RewardsController not configured");
+        address[] memory assets = new address[](1);
+        assets[0] = aToken;
+        address dragon = TokenizedStrategy.dragonRouter();
+        (rewardsList, amounts) = rewardsController.claimAllRewards(assets, dragon);
+        emit AaveRewardsClaimed(dragon, rewardsList, amounts);
+    }
+
+    /**
+     * @notice Sweeps non-critical ERC-20 balances on this strategy address to the dragon
+     *         router. Mirrors `SparkStrategy.sweepAirdrop` so the operational interface
+     *         is consistent across strategies.
+     * @dev Used to forward airdrops, off-chain reward distributions (Merkl/Merit settled
+     *      by an off-chain curator), and any stray ERC-20 that lands on the strategy
+     *      address. Excludes the strategy asset and the aToken to protect the deployed
+     *      position.
+     * @param _token Address of the token to sweep (must NOT be `asset` or `aToken`)
+     */
+    function sweepAirdrop(address _token) external onlyKeepers {
+        require(_token != address(asset), "AaveV3Strategy: Cannot sweep main asset");
+        require(_token != aToken, "AaveV3Strategy: Cannot sweep aToken");
+        uint256 balance = IERC20(_token).balanceOf(address(this));
+        require(balance > 0, "AaveV3Strategy: No balance to sweep");
+        address dragon = TokenizedStrategy.dragonRouter();
+        IERC20(_token).safeTransfer(dragon, balance);
+        emit TokenSwept(_token, balance, dragon);
     }
 
     /**

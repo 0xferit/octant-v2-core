@@ -131,6 +131,7 @@ contract AaveV3DataProviderRotationTest is Test {
 
         strategy = new AaveV3Strategy(
             address(addressesProvider),
+            address(0), // rewardsController not exercised in rotation tests
             address(asset),
             "Test Aave",
             "tsAAVE",

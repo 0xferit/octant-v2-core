@@ -106,6 +106,7 @@ contract AaveV3ApprovalHygieneTest is Test {
 
         strategy = new AaveV3Strategy(
             address(provider),
+            address(0), // rewardsController not exercised in approval tests
             address(asset),
             "Test Aave",
             "tsAAVE",

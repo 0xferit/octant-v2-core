@@ -408,6 +408,7 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         vm.expectRevert();
         new AaveV3Strategy(
             AaveV3TestConfig.AAVE_ADDRESSES_PROVIDER,
+            address(0), // rewardsController unused for this revert path
             address(0x123), // Unsupported asset
             _strategyName(),
             _strategySymbol(),

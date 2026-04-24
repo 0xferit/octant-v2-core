@@ -155,6 +155,7 @@ contract AaveV3DepositCapTreasuryTest is Test {
 
         strategy = new AaveV3Strategy(
             address(provider),
+            address(0), // rewardsController not exercised in cap tests
             address(asset),
             "Test Aave",
             "tsAAVE",

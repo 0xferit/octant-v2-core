@@ -142,6 +142,7 @@ contract AaveV3PausedFrozenTest is Test {
 
         strategy = new AaveV3Strategy(
             address(provider),
+            address(0), // rewardsController not exercised in pause/freeze tests
             address(asset),
             "Test Aave",
             "tsAAVE",
