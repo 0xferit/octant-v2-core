@@ -347,7 +347,26 @@ contract AaveV3Strategy is BaseHealthCheck {
     }
 
     /**
-     * @dev Emergency withdrawal after strategy shutdown
+     * @dev Emergency withdrawal after strategy shutdown.
+     *
+     *      AAVE DEPENDENCY: this path delegates to `_freeFunds`, which calls
+     *      `pool.withdraw(asset, amount, this)` with no fallback. Emergency
+     *      withdrawal therefore depends on Aave pool state -- if Aave has
+     *      paused the reserve, marked it inactive, or utilization is too high
+     *      for the requested amount, the call reverts and no funds are pulled.
+     *
+     *      OPERATIONAL RUNBOOK when Aave blocks an emergency exit:
+     *      1. Call `shutdownStrategy()` first -- this marks the strategy
+     *         shutdown for new deposits independently of Aave state.
+     *      2. Call `emergencyWithdraw(amount)` with `amount` capped at the
+     *         Aave-backed portion of `availableWithdrawLimit(address(0))`.
+     *         The view already accounts for pool liquidity; on a paused or
+     *         inactive reserve it surfaces only idle assets, which are already
+     *         outside Aave and remain withdrawable through regular user exits.
+     *      3. Repeat step 2 as Aave liquidity returns or pauses lift. A
+     *         strategy stuck on a paused reserve recovers automatically once
+     *         Aave governance resumes the pool; no contract-level rescue is
+     *         possible without trusting the Aave counterparty.
      * @param _amount Amount of assets to withdraw in asset base units
      */
     function _emergencyWithdraw(uint256 _amount) internal override {
