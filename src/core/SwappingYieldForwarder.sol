@@ -129,6 +129,12 @@ contract SwappingYieldForwarder is YieldForwarder {
     /// @param newBps New floor
     event MinSlippageBpsUpdated(uint16 oldBps, uint16 newBps);
 
+    /// @notice Emitted when an arbitrary token balance is forwarded to the receiver
+    /// @param token Address of the token whose balance was flushed
+    /// @param receiver Address that received the token balance
+    /// @param amount Amount of the token transferred
+    event TokenForwarded(address indexed token, address indexed receiver, uint256 amount);
+
     // ============================================
     // STATE
     // ============================================
@@ -318,5 +324,24 @@ contract SwappingYieldForwarder is YieldForwarder {
         if (assetsOut < minAmountOut) revert InsufficientSwapOutput(minAmountOut, assetsOut);
 
         emit YieldSwappedAndForwarded(strategy, receiver, shares, assetsIn, assetsOut);
+    }
+
+    /**
+     * @notice Forwards the full balance of an arbitrary ERC-20 token to the immutable receiver
+     * @dev Allows either the keeper or the vault management role to recover token balances
+     *      that are outside the normal report/swap pipeline. The caller chooses only the token;
+     *      the destination remains fixed to `receiver`.
+     * @param token ERC-20 token whose balance should be flushed to the receiver
+     */
+    function forwardToken(address token) external nonReentrant {
+        if (msg.sender != keeper && msg.sender != ITokenizedStrategy(vault).management()) {
+            revert OnlyVaultManagement();
+        }
+
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        if (balance == 0) return;
+
+        IERC20(token).safeTransfer(receiver, balance);
+        emit TokenForwarded(token, receiver, balance);
     }
 }

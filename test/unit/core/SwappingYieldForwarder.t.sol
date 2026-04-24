@@ -183,6 +183,51 @@ contract SwappingYieldForwarderTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // forwardToken — AUTHORIZED RECOVERY
+    // ═══════════════════════════════════════════════════════════
+
+    function test_forwardToken_managementCanForwardToReceiver() public {
+        asset.mint(address(forwarder), 3e18);
+
+        vm.prank(management);
+        forwarder.forwardToken(address(asset));
+
+        assertEq(asset.balanceOf(address(forwarder)), 0, "forwarder residual must be flushed");
+        assertEq(asset.balanceOf(receiver), 3e18, "receiver gets recovered balance");
+    }
+
+    function test_forwardToken_keeperCanForwardToReceiver() public {
+        asset.mint(address(forwarder), 5e18);
+
+        vm.prank(keeperEOA);
+        forwarder.forwardToken(address(asset));
+
+        assertEq(asset.balanceOf(address(forwarder)), 0, "forwarder residual must be flushed");
+        assertEq(asset.balanceOf(receiver), 5e18, "receiver gets recovered balance");
+    }
+
+    function test_forwardToken_revertsWhenNeitherKeeperNorManagement() public {
+        asset.mint(address(forwarder), 7e18);
+
+        vm.prank(user);
+        vm.expectRevert(SwappingYieldForwarder.OnlyVaultManagement.selector);
+        forwarder.forwardToken(address(asset));
+
+        assertEq(asset.balanceOf(address(forwarder)), 7e18, "unauthorized call keeps balance");
+        assertEq(asset.balanceOf(receiver), 0, "receiver gets nothing");
+    }
+
+    function test_forwardToken_emitsTokenForwardedEvent() public {
+        asset.mint(address(forwarder), 11e18);
+
+        vm.expectEmit(true, true, false, true);
+        emit SwappingYieldForwarder.TokenForwarded(address(asset), receiver, 11e18);
+
+        vm.prank(keeperEOA);
+        forwarder.forwardToken(address(asset));
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // reportAndForward — NO-SWAP FALLBACK PATH
     // ═══════════════════════════════════════════════════════════
 
