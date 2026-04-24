@@ -1,3 +1,130 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [1.2.0-develop.1](https://github.com/golemfoundation/octant-v2-core/compare/backup/pr418-pre-surgery..1.2.0-develop.1) - 2026-04-24
+
+### Bug Fixes
+
+- **(curve-swapper)** cantina #1 enforce zero-residue invariant - ([d82fcca](https://github.com/golemfoundation/octant-v2-core/commit/d82fccab76a8c9d91fdae94f4b7830bab70ed0de)) - skimaharvey
+- **(privileged)** gate deposits by caller only - ([4c0e83d](https://github.com/golemfoundation/octant-v2-core/commit/4c0e83d5963f2d7bc5de52dd95adafde8e96d8aa)) - Maxime
+- **(privileged)** skip no-op writes and events - ([59fd35a](https://github.com/golemfoundation/octant-v2-core/commit/59fd35a39b9c9a5112a5aca7992b2443ea5eeaf5)) - Maxime
+- **(psm-swapper)** bailsec #70 compute exact psm charge and pull minimum - ([fd44d30](https://github.com/golemfoundation/octant-v2-core/commit/fd44d30b1907dc5ad310e4ed0966f929dd290197)) - skimaharvey
+- **(semver)** downgrade storage layout changes from major to minor - ([b21a545](https://github.com/golemfoundation/octant-v2-core/commit/b21a545c434282f572b3caf96836dd66e8948ae8)) - Ferit
+- **(semver)** address review feedback from PR #394 - ([a72dd70](https://github.com/golemfoundation/octant-v2-core/commit/a72dd70844ba88809ce27f8ec56b443253c93521)) - Ferit
+- **(semver)** scope discovery to contracts declaring API_VERSION - ([3d96e7d](https://github.com/golemfoundation/octant-v2-core/commit/3d96e7de90435ac8104d5a1d4a17b99b7219d4e1)) - Ferit
+- **(semver)** normalize renamed lock ids and ignore comment contracts - ([a135211](https://github.com/golemfoundation/octant-v2-core/commit/a13521155a8ac1e654a9771c242b694760b85a9c)) - Ferit
+- **(semver)** handle renames and honor explicit contract scope - ([a5698da](https://github.com/golemfoundation/octant-v2-core/commit/a5698da10b2c5af49e8fd1c67601f22ea18d055c)) - Ferit
+- **(semver)** tighten workflow triggers and ABI/version edge checks - ([1b5e7c0](https://github.com/golemfoundation/octant-v2-core/commit/1b5e7c0588886a64b50c45902db565d173ce0232)) - Ferit
+- **(semver)** handle merge-base and tuple/deletion discovery edge cases - ([e68d9ad](https://github.com/golemfoundation/octant-v2-core/commit/e68d9ad86b3f1367828f8604d0bebef8a7856454)) - Ferit
+- **(semver)** treat event anonymity changes as breaking - ([2a1b170](https://github.com/golemfoundation/octant-v2-core/commit/2a1b1703528cea8ce20a5d4a9b339b8a60bf42d4)) - Ferit
+- **(semver)** analyze deleted contracts as breaking changes - ([851a0f1](https://github.com/golemfoundation/octant-v2-core/commit/851a0f1b29dd4ebb4c9fd84c853221512c60ff36)) - Ferit
+- **(semver)** enforce API_VERSION on changed contracts - ([e375644](https://github.com/golemfoundation/octant-v2-core/commit/e37564491ecc1480682d95c7c2f77737c8d0e7b2)) - Ferit
+- **(sol-semver)** harden contract and lock validation - ([90b2332](https://github.com/golemfoundation/octant-v2-core/commit/90b2332fa595db5edd72743f0642b22d31f804be)) - Ferit
+- **(swappers)** validate conversionFactor != 0 for BUY_GEM route - ([b9a9d70](https://github.com/golemfoundation/octant-v2-core/commit/b9a9d700bde01dc82a08f3c77d66fbbba0a4c190)) - Maxime
+- **(swapping-forwarder)** clear swapper allowance after swap - ([8c5bc4c](https://github.com/golemfoundation/octant-v2-core/commit/8c5bc4c7b5d7009036b62d4bad6aeddf1207b7dc)) - skimaharvey
+- **(swapping-forwarder)** add authorized forwardToken - ([a4d2f2b](https://github.com/golemfoundation/octant-v2-core/commit/a4d2f2ba90c151e6037ce30c4fead5d5a006bbd6)) - skimaharvey
+- **(swapping-forwarder)** bailsec #68 require caller-supplied deadline - ([d4d463c](https://github.com/golemfoundation/octant-v2-core/commit/d4d463cfa89f53891b041be2127eb912984c5b5b)) - skimaharvey
+- **(swapping-forwarder)** bailsec #61 #62 mirror maxRedeem cap and ZERO_ASSETS skip - ([5e0cf2d](https://github.com/golemfoundation/octant-v2-core/commit/5e0cf2d93ff60f8ac07cf465baf299922e5f7a37)) - skimaharvey
+- **(uniswap-v3-swapper)** bailsec #73 #74 return leftover and zero router approval - ([fd52181](https://github.com/golemfoundation/octant-v2-core/commit/fd52181025ffcf9c5ffbbeac66f0594d07a9b2f4)) - skimaharvey
+- **(uniswap-v4-swapper)** initialize unused base - ([bf6a1d8](https://github.com/golemfoundation/octant-v2-core/commit/bf6a1d850260a45585cac3fd5b4e741ef106faf4)) - skimaharvey
+- **(uniswap-v4-swapper)** return unused base on second-hop partial fill - ([cf380bc](https://github.com/golemfoundation/octant-v2-core/commit/cf380bc01015bf631ff9834902e43fce828fe54c)) - skimaharvey
+- **(uniswap-v4-swapper)** bailsec #76 take unused tokenin back via unlockcallback - ([77356cc](https://github.com/golemfoundation/octant-v2-core/commit/77356cc1dcedf7461615bfc120bff10ef706561a)) - skimaharvey
+- **(yield-donate)** skip zero-share donation event - ([3e847c4](https://github.com/golemfoundation/octant-v2-core/commit/3e847c42f9e1545ba3a87fd5db7d4edbd354490a)) - Maxime
+- **(yield-forwarder)** skip zero-asset redeem - ([3108012](https://github.com/golemfoundation/octant-v2-core/commit/3108012621fffb6c42909a8fc4c4bbb6691a1f81)) - skimaharvey
+- **(yield-forwarder)** cap shares at strategy.maxRedeem - ([5dd7682](https://github.com/golemfoundation/octant-v2-core/commit/5dd76827a49f3a66a1bb4d3c2893a48ddc67d616)) - Maxime
+- **(yield-forwarder)** add authorized forwardToken - ([28d1886](https://github.com/golemfoundation/octant-v2-core/commit/28d1886ddef51edddc1416fe959bc0b4376d8b7e)) - Maxime
+- **(yield-skim)** mirror gates in preview functions - ([cd5009e](https://github.com/golemfoundation/octant-v2-core/commit/cd5009e85335d70ba8bcc486746c5731c2375fd4)) - Maxime
+- simulate lazy burn in maxWithdraw/maxRedeem for ERC4626 compliance - ([dbca1e5](https://github.com/golemfoundation/octant-v2-core/commit/dbca1e52f9a64e0f2d556b60ab324136fccf012a)) - Maxime
+- burn dragon shares before pricing user exits during insolvency - ([475a69f](https://github.com/golemfoundation/octant-v2-core/commit/475a69f54311cb30fb64b93c94757e67e11c52cc)) - Maxime
+- lint solidity scripts with script-specific solhint config - ([0163706](https://github.com/golemfoundation/octant-v2-core/commit/0163706261cc2657654c651204557673dbf3e69e)) - Ferit
+- exclude script/ from solhint lint glob - ([12e8263](https://github.com/golemfoundation/octant-v2-core/commit/12e82639b746cd0c09385455757c4ac49ade423f)) - Ferit
+- tighten semver API version detection - ([0908bbc](https://github.com/golemfoundation/octant-v2-core/commit/0908bbc66be389319c4aa81fd7461cae30326c8e)) - Ferit
+- use USDC/DAI V4 pool for multi-hop integration tests - ([9b06074](https://github.com/golemfoundation/octant-v2-core/commit/9b06074353ea79ffca004197fb72d0801a71c278)) - Maxime
+- use existing V4 pool params for multi-hop integration tests - ([feac1b3](https://github.com/golemfoundation/octant-v2-core/commit/feac1b388abeff7a8d63c2804c62b737d493539d)) - Maxime
+- update fork block to resolve V4 pool and RPC archive errors - ([c003c95](https://github.com/golemfoundation/octant-v2-core/commit/c003c95bf7767a9904ab0210f2f13453206d8cb5)) - Maxime
+- tighten forwarder kontrol coverage - ([d06bf4b](https://github.com/golemfoundation/octant-v2-core/commit/d06bf4bef54698d96235fe109bf41de6f822ca75)) - Ferit
+- use sentinel values to strengthen zero-share passthrough proofs - ([f83e85c](https://github.com/golemfoundation/octant-v2-core/commit/f83e85cdd0c7278d9a6c2e9e04adc17aeda9a622)) - Ferit
+- emit event on zero-asset redeem in SwappingYieldForwarder - ([efd86d3](https://github.com/golemfoundation/octant-v2-core/commit/efd86d367d1030cad4a151bf1354275fc77ee28a)) - Maxime
+- enforce 1:1 invariant for DaiUsds converter routes - ([066bb86](https://github.com/golemfoundation/octant-v2-core/commit/066bb86210443f799d12de98b309140a2f2bebf8)) - Maxime
+- validate token-index consistency in CurveSwapper constructor - ([b6817bc](https://github.com/golemfoundation/octant-v2-core/commit/b6817bc0673436fba3777f2952fa2bb789e01a00)) - Maxime
+- address review findings - ([c2837a3](https://github.com/golemfoundation/octant-v2-core/commit/c2837a3fb476625c684fc2ceac1fd3d657f782ca)) - Maxime
+
+### CI/CD
+
+- update packages and shared actions version(s) [skip ci] - ([da77e32](https://github.com/golemfoundation/octant-v2-core/commit/da77e32a3c2607a6ad5d36d0ec930e86d4743021)) - Michał Kluczek
+- update runners reference and production GH environment  [skip ci] - ([e0cb8e9](https://github.com/golemfoundation/octant-v2-core/commit/e0cb8e9bd3d5a61be70450059272bc81f444901a)) - Michał Kluczek
+- optimize jobs and fix internal actions access for shared runners [skip ci] - ([1023043](https://github.com/golemfoundation/octant-v2-core/commit/1023043cb7897cf4ef1c3bafaac09ef6a82fb24e)) - Michał Kluczek
+- CICD workflows revamp [skip ci] - ([e51f422](https://github.com/golemfoundation/octant-v2-core/commit/e51f422582cf5bfcf3281337c33bac8e886a663e)) - Michał Kluczek
+- add VERSION date check for develop-to-main PRs - ([9bd7caf](https://github.com/golemfoundation/octant-v2-core/commit/9bd7caff4f053ed8c3056d9262bb8a51db7fd396)) - Ferit
+- set safe.directory for merge-base in semver check - ([fbf0986](https://github.com/golemfoundation/octant-v2-core/commit/fbf0986a6c5a397fa29a1f6015aff2f44a164324)) - Ferit
+
+### Documentation
+
+- **(periphery)** fix harvestAndReport NatSpec typo - ([12716f7](https://github.com/golemfoundation/octant-v2-core/commit/12716f7db0500bfabfb253f7383f34000a2a5513)) - Maxime
+- **(swappers)** remove audit labels from comments - ([cb3c45f](https://github.com/golemfoundation/octant-v2-core/commit/cb3c45f5d05604312413a92ab7bc03f587d4510e)) - skimaharvey
+- **(tokenized-strategy)** document unsupported token accounting - ([2176b20](https://github.com/golemfoundation/octant-v2-core/commit/2176b2053e676e222bd2ee9e18acce0c6405b281)) - Maxime
+- **(tokenized-strategy)** fix lastReport timestamp comment - ([520ff43](https://github.com/golemfoundation/octant-v2-core/commit/520ff43f21de081881d98b6693eb9e5b018a015a)) - Maxime
+- **(tokenized-strategy)** document permit frontrun grief - ([3bdd8d6](https://github.com/golemfoundation/octant-v2-core/commit/3bdd8d6668e8187bc916595f35b4bc98baa0ee3f)) - Maxime
+- **(yield-donate)** document terminal-state recovery - ([5fef432](https://github.com/golemfoundation/octant-v2-core/commit/5fef432efb63962da0c0798b47e0a98ee59a70d1)) - Maxime
+- **(yield-donate)** document keeper timing trust - ([3c1123b](https://github.com/golemfoundation/octant-v2-core/commit/3c1123b9d4de70908d53823eda6b9fda06b7a9d7)) - Maxime
+- **(yield-forwarder)** bailsec #66 migration cooldown note - ([9887ba7](https://github.com/golemfoundation/octant-v2-core/commit/9887ba7f2ae0ef95f757e4df216becd0c1167b31)) - Maxime
+- **(yield-forwarder)** bailsec #65 keeper-only API operational note - ([6c22d9b](https://github.com/golemfoundation/octant-v2-core/commit/6c22d9bdfe377b1137e228296ba4e3b73dc736bf)) - Maxime
+- **(yield-forwarder)** document enableBurning incompatibility with YieldForwarder dragonRouter - ([18b291c](https://github.com/golemfoundation/octant-v2-core/commit/18b291c0cf89626080b68e38a548d40edfec08aa)) - Maxime
+- consolidate docs/ into doc/ directory - ([b2535d8](https://github.com/golemfoundation/octant-v2-core/commit/b2535d8ab801f5f5f3303ec6d986eafff3ac7e08)) - Ferit
+- introduce ADR practice with template and contributing guidelines - ([34f2b5c](https://github.com/golemfoundation/octant-v2-core/commit/34f2b5c3b57d62910f40aa82c21e3caeed16f365)) - Ferit
+
+### Features
+
+- **(semver)** auto-discover changed versioned contracts - ([2f469bc](https://github.com/golemfoundation/octant-v2-core/commit/2f469bcba75cc1e659c63440c856dbacc7e0ac55)) - Ferit
+- **(swapping-forwarder)** bailsec #67 admin-settable slippage floor - ([7d15ab0](https://github.com/golemfoundation/octant-v2-core/commit/7d15ab07ea314a8a9696c7f189a40f8112db0142)) - skimaharvey
+- **(swapping-forwarder)** bailsec #72 #75 admin-settable swapper via vault management - ([2fd5f3e](https://github.com/golemfoundation/octant-v2-core/commit/2fd5f3eb52fa7eb9200c11978ea85275a40f91bf)) - skimaharvey
+- add semantic version checks for contracts - ([b135ee5](https://github.com/golemfoundation/octant-v2-core/commit/b135ee5f0735e6612eda975b4eb3ea1d40b13a2d)) - Ferit
+- add Kontrol formal verification proofs for YieldForwarder and SwappingYieldForwarder - ([53f5546](https://github.com/golemfoundation/octant-v2-core/commit/53f5546dd0318184e7fbb16a7dda58d077e6a8d2)) - Ferit
+- add UniswapV4SwapperAdapter and tests - ([6f2f26a](https://github.com/golemfoundation/octant-v2-core/commit/6f2f26a481c50fb7cac08dace9a5decb61a6a079)) - Maxime
+- add SwappingYieldForwarder and pluggable ISwapper adapters - ([8f0510e](https://github.com/golemfoundation/octant-v2-core/commit/8f0510ea190c3acafcff6c8e0234e5dceae17710)) - Maxime
+- add YieldForwarder and YieldForwarderFactory contracts - ([09bb01c](https://github.com/golemfoundation/octant-v2-core/commit/09bb01c4254346d44fa4ce66791f2bfc3452019f)) - Maxime
+
+### Miscellaneous Tasks
+
+- update allocation mechanism deployment address in staging. - ([40fd832](https://github.com/golemfoundation/octant-v2-core/commit/40fd832ae7d3908b80c6238332a66aba78bc6040)) - GiFTED
+
+### Refactor
+
+- **(semver)** align on API_VERSION across contracts and checks - ([992a252](https://github.com/golemfoundation/octant-v2-core/commit/992a252b29dfa6de023cc291f21eb949142bbd50)) - Ferit
+- **(semver)** enforce VERSION constant only - ([26b3214](https://github.com/golemfoundation/octant-v2-core/commit/26b32140c68e692c7966b11d5108bbd8b3b660f4)) - Ferit
+- **(semver)** use contract-declared versions only - ([c681d5d](https://github.com/golemfoundation/octant-v2-core/commit/c681d5d6403d882361b2b0a8654d8567630b6dd0)) - Ferit
+- **(swappers)** cantina #2 iswapper pull-pattern migration - ([bf343b9](https://github.com/golemfoundation/octant-v2-core/commit/bf343b99161aee6ab70c36f83c0ce80ed3645d69)) - skimaharvey
+- **(version)** remove API_VERSION compatibility surface - ([076c070](https://github.com/golemfoundation/octant-v2-core/commit/076c070c629053d65324d4f9c32c8bc7b95d4d19)) - Ferit
+- consolidate scripts/ into script/ and codify convention - ([0c74dd7](https://github.com/golemfoundation/octant-v2-core/commit/0c74dd777c12e290b262c57af57350217aab92d0)) - Ferit
+- update Nouns proposal for keeper-gated YieldForwarder - ([46c8318](https://github.com/golemfoundation/octant-v2-core/commit/46c83186ffe5833599b5df6ef793b6032d2b4e8d)) - Maxime
+- add keeper-gated report+forward flow to YieldForwarder - ([53f720e](https://github.com/golemfoundation/octant-v2-core/commit/53f720e28b123914688922a86f558b87e6c9a3ff)) - Maxime
+- replace PaymentSplitter with YieldForwarder in Nouns DAO proposal - ([70a22e8](https://github.com/golemfoundation/octant-v2-core/commit/70a22e860e4913e31056d07da4661a275f05625f)) - Maxime
+
+### Styling
+
+- fix prettier formatting in UniswapV4 swapper files - ([a798a2e](https://github.com/golemfoundation/octant-v2-core/commit/a798a2e30aa8e8739ff378e42a6104805df4fe9f)) - Maxime
+- apply prettier to regen consolidated test files - ([0cd1480](https://github.com/golemfoundation/octant-v2-core/commit/0cd1480c7854daf385f0c38782ff9a365f91ef52)) - Ferit
+
+### Testing
+
+- **(kontrol)** support swapping forwarder redeem guards - ([79ffca7](https://github.com/golemfoundation/octant-v2-core/commit/79ffca7919aaea26f3e7e07ba570beb94c9c2a1b)) - skimaharvey
+- **(kpk)** pin fork block for vault deposits - ([a2ebb4a](https://github.com/golemfoundation/octant-v2-core/commit/a2ebb4a3f7d7e00e67b07a441e1f599c816438d7)) - Maxime
+- update integration test expectations for lazy dragon burn - ([26e758b](https://github.com/golemfoundation/octant-v2-core/commit/26e758bd9f2f0aafd5630b7d5363e2e16cf87f63)) - Maxime
+- add KPK Gearbox V3 WETH/wstETH integration tests - ([cdb6749](https://github.com/golemfoundation/octant-v2-core/commit/cdb674943b58f6b98a57fb3a07730f0b87b98d88)) - Maxime
+- add KPK USDC/ETH Prime vault integration tests - ([1625510](https://github.com/golemfoundation/octant-v2-core/commit/1625510f22231f3fe654c15f5feaaf3d24f9f735)) - Maxime
+- add swapper unit tests for 100% coverage - ([43dfb53](https://github.com/golemfoundation/octant-v2-core/commit/43dfb53146a823941e45c97a870b19e1ca7e684c)) - Maxime
+- add swapper integration tests (PSM, Curve, Uniswap V3) - ([9cea7cc](https://github.com/golemfoundation/octant-v2-core/commit/9cea7cc5216488edf59dc8af0b7c4187b38d72c7)) - Maxime
+- add SwappingYieldForwarder unit tests - ([6c8e9b6](https://github.com/golemfoundation/octant-v2-core/commit/6c8e9b67e5704330c197bb9376d9bf0bb2c61b2c)) - Maxime
+- integrate YieldForwarder tests with real vault infrastructure - ([2cf0f19](https://github.com/golemfoundation/octant-v2-core/commit/2cf0f19021fbb0fa0b78772aea07a3f477d7c8f2)) - Maxime
+- update tests for keeper-gated YieldForwarder design - ([dd14f1d](https://github.com/golemfoundation/octant-v2-core/commit/dd14f1da7beb8544b591e0df2ef1aeca678e754d)) - Maxime
+- add YieldForwarder and YieldForwarderFactory unit tests - ([82dcb76](https://github.com/golemfoundation/octant-v2-core/commit/82dcb76ad051271d3e11f0c20fb48e93a27da2fa)) - Maxime
+- fold regen same-token protection into base suite - ([43ad5fd](https://github.com/golemfoundation/octant-v2-core/commit/43ad5fd2c36e99e664e8cebacd5a1d2ebb5c059d)) - Ferit
+- consolidate regen staker base suites further - ([e806156](https://github.com/golemfoundation/octant-v2-core/commit/e806156b94502d4d180023505f225d6cbb6c57ae)) - Ferit
+- further consolidate regen test suites - ([4247ddd](https://github.com/golemfoundation/octant-v2-core/commit/4247ddd132dbaee5840c42f256f1d77eccdc9b7a)) - Ferit
+- consolidate RegenStaker tests into unit/regen with coherent naming - ([12d823f](https://github.com/golemfoundation/octant-v2-core/commit/12d823f806b2bbcad5b7bddbdbfe3682a2b4d84b)) - Ferit
+
+
 
 
 ## [1.2.0-develop.0](https://github.com/golemfoundation/octant-v2-core/compare/v1.1.0-develop.0...v1.2.0-develop.0) (2026-03-02)
