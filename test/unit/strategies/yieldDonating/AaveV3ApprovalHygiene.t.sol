@@ -46,6 +46,16 @@ contract MockDataProvider {
     function getATokenTotalSupply(address) external pure returns (uint256) {
         return 0;
     }
+
+    function getReserveConfigurationData(
+        address
+    ) external pure returns (uint256, uint256, uint256, uint256, uint256, bool, bool, bool, bool, bool) {
+        return (0, 0, 0, 0, 0, false, false, false, true, false); // isActive=true, isFrozen=false
+    }
+
+    function getPaused(address) external pure returns (bool) {
+        return false;
+    }
 }
 
 contract MockAddressesProvider {

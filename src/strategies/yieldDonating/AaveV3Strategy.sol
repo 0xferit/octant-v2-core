@@ -24,6 +24,28 @@ interface IPoolDataProvider {
     function getReserveTokensAddresses(
         address asset
     ) external view returns (address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress);
+
+    /// @notice Returns reserve configuration flags including isActive and isFrozen
+    function getReserveConfigurationData(
+        address asset
+    )
+        external
+        view
+        returns (
+            uint256 decimals,
+            uint256 ltv,
+            uint256 liquidationThreshold,
+            uint256 liquidationBonus,
+            uint256 reserveFactor,
+            bool usageAsCollateralEnabled,
+            bool borrowingEnabled,
+            bool stableBorrowRateEnabled,
+            bool isActive,
+            bool isFrozen
+        );
+
+    /// @notice Returns whether the reserve is paused (governance/risk admin emergency switch)
+    function getPaused(address asset) external view returns (bool);
 }
 
 interface IPoolAddressesProvider {
@@ -134,6 +156,13 @@ contract AaveV3Strategy is BaseHealthCheck {
      * @return limit Maximum additional deposit amount in asset base units
      */
     function availableDepositLimit(address /*_owner*/) public view override returns (uint256) {
+        // Aave-side blockers make `pool.supply` revert when the reserve is paused,
+        // inactive, or frozen; surfacing capacity through `maxDeposit` would only
+        // route users into failing transactions.
+        if (dataProvider.getPaused(address(asset))) return 0;
+        (, , , , , , , , bool isActive, bool isFrozen) = dataProvider.getReserveConfigurationData(address(asset));
+        if (!isActive || isFrozen) return 0;
+
         (, uint256 supplyCap) = dataProvider.getReserveCaps(address(asset));
 
         // If supply cap is 0, it means unlimited (see https://github.com/aave/aave-v3-core/blob/782f51917056a53a2c228701058a6c3fb233684a/contracts/protocol/libraries/types/DataTypes.sol#L53)
@@ -174,9 +203,22 @@ contract AaveV3Strategy is BaseHealthCheck {
      * @return limit Maximum withdrawal amount in asset base units
      */
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
+        // Idle balance is always withdrawable -- it lives on this contract, no Aave
+        // pool interaction is required to move it out. This matters on a paused or
+        // inactive reserve (short-circuit below) AND after `emergencyWithdraw`
+        // pulls everything out of Aave into idle.
+        uint256 idleBalance = IERC20(address(asset)).balanceOf(address(this));
+
+        // `pool.withdraw` reverts when the reserve is paused or inactive.
+        // (Withdrawals are NOT blocked by `isFrozen` -- a frozen reserve still allows
+        // exits.) Cap `maxWithdraw`/`maxRedeem` at idle-only so users can still exit
+        // any balance already out of the pool even while the Aave side is blocked.
+        if (dataProvider.getPaused(address(asset))) return idleBalance;
+        (, , , , , , , , bool isActive, ) = dataProvider.getReserveConfigurationData(address(asset));
+        if (!isActive) return idleBalance;
+
         // Get our aToken balance which represents our deposited assets
         uint256 aTokenBalance = IERC20(aToken).balanceOf(address(this));
-        uint256 idleBalance = IERC20(address(asset)).balanceOf(address(this));
 
         // Check pool liquidity - the underlying asset balance held by the aToken contract
         uint256 poolLiquidity = IERC20(address(asset)).balanceOf(aToken);

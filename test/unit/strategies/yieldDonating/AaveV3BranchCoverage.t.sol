@@ -60,6 +60,18 @@ contract MockDataProvider {
     function getATokenTotalSupply(address) external view returns (uint256) {
         return totalSupply;
     }
+
+    function getReserveConfigurationData(
+        address
+    ) external pure returns (uint256, uint256, uint256, uint256, uint256, bool, bool, bool, bool, bool) {
+        // Default: active, not frozen — let cap/aToken-derivation tests still exercise
+        // the legacy paths after the pause/freeze short-circuits were added.
+        return (0, 0, 0, 0, 0, false, false, false, true, false);
+    }
+
+    function getPaused(address) external pure returns (bool) {
+        return false;
+    }
 }
 
 /// @title AaveV3Strategy branch coverage tests
