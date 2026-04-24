@@ -845,6 +845,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         address oldDragonRouter = S.dragonRouter;
         address newDragonRouter = S.pendingDragonRouter;
 
+        // Burn any stale junior loss buffer before snapshotting balances so a
+        // dust transfer to the old dragon cannot decide migration accounting.
+        if (S.enableBurning) {
+            _applyDragonLossProtectionIfNeeded(S, YS);
+        }
+
         // Get balances before changing the router
         uint256 oldDragonBalance = _balanceOf(S, oldDragonRouter);
         uint256 newDragonBalance = _balanceOf(S, newDragonRouter);

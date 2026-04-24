@@ -22,6 +22,7 @@ contract YieldSkimmingDragonRouterMigrationSolvencyTest is Setup {
     address internal charlie;
 
     uint256 internal constant DEPOSIT = 100e18;
+    uint256 internal constant DUST_SHARES = 1;
 
     function setUp() public override {
         super.setUp();
@@ -119,5 +120,71 @@ contract YieldSkimmingDragonRouterMigrationSolvencyTest is Setup {
         // Assert no state mutation happened (router unchanged, pending preserved).
         assertEq(strategy.dragonRouter(), donationAddress, "router unchanged on revert");
         assertEq(strategy.pendingDragonRouter(), charlie, "pending preserved on revert");
+    }
+
+    /// @notice Bailsec #25: a dust transfer to the old dragon must not leave
+    ///         stale junior shares behind to affect migration. When burning is
+    ///         enabled and the vault is insolvent, finalize first applies the
+    ///         same lazy dragon burn used by user exits, then snapshots balances.
+    function test_finalize_burnsOldDragonDustBeforeMigrationWhenBurningEnabled() public {
+        // Alice and Bob deposit at rate 1.0. Bob will become the new dragon.
+        mintAndDepositIntoStrategy(strategy, alice, DEPOSIT);
+        mintAndDepositIntoStrategy(strategy, bob, 50e18);
+
+        vm.prank(management);
+        strategy.setDragonRouter(bob);
+        skip(14 days);
+
+        // Rate drops: pre-migration user debt is 150, vault value is 120, so
+        // the vault is insolvent. Migrating Bob's 50 shares to dragon debt
+        // restores user-debt coverage.
+        MockStrategySkimming(address(strategy)).updateExchangeRate(8e17);
+        assertTrue(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "pre-migration insolvent");
+
+        vm.prank(alice);
+        strategy.transfer(donationAddress, DUST_SHARES);
+
+        assertEq(strategy.balanceOf(donationAddress), DUST_SHARES, "old dragon has attacker dust");
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).getDragonRouterDebtInAssetValue(),
+            DUST_SHARES,
+            "dust was classified as dragon debt"
+        );
+
+        strategy.finalizeDragonRouterChange();
+
+        assertEq(strategy.dragonRouter(), bob, "router migrated");
+        assertEq(strategy.balanceOf(donationAddress), 0, "old dragon dust was burned before migration");
+        assertEq(
+            IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue(),
+            DEPOSIT - DUST_SHARES,
+            "burned dust is not reclassified back into user debt"
+        );
+        assertFalse(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent(), "post-migration solvent");
+    }
+
+    /// @notice The issue #25 burn is gated by `enableBurning`. With burning
+    ///         disabled, finalize preserves the old dragon balance and follows
+    ///         the existing unrestricted dragon-operation policy.
+    function test_finalize_doesNotBurnOldDragonDustWhenBurningDisabled() public {
+        vm.prank(management);
+        strategy.setEnableBurning(false);
+
+        mintAndDepositIntoStrategy(strategy, alice, DEPOSIT);
+        mintAndDepositIntoStrategy(strategy, bob, 50e18);
+
+        vm.prank(management);
+        strategy.setDragonRouter(bob);
+        skip(14 days);
+
+        MockStrategySkimming(address(strategy)).updateExchangeRate(8e17);
+
+        vm.prank(alice);
+        strategy.transfer(donationAddress, DUST_SHARES);
+
+        strategy.finalizeDragonRouterChange();
+
+        assertEq(strategy.dragonRouter(), bob, "router migrated");
+        assertEq(strategy.balanceOf(donationAddress), DUST_SHARES, "old dragon dust is preserved");
     }
 }
