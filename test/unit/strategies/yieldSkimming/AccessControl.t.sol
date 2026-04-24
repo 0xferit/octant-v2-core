@@ -302,9 +302,10 @@ contract AccessControlTest is Setup {
         vm.prank(management);
         strategy.setEnableBurning(true);
 
-        // Act + Assert: finalize should revert during insolvency
+        // Act + Assert: finalize should revert because the post-migration state is
+        // still insolvent. Here oldDragonShares move to user debt, which only worsens the gap.
         skip(14 days);
-        vm.expectRevert("Dragon cannot operate during insolvency");
+        vm.expectRevert("Router change would cause insolvency");
         strategy.finalizeDragonRouterChange();
     }
 

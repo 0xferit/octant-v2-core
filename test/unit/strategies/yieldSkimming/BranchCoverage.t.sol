@@ -979,7 +979,10 @@ contract YieldSkimmingBranchCoverageTest is Setup {
 
         assertTrue(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent());
 
-        vm.expectRevert("Dragon cannot operate during insolvency");
+        // Solvency check is now post-migration. Old dragon balance becoming user debt
+        // only worsens the gap here, so the post-state remains insolvent and finalize
+        // reverts with the new error message.
+        vm.expectRevert("Router change would cause insolvency");
         strategy.finalizeDragonRouterChange();
     }
 
@@ -1548,7 +1551,7 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         // Deposit first so we have shares
         mintAndDepositIntoStrategy(strategy, user1, 100e18);
 
-        // Set rate to 0 and manipulate debts to 0 so vault stays "solvent"
+        // Set rate to 0 and manipulate debts to 0 so vault stays "solvent".
         MockStrategySkimming(address(strategy)).updateExchangeRate(0);
         vm.store(address(strategy), YS_SLOT, bytes32(uint256(0))); // totalDebtOwedToUserInAssetValue = 0
         bytes32 dragonDebtSlot = bytes32(uint256(YS_SLOT) + 2);

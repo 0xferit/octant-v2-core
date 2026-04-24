@@ -59,8 +59,10 @@ interface IYieldSkimmingStrategy {
 
     /**
      * @notice Check whether the vault is insolvent
-     * @dev Insolvent when total vault value (assets * rate) < total value debt (users + dragon)
-     * @return isInsolvent True if vault cannot cover total value debt
+     * @dev Insolvent when total vault value (assets * rate) is below user debt.
+     *      Dragon debt is excluded from this check because dragon shares are junior
+     *      loss-buffer accounting and are expected to absorb losses before users.
+     * @return isInsolvent True if vault cannot cover user value debt
      */
     function isVaultInsolvent() external view returns (bool isInsolvent);
 }

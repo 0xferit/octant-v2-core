@@ -815,7 +815,13 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
 
     /**
      * @notice Finalizes the dragon router change with proper debt accounting migration
-     * @dev Migrates debt tracking when dragon router changes to maintain correct accounting
+     * @dev Migrates debt tracking when dragon router changes to maintain correct accounting.
+     *      The solvency check runs AFTER debt migration so that:
+     *      - Migrations that would restore solvency (new dragon holds user shares whose
+     *        conversion to dragon debt drops user debt below vault value) are allowed.
+     *      - Migrations that would create insolvency (old dragon balance becoming user
+     *        debt pushes user debt above vault value) are blocked.
+     *      A pre-migration check inspecting the old state misclassifies both directions.
      */
     function finalizeDragonRouterChange() external override {
         StrategyData storage S = _strategyStorage();
@@ -830,10 +836,6 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         // Get balances before changing the router
         uint256 oldDragonBalance = _balanceOf(S, oldDragonRouter);
         uint256 newDragonBalance = _balanceOf(S, newDragonRouter);
-
-        if (oldDragonBalance > 0) {
-            _requireDragonSolvency(oldDragonRouter);
-        }
 
         // Migrate debt accounting:
         // 1. Old dragon router's balance becomes user debt
@@ -854,6 +856,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             } else {
                 YS.totalDebtOwedToUserInAssetValue = 0;
             }
+        }
+
+        // Post-migration solvency check: only enforced when burning is enabled
+        // (mirrors the gating used by _requireDragonSolvency / _maxDragonRedeemableShares).
+        if (S.enableBurning) {
+            require(!_isVaultInsolvent(), "Router change would cause insolvency");
         }
 
         // Now call the parent implementation to actually change the router
