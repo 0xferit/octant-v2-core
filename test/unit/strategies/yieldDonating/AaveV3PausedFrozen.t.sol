@@ -11,6 +11,9 @@ contract MockPool {
     function withdraw(address, uint256, address) external pure returns (uint256) {
         return 0;
     }
+    function getReserveNormalizedIncome(address) external pure returns (uint256) {
+        return 1e27;
+    }
 }
 
 /// @notice Configurable data provider so tests can flip paused/active/frozen flags.
@@ -64,6 +67,31 @@ contract ConfigurableDataProvider {
 
     function getPaused(address) external view returns (bool) {
         return paused;
+    }
+
+    function getReserveData(
+        address
+    )
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint40
+        )
+    {
+        // accruedToTreasuryScaled=0, totalAToken=totalSupply (mirrors the legacy
+        // getATokenTotalSupply value used by the pre-fix cap path).
+        return (0, 0, totalSupply, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 }
 

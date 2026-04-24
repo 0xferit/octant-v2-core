@@ -32,6 +32,9 @@ contract MockPool {
     function withdraw(address, uint256, address) external pure returns (uint256) {
         return 0;
     }
+    function getReserveNormalizedIncome(address) external pure returns (uint256) {
+        return 1e27; // RAY — no growth, treasury scaling is a no-op
+    }
 }
 
 /// @title Inline mock for IPoolDataProvider

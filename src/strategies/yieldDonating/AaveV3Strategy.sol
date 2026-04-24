@@ -5,12 +5,29 @@ import { BaseHealthCheck } from "src/strategies/periphery/BaseHealthCheck.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 interface IPool {
     /// @notice Supplies an asset to the Aave pool
     function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external;
     /// @notice Withdraws an asset from the Aave pool
     function withdraw(address asset, uint256 amount, address to) external returns (uint256);
+    /// @notice Returns the projected liquidity index for a reserve, accounting for the
+    ///         accrual since `lastUpdateTimestamp` — this is the `nextLiquidityIndex`
+    ///         Aave's own `validateSupply` uses, so it matches the cap check exactly.
+    function getReserveNormalizedIncome(address asset) external view returns (uint256);
+}
+
+/// @dev Slim view of `IPoolDataProvider.getReserveData` that only decodes the first
+///      three return slots (`unbacked`, `accruedToTreasuryScaled`, `totalAToken`).
+///      The cap path needs only `accruedToTreasuryScaled` and `totalAToken`; reading
+///      the full 12-slot tuple trips a stack-too-deep on the ABI decoder under the
+///      `forge coverage` build profile (viaIR + optimizer disabled). Same underlying
+///      contract, narrower signature.
+interface IPoolDataProviderSlim {
+    function getReserveData(
+        address asset
+    ) external view returns (uint256 unbacked, uint256 accruedToTreasuryScaled, uint256 totalAToken);
 }
 
 interface IPoolDataProvider {
@@ -46,6 +63,30 @@ interface IPoolDataProvider {
 
     /// @notice Returns whether the reserve is paused (governance/risk admin emergency switch)
     function getPaused(address asset) external view returns (bool);
+
+    /// @notice Returns full reserve data including totalAToken and accruedToTreasuryScaled.
+    /// @dev `accruedToTreasuryScaled` is treasury-bound reserve that consumes supply-cap
+    ///      headroom in `ValidationLogic.validateSupply` but is missing from
+    ///      `getATokenTotalSupply`. We add it conservatively to the cap denominator.
+    function getReserveData(
+        address asset
+    )
+        external
+        view
+        returns (
+            uint256 unbacked,
+            uint256 accruedToTreasuryScaled,
+            uint256 totalAToken,
+            uint256 totalStableDebt,
+            uint256 totalVariableDebt,
+            uint256 liquidityRate,
+            uint256 variableBorrowRate,
+            uint256 stableBorrowRate,
+            uint256 averageStableBorrowRate,
+            uint256 liquidityIndex,
+            uint256 variableBorrowIndex,
+            uint40 lastUpdateTimestamp
+        );
 }
 
 interface IPoolAddressesProvider {
@@ -170,8 +211,17 @@ contract AaveV3Strategy is BaseHealthCheck {
             return type(uint256).max;
         }
 
-        // Get current total supply in the pool
-        uint256 totalSupply = dataProvider.getATokenTotalSupply(address(asset));
+        // Aave's `validateSupply` enforces
+        //   (scaledTotalSupply + accruedToTreasury).rayMul(nextLiquidityIndex) + amount
+        //     <= supplyCap * 10^decimals
+        // `getATokenTotalSupply` omits the `accruedToTreasury` contribution, so a
+        // headroom check that uses `totalAToken` alone over-reports cap room and
+        // lets users hit a downstream `SUPPLY_CAP_EXCEEDED` revert. The helper
+        // rayMul-scales treasury into underlying units and keeps its locals out
+        // of this function's stack frame (needed for the `--no-via-ir` coverage
+        // build profile, which otherwise hits a stack-too-deep on the 12-return
+        // decoder combined with the surrounding locals).
+        uint256 totalSupply = _cappedTotalSupply();
 
         // Cap is in whole tokens, need to adjust for decimals (see https://github.com/aave/aave-v3-core/blob/782f51917056a53a2c228701058a6c3fb233684a/contracts/protocol/libraries/types/DataTypes.sol#L53)
         uint256 supplyCapScaled = supplyCap * 10 ** IERC20Metadata(address(asset)).decimals();
@@ -189,6 +239,33 @@ contract AaveV3Strategy is BaseHealthCheck {
         } else {
             return 0;
         }
+    }
+
+    /// @dev Returns the cap-denominator view of total supplied assets, rayMul-scaled
+    ///      into underlying units to match Aave's `validateSupply`:
+    ///      `totalAToken + rayMul(accruedToTreasuryScaled, nextLiquidityIndex)`,
+    ///      ceiling-rounded so headroom stays conservative.
+    ///
+    ///      `liquidityIndex` is read via `IPool.getReserveNormalizedIncome` — this is
+    ///      the projected `nextLiquidityIndex` Aave uses, avoiding the few-seconds-of-
+    ///      accrual gap vs the stored `liquidityIndex` on the data provider.
+    ///
+    ///      Uses `IPoolDataProviderSlim` (3-return view of `getReserveData`) instead
+    ///      of the full 12-return interface: the narrower ABI decoder keeps the call
+    ///      site within the EVM stack budget under the `--no-via-ir` + `--no-optimizer`
+    ///      `forge coverage` build. Identical on-chain behavior — Solidity decodes the
+    ///      first three 32-byte slots of the return data and stops.
+    function _cappedTotalSupply() internal view returns (uint256) {
+        (, uint256 accruedToTreasuryScaled, uint256 totalAToken) = IPoolDataProviderSlim(address(dataProvider))
+            .getReserveData(address(asset));
+        return
+            totalAToken +
+            Math.mulDiv(
+                accruedToTreasuryScaled,
+                pool.getReserveNormalizedIncome(address(asset)),
+                1e27,
+                Math.Rounding.Ceil
+            );
     }
 
     /**
