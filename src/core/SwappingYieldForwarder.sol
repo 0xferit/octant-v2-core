@@ -317,6 +317,7 @@ contract SwappingYieldForwarder is YieldForwarder {
         ISwapper currentSwapper = swapper;
         IERC20(assetIn).forceApprove(address(currentSwapper), assetsIn);
         assetsOut = currentSwapper.swap(assetIn, targetAsset, assetsIn, minAmountOut, receiver);
+        IERC20(assetIn).forceApprove(address(currentSwapper), 0);
 
         // Forwarder-side minAmountOut re-check, independent of the swapper's own
         // check. Catches an honest-but-buggy adapter whose swap() returns an

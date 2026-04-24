@@ -841,6 +841,36 @@ contract SwappingYieldForwarderTest is Test {
         vm.expectRevert(abi.encodeWithSelector(SwappingYieldForwarder.InsufficientSwapOutput.selector, 5e18, 1));
         forwarder.reportSwapAndForward(address(strategy), 10_000, 5e18, block.timestamp + 1 hours);
     }
+
+    /// @notice A pull-pattern swapper may consume less than `assetsIn` and leave
+    ///         residual input with the forwarder. Authorized recovery flushes it
+    ///         to the immutable receiver, while the forwarder must not retain a
+    ///         live swapper allowance after the successful swap.
+    function test_reportSwapAndForward_partialPullResidueRecoverableAndAllowanceCleared() public {
+        PartialPullSwapper partialPull = new PartialPullSwapper(address(targetAsset), 6_000);
+        vm.prank(management);
+        forwarder.setSwapper(address(partialPull));
+
+        _depositIntoStrategy(user, DEPOSIT_AMOUNT);
+        vm.prank(address(forwarder));
+        strategy.report();
+        _simulateProfit(10e18);
+
+        vm.prank(keeperEOA);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
+
+        uint256 residual = asset.balanceOf(address(forwarder));
+        assertGt(assetsOut, 0, "partial pull still produces output");
+        assertGt(residual, 0, "unpulled input should remain recoverable at forwarder");
+        assertEq(asset.allowance(address(forwarder), address(partialPull)), 0, "swapper allowance must be cleared");
+
+        uint256 receiverAssetBefore = asset.balanceOf(receiver);
+        vm.prank(management);
+        forwarder.forwardToken(address(asset));
+
+        assertEq(asset.balanceOf(address(forwarder)), 0, "forwarder residual must be flushed");
+        assertEq(asset.balanceOf(receiver), receiverAssetBefore + residual, "receiver gets residual input");
+    }
 }
 
 /// @dev A swapper that lies about amountOut to exercise the forwarder's post-swap check.
@@ -892,5 +922,34 @@ contract MixedDecimalSwapper {
             : amountIn * (10 ** (outDecimals - inDecimals));
         if (amountOut < minAmountOut) revert Insufficient(minAmountOut, amountOut);
         MockERC20(outputToken).mint(receiver, amountOut);
+    }
+}
+
+/// @dev Pull-pattern swapper that intentionally consumes only part of amountIn.
+contract PartialPullSwapper {
+    using SafeERC20 for IERC20;
+
+    uint256 internal constant BPS = 10_000;
+
+    address public immutable outputToken;
+    uint256 public immutable pullBps;
+
+    constructor(address _outputToken, uint256 _pullBps) {
+        outputToken = _outputToken;
+        pullBps = _pullBps;
+    }
+
+    function swap(
+        address tokenIn,
+        address,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address receiver
+    ) external returns (uint256) {
+        uint256 pulled = (amountIn * pullBps) / BPS;
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), pulled);
+        if (pulled < minAmountOut) revert MockSwapper.InsufficientOutput(minAmountOut, pulled);
+        ERC20Mock(outputToken).mint(receiver, pulled);
+        return pulled;
     }
 }
