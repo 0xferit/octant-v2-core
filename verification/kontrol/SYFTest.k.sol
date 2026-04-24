@@ -26,7 +26,7 @@ contract SYFTest is SYFSetup {
 
         vm.prank(nonKeeper);
         vm.expectRevert(YieldForwarder.OnlyKeeper.selector);
-        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
     }
 
     /// @notice swap() is always called with the hardcoded receiver as output recipient
@@ -38,7 +38,7 @@ contract SYFTest is SYFSetup {
         vm.assume(redeemReturn > 0);
 
         vm.prank(_keeper);
-        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
 
         // Assert: swap was called with receiver == forwarder.receiver()
         address lastReceiver = _loadAddress(address(mockSwapper), MSWP_LAST_RECEIVER_SLOT);
@@ -54,7 +54,7 @@ contract SYFTest is SYFSetup {
         vm.assume(redeemReturn > 0);
 
         vm.prank(_keeper);
-        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
 
         // Assert: forwarder's source asset balance is 0 (all transferred to swapper)
         uint256 forwarderBalance = sourceAsset.balanceOf(address(syfForwarder));
@@ -75,7 +75,7 @@ contract SYFTest is SYFSetup {
         _storeUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT, sentinel);
 
         vm.prank(_keeper);
-        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
 
         // Assert: returned 0
         assertEq(assetsOut, 0);
@@ -104,7 +104,7 @@ contract SYFTest is SYFSetup {
         _storeMappingUInt256(address(sourceAsset), ERC20_BALANCES_SLOT, uint256(uint160(address(syfForwarder))), 0, 0);
 
         vm.prank(_keeper);
-        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0);
+        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
 
         // Assert: returned 0
         assertEq(assetsOut, 0);
@@ -125,7 +125,7 @@ contract SYFTest is SYFSetup {
         uint256 minAmountOut = freshUInt256Bounded();
 
         vm.prank(_keeper);
-        syfForwarder.reportSwapAndForward(address(mockStrategy), maxLoss, minAmountOut);
+        syfForwarder.reportSwapAndForward(address(mockStrategy), maxLoss, minAmountOut, block.timestamp + 1 hours);
 
         // Assert: tokenIn == sourceAsset (strategy's underlying)
         address lastTokenIn = _loadAddress(address(mockSwapper), MSWP_LAST_TOKEN_IN_SLOT);

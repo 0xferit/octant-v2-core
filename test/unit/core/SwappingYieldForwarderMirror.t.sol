@@ -159,7 +159,7 @@ contract SwappingYieldForwarderMirrorTest is Test {
         assertEq(s.convertToAssets(1), 0, "precondition: dust rounds to zero");
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = swappingForwarder.reportSwapAndForward(address(s), 0, 0);
+        uint256 assetsOut = swappingForwarder.reportSwapAndForward(address(s), 0, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 0, "no swap output");
         assertEq(s.balanceOf(address(swappingForwarder)), 1, "dust share retained");
@@ -179,7 +179,7 @@ contract SwappingYieldForwarderMirrorTest is Test {
         s.setMaxRedeem(40 ether);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = swappingForwarder.reportSwapAndForward(address(s), 0, 0);
+        uint256 assetsOut = swappingForwarder.reportSwapAndForward(address(s), 0, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 40 ether, "output matches capped redeem");
         assertEq(s.balanceOf(address(swappingForwarder)), 60 ether, "residual shares retained");
@@ -194,7 +194,7 @@ contract SwappingYieldForwarderMirrorTest is Test {
         s.setMaxRedeem(0);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = swappingForwarder.reportSwapAndForward(address(s), 0, 0);
+        uint256 assetsOut = swappingForwarder.reportSwapAndForward(address(s), 0, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 0, "no swap when redeem is skipped");
         assertEq(s.balanceOf(address(swappingForwarder)), 100 ether, "all shares retained");

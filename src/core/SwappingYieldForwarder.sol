@@ -96,6 +96,11 @@ contract SwappingYieldForwarder is YieldForwarder {
     /// @param supplied The minAmountOut the keeper passed in
     error SlippageFloorTooLoose(uint256 floor, uint256 supplied);
 
+    /// @notice Thrown when `reportSwapAndForward` is called past the caller-supplied deadline
+    /// @param deadline The keeper-chosen expiry timestamp (seconds since epoch)
+    /// @param blockTimestamp The block time at which the call landed
+    error ExpiredDeadline(uint256 deadline, uint256 blockTimestamp);
+
     // ============================================
     // EVENTS
     // ============================================
@@ -232,16 +237,29 @@ contract SwappingYieldForwarder is YieldForwarder {
      *      If report() produces no profit shares, the function returns 0 without reverting.
      *      If redemption returns 0 assets, the function returns 0 without attempting a swap.
      *
+     *      Bailsec #68: the caller MUST supply a fresh `deadline` (seconds since epoch).
+     *      The underlying Uniswap V3 adapter uses `block.timestamp` as the router deadline,
+     *      which always passes at inclusion and therefore adds no real time bound between
+     *      the keeper's quote and settlement. Enforcing an explicit expiry at the forwarder
+     *      prevents stale-slippage execution when a queued transaction lands in a later
+     *      block against a moved market. There is no `0 = disabled` sentinel: keepers
+     *      always pass `block.timestamp + buffer` at transaction assembly time.
+     *
      * @param strategy Address of the strategy contract (must implement IReportable, IRedeemable, IERC20, IERC4626Asset)
      * @param maxLoss Maximum acceptable loss in basis points for the redemption
      * @param minAmountOut Minimum acceptable amount of target asset after swap (slippage protection)
+     * @param deadline Unix timestamp (seconds) past which the call reverts with ExpiredDeadline
      * @return assetsOut Amount of target asset forwarded to receiver (0 if no profit shares)
      */
     function reportSwapAndForward(
         address strategy,
         uint256 maxLoss,
-        uint256 minAmountOut
+        uint256 minAmountOut,
+        uint256 deadline
     ) external nonReentrant returns (uint256 assetsOut) {
+        // Bailsec #68: freshness check runs before any state-touching work so an expired
+        // call fails cheaply and the keeper can retry with a fresh deadline.
+        if (block.timestamp > deadline) revert ExpiredDeadline(deadline, block.timestamp);
         if (msg.sender != keeper) revert OnlyKeeper();
 
         IReportable(strategy).report();

@@ -218,7 +218,7 @@ abstract contract BaseSwapperIntegrationTest is Test {
         uint256 receiverTargetBefore = ERC20(_targetAsset()).balanceOf(receiver);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         _clearMocks();
 
@@ -235,7 +235,7 @@ abstract contract BaseSwapperIntegrationTest is Test {
         _depositAndReport(DEPOSIT_AMOUNT);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 0, "Should return 0 when no profit");
         assertEq(ERC20(_targetAsset()).balanceOf(receiver), 0, "Receiver gets nothing");
@@ -247,14 +247,14 @@ abstract contract BaseSwapperIntegrationTest is Test {
         // First profit cycle
         _simulateProfit(500e6);
         vm.prank(keeperEOA);
-        uint256 assets1 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assets1 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
         _clearMocks();
         assertGt(assets1, 0, "First report should yield target assets");
 
         // Second profit cycle
         _simulateProfit(1_500e6);
         vm.prank(keeperEOA);
-        uint256 assets2 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assets2 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
         _clearMocks();
         assertGt(assets2, 0, "Second report should yield target assets");
 
@@ -274,7 +274,7 @@ abstract contract BaseSwapperIntegrationTest is Test {
         emit SwappingYieldForwarder.YieldSwappedAndForwarded(address(strategy), receiver, 0, 0, 0);
 
         vm.prank(keeperEOA);
-        forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         _clearMocks();
     }
@@ -290,6 +290,6 @@ abstract contract BaseSwapperIntegrationTest is Test {
     function _test_onlyKeeper_reportSwapAndForward() internal {
         vm.prank(address(0x1111));
         vm.expectRevert(YieldForwarder.OnlyKeeper.selector);
-        forwarder.reportSwapAndForward(address(strategy), 0, 0);
+        forwarder.reportSwapAndForward(address(strategy), 0, 0, block.timestamp + 1 hours);
     }
 }

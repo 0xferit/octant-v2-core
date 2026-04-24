@@ -92,7 +92,7 @@ contract PSMSwapperIntegrationTest is BaseSwapperIntegrationTest {
         _simulateProfit(profit);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         _clearMocks();
 

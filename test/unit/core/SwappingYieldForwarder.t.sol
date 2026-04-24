@@ -249,7 +249,7 @@ contract SwappingYieldForwarderTest is Test {
         _simulateProfit(profit);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         assertGt(assetsOut, 0, "Should swap and forward nonzero target assets");
         assertEq(targetAsset.balanceOf(receiver), assetsOut, "Receiver should get target asset");
@@ -261,7 +261,52 @@ contract SwappingYieldForwarderTest is Test {
     function test_reportSwapAndForward_revertsWhenNotKeeper() public {
         vm.prank(address(0x1111));
         vm.expectRevert(YieldForwarder.OnlyKeeper.selector);
-        forwarder.reportSwapAndForward(address(strategy), 0, 0);
+        forwarder.reportSwapAndForward(address(strategy), 0, 0, block.timestamp + 1 hours);
+    }
+
+    function test_reportSwapAndForward_revertsOnExpiredDeadline() public {
+        // Bailsec #68: freshness check runs before any other work so a keeper transaction
+        // that lands one block too late fails cheaply with ExpiredDeadline instead of
+        // settling against a moved market.
+        uint256 staleDeadline = block.timestamp - 1;
+
+        vm.prank(keeperEOA);
+        vm.expectRevert(
+            abi.encodeWithSelector(SwappingYieldForwarder.ExpiredDeadline.selector, staleDeadline, block.timestamp)
+        );
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 0, staleDeadline);
+    }
+
+    function test_reportSwapAndForward_revertsOnDeadlineBoundary() public {
+        // `block.timestamp == deadline` is accepted (require-eq semantics); `deadline + 1`
+        // in the past is the tightest stale window and must revert.
+        uint256 exactNow = block.timestamp;
+
+        // Exactly at deadline: must not revert on the deadline check. We expect the
+        // call to succeed through to the no-profit return of 0 (strategy is pristine).
+        vm.prank(keeperEOA);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, exactNow);
+        assertEq(assetsOut, 0, "equal-timestamp deadline must pass the freshness gate");
+
+        // One second past: must revert with ExpiredDeadline.
+        vm.warp(block.timestamp + 2);
+        vm.prank(keeperEOA);
+        vm.expectRevert(
+            abi.encodeWithSelector(SwappingYieldForwarder.ExpiredDeadline.selector, exactNow, block.timestamp)
+        );
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 0, exactNow);
+    }
+
+    function test_reportSwapAndForward_deadlineCheckedBeforeKeeperGate() public {
+        // A non-keeper with an expired deadline must hit ExpiredDeadline first — cheaper
+        // revert path and matches the ordering documented on the function.
+        uint256 staleDeadline = block.timestamp - 1;
+
+        vm.prank(address(0x1111)); // not keeper
+        vm.expectRevert(
+            abi.encodeWithSelector(SwappingYieldForwarder.ExpiredDeadline.selector, staleDeadline, block.timestamp)
+        );
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 0, staleDeadline);
     }
 
     function test_reportSwapAndForward_zeroProfit_returnsZero() public {
@@ -270,7 +315,7 @@ contract SwappingYieldForwarderTest is Test {
         strategy.report();
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 0, "Should return 0 when no profit");
         assertEq(targetAsset.balanceOf(receiver), 0, "Receiver should get nothing");
@@ -287,7 +332,7 @@ contract SwappingYieldForwarderTest is Test {
         emit SwappingYieldForwarder.YieldSwappedAndForwarded(address(strategy), receiver, 0, 0, 0);
 
         vm.prank(keeperEOA);
-        forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
     }
 
     function test_reportSwapAndForward_multipleReports() public {
@@ -298,13 +343,13 @@ contract SwappingYieldForwarderTest is Test {
         // First profit cycle
         _simulateProfit(5e18);
         vm.prank(keeperEOA);
-        uint256 assets1 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assets1 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
         assertGt(assets1, 0, "First report should yield target assets");
 
         // Second profit cycle
         _simulateProfit(15e18);
         vm.prank(keeperEOA);
-        uint256 assets2 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assets2 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
         assertGt(assets2, 0, "Second report should yield target assets");
 
         assertEq(targetAsset.balanceOf(receiver), assets1 + assets2, "Receiver should accumulate all payouts");
@@ -320,7 +365,7 @@ contract SwappingYieldForwarderTest is Test {
         // minAmountOut too high should revert (swapper enforces it)
         vm.prank(keeperEOA);
         vm.expectRevert();
-        forwarder.reportSwapAndForward(address(strategy), 10_000, type(uint256).max);
+        forwarder.reportSwapAndForward(address(strategy), 10_000, type(uint256).max, block.timestamp + 1 hours);
     }
 
     function test_reportSwapAndForward_lossScenario_noSharesMinted() public {
@@ -333,7 +378,7 @@ contract SwappingYieldForwarderTest is Test {
         yieldSource.simulateLoss(5e18);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 0, "Loss report should return 0");
         assertEq(targetAsset.balanceOf(receiver), 0, "Receiver gets nothing on loss");
@@ -360,7 +405,7 @@ contract SwappingYieldForwarderTest is Test {
         emit SwappingYieldForwarder.YieldSwappedAndForwarded(address(strategy), receiver, 0, 0, 0);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 0, "Should return 0 when redeem returns 0 assets");
         assertEq(targetAsset.balanceOf(receiver), 0, "Receiver gets nothing");
@@ -382,7 +427,7 @@ contract SwappingYieldForwarderTest is Test {
         _simulateProfit(profit);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         assertGt(assetsOut, 0, "Should always forward positive target assets for positive profit");
         assertEq(strategy.balanceOf(address(forwarder)), 0, "Forwarder should redeem all shares");
@@ -468,7 +513,7 @@ contract SwappingYieldForwarderTest is Test {
         _simulateProfit(10e18);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         // New swapper at 2x rate: assetsOut should be roughly 2x the redeemed underlying
         assertGt(assetsOut, 0);
@@ -522,7 +567,7 @@ contract SwappingYieldForwarderTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(SwappingYieldForwarder.SlippageFloorTooLoose.selector, (profit * 9_900) / 10_000, 0)
         );
-        forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
     }
 
     /// @notice A constructor-supplied floor is active before any management call.
@@ -544,7 +589,7 @@ contract SwappingYieldForwarderTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(SwappingYieldForwarder.SlippageFloorTooLoose.selector, (profit * 9_900) / 10_000, 0)
         );
-        fwd.reportSwapAndForward(address(strat), 10_000, 0);
+        fwd.reportSwapAndForward(address(strat), 10_000, 0, block.timestamp + 1 hours);
     }
 
     /// @notice Codex P1 regression — USDC(6) -> USDS(18), 99% floor.
@@ -580,10 +625,8 @@ contract SwappingYieldForwarderTest is Test {
         // Pre-fix floor (raw, no scaling) = 1e6 * 9_900 / 10_000 = 990_000 — so
         // minAmountOut = 1e17 sits between the two and distinguishes the fix.
         vm.prank(keeperEOA);
-        vm.expectRevert(
-            abi.encodeWithSelector(SwappingYieldForwarder.SlippageFloorTooLoose.selector, 9.9e17, 1e17)
-        );
-        fwd.reportSwapAndForward(address(strat), 10_000, 1e17);
+        vm.expectRevert(abi.encodeWithSelector(SwappingYieldForwarder.SlippageFloorTooLoose.selector, 9.9e17, 1e17));
+        fwd.reportSwapAndForward(address(strat), 10_000, 1e17, block.timestamp + 1 hours);
     }
 
     /// @notice Codex P1 regression — USDS(18) -> USDC(6), 99% floor.
@@ -618,7 +661,7 @@ contract SwappingYieldForwarderTest is Test {
         // Keeper passes minAmountOut = 1e6 (1 USDC), which clears the correct floor.
         // Pre-fix: floor would be 9.9e17 and the same call would revert (DoS).
         vm.prank(keeperEOA);
-        uint256 assetsOut = fwd.reportSwapAndForward(address(strat), 10_000, 1e6);
+        uint256 assetsOut = fwd.reportSwapAndForward(address(strat), 10_000, 1e6, block.timestamp + 1 hours);
         assertGt(assetsOut, 0, "swap should succeed when floor is correctly normalized");
     }
 
@@ -687,7 +730,7 @@ contract SwappingYieldForwarderTest is Test {
         _simulateProfit(10e18);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
         assertGt(assetsOut, 0);
     }
 
@@ -751,7 +794,7 @@ contract SwappingYieldForwarderTest is Test {
 
         vm.prank(keeperEOA);
         vm.expectRevert(abi.encodeWithSelector(SwappingYieldForwarder.InsufficientSwapOutput.selector, 5e18, 1));
-        forwarder.reportSwapAndForward(address(strategy), 10_000, 5e18);
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 5e18, block.timestamp + 1 hours);
     }
 }
 

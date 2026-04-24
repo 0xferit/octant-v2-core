@@ -101,7 +101,7 @@ contract UniswapV3SwapperIntegrationTest is BaseSwapperIntegrationTest {
         _simulateProfit(profit);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         _clearMocks();
 
@@ -366,7 +366,7 @@ contract UniswapV3MultiHopTest is Test {
 
         // Report, swap (multi-hop USDC→WETH→DAI), forward
         vm.prank(keeper);
-        uint256 daiOut = fwd.reportSwapAndForward(stratAddr, 10_000, 0);
+        uint256 daiOut = fwd.reportSwapAndForward(stratAddr, 10_000, 0, block.timestamp + 1 hours);
         vm.clearMockedCalls();
 
         assertGt(daiOut, 0, "Multi-hop through forwarder should produce DAI");
