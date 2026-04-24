@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { ISwapper } from "./interfaces/ISwapper.sol";
 import { ITokenizedStrategy } from "./interfaces/ITokenizedStrategy.sol";
 import { YieldForwarder, IRedeemable, IReportable } from "./YieldForwarder.sol";
@@ -12,6 +13,26 @@ import { YieldForwarder, IRedeemable, IReportable } from "./YieldForwarder.sol";
 interface IERC4626Asset {
     /// @notice Returns the address of the underlying asset
     function asset() external view returns (address);
+}
+
+/// @notice Minimal interface for ERC-4626 maxRedeem
+/// @dev Defined inline here (rather than imported from YieldForwarder) so this
+///      contract compiles standalone on develop while the matching base-class
+///      interface declarations ship in the sibling #415 PR. Once both PRs merge,
+///      both copies are byte-for-byte identical.
+interface IMaxRedeem {
+    /// @notice Maximum shares redeemable by `owner` right now (ERC-4626)
+    /// @param owner Address whose redeem headroom is queried
+    /// @return maxShares Upper bound on shares redeemable by `owner`
+    function maxRedeem(address owner) external view returns (uint256 maxShares);
+}
+
+/// @notice Minimal interface for ERC-4626 convertToAssets (floor rounding)
+interface IConvertible {
+    /// @notice Preview the assets returned for `shares`, rounded down (ERC-4626)
+    /// @param shares Amount of shares to preview
+    /// @return assets Assets that would be returned by redeem(), before fees/loss
+    function convertToAssets(uint256 shares) external view returns (uint256 assets);
 }
 
 /**
@@ -225,8 +246,20 @@ contract SwappingYieldForwarder is YieldForwarder {
 
         IReportable(strategy).report();
 
-        uint256 shares = IERC20(strategy).balanceOf(address(this));
+        uint256 balance = IERC20(strategy).balanceOf(address(this));
+        if (balance == 0) return 0;
+
+        // Bailsec #62: mirror reportAndForward's maxRedeem cap so the inner redeem
+        // cannot revert when external vault liquidity tightens below the forwarder's
+        // share balance. Residual shares stay at the forwarder until headroom recovers.
+        uint256 shares = Math.min(balance, IMaxRedeem(strategy).maxRedeem(address(this)));
         if (shares == 0) return 0;
+
+        // Bailsec #61: mirror reportAndForward's ZERO_ASSETS skip so a dust share
+        // balance on a loss-impaired strategy (totalAssets < totalSupply) does not
+        // roll back the report() above. The dust stays at the forwarder for a later
+        // report once the imbalance resolves.
+        if (IConvertible(strategy).convertToAssets(shares) == 0) return 0;
 
         // Redeem to this contract (not receiver) so we can swap first
         uint256 assetsIn = IRedeemable(strategy).redeem(shares, address(this), address(this), maxLoss);
