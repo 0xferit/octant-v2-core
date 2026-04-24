@@ -452,8 +452,19 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * 3. **Loss Protection**: When current value is less than total shares, burns dragon shares (if enabled) to cover shortfall
      * 4. **Insolvency Handling**: If dragon buffer insufficient for losses, remaining shortfall is handled through proportional asset distribution during withdrawals
      *
-     * @return profit Profit in assets from underlying value appreciation
-     * @return loss Loss in assets from underlying value depreciation
+     * Event semantics: the `loss` value emitted via `Reported` is a gross
+     * shortfall — the full gap between total value debt and current vault
+     * value at the time of the call — not an incremental delta since the last
+     * report. If `report()` is called multiple times during the same impairment
+     * (e.g. dragon shares cannot fully cover the loss), the same gross shortfall
+     * is re-emitted on each call.
+     *
+     * Integrators must not naively sum `loss` across consecutive `Reported`
+     * events to compute cumulative damage; doing so double-counts persistent
+     * impairments. Treat the event as a level signal, not a delta signal.
+     *
+     * @return profit Profit in assets from underlying value appreciation since the last report
+     * @return loss Loss in assets — gross shortfall (level), not a delta. See event semantics above.
      */
     function report()
         public
@@ -505,6 +516,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         S.lastReport = uint96(block.timestamp);
         YS.lastReportedRate = currentRate;
         emit Harvest(msg.sender, currentRate.rayToWad());
+        // `loss` here is a gross shortfall (level), not a delta; see report() NatSpec.
         emit Reported(profit, loss);
 
         return (profit, loss);

@@ -29,6 +29,10 @@ interface ITokenizedStrategy is IERC4626, IERC20Permit {
 
     /**
      * @notice Emitted when the strategy reports `profit` or `loss`.
+     * @dev Base semantics are gain/loss since the previous report. Specialized
+     *      implementations may define narrower semantics; for
+     *      YieldSkimmingTokenizedStrategy, `loss` is a gross shortfall level
+     *      and must not be summed across consecutive reports.
      */
     event Reported(uint256 profit, uint256 loss);
 
@@ -169,9 +173,11 @@ interface ITokenizedStrategy is IERC4626, IERC20Permit {
      * @dev Keepers should consider MEV-protected submission. Specialized implementations may
      *      mint shares to the donation destination (dragon router) on profit, and apply
      *      loss-protection via dragon burning (if enabled). The return values are denominated
-     *      in the underlying `asset`.
+     *      in the underlying `asset`, subject to implementation-specific semantics.
+     *      YieldSkimmingTokenizedStrategy returns and emits `loss` as a gross shortfall level,
+     *      not an incremental delta.
      * @return _profit Gain since last report, in `asset` units.
-     * @return _loss Loss since last report, in `asset` units.
+     * @return _loss Loss in `asset` units, subject to implementation-specific semantics.
      */
     function report() external returns (uint256 _profit, uint256 _loss);
 
