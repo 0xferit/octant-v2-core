@@ -125,7 +125,15 @@ contract AaveV3Strategy is BaseHealthCheck {
 
     /**
      * @notice Returns maximum additional assets that can be deposited
-     * @dev Checks Aave V3 supply cap and subtracts current supply
+     * @dev Checks Aave V3 supply cap and subtracts current supply.
+     *
+     *      DUST CAVEAT: Aave mints aTokens proportional to `amount / liquidityIndex`.
+     *      For sub-unit deposits on a high-index reserve, the scaled mint amount can round
+     *      to zero and `pool.supply` reverts with `INVALID_MINT_AMOUNT`. This view does
+     *      NOT pre-filter such dust; integrators relying on `maxDeposit` should be prepared
+     *      for Aave reverts on amounts below the per-reserve scaled-unit floor.
+     *      A pre-flight check is intentionally omitted to keep the hot path cheap for
+     *      the typical case where deposits are far above the dust threshold.
      * @return limit Maximum additional deposit amount in asset base units
      */
     function availableDepositLimit(address /*_owner*/) public view override returns (uint256) {
