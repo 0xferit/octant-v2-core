@@ -124,6 +124,7 @@ contract CurveSwapper is ISwapper {
     ) external override returns (uint256 amountOut) {
         if (_tokenIn != tokenIn || _tokenOut != tokenOut) revert InvalidToken();
 
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
         IERC20(tokenIn).forceApprove(pool, amountIn);
 
         uint256 balBefore = IERC20(tokenOut).balanceOf(address(this));
@@ -133,5 +134,14 @@ contract CurveSwapper is ISwapper {
         IERC20(tokenIn).forceApprove(pool, 0);
 
         IERC20(tokenOut).safeTransfer(receiver, amountOut);
+
+        // Curve pools normally pull the full `amountIn`, but any tokenIn that
+        // ended up here -- whether from an unusual pool implementation or a
+        // donation -- is returned to the caller so the adapter upholds its
+        // stateless-between-calls contract on every path.
+        uint256 leftover = IERC20(tokenIn).balanceOf(address(this));
+        if (leftover != 0) {
+            IERC20(tokenIn).safeTransfer(msg.sender, leftover);
+        }
     }
 }

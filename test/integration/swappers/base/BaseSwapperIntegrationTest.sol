@@ -66,14 +66,42 @@ abstract contract BaseSwapperIntegrationTest is Test {
         // 2. Deploy swapper (concrete test provides this)
         ISwapper swapper = _deploySwapper();
 
-        // 3. Deploy SwappingYieldForwarder
-        forwarder = new SwappingYieldForwarder(receiver, keeperEOA, _targetAsset(), address(swapper));
-
-        // 4. Deploy MorphoCompounder strategy via factory with forwarder as keeper AND donation address
+        // 3. Deploy the factory
         factory = new MorphoCompounderStrategyFactory{
             salt: keccak256("OCT_MORPHO_COMPOUNDER_STRATEGY_VAULT_FACTORY_V1")
         }();
 
+        // 4. Predict the forwarder's CREATE address (next contract deployed by this test),
+        //    then predict the strategy's CREATE2 address using the predicted forwarder
+        //    as keeper/donation (both feed into the factory's salt hash). This breaks the
+        //    forwarder <-> strategy circular dependency.
+        address predictedForwarder = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
+        address predictedStrategy = factory.computeStrategyAddress(
+            factory.YS_USDC(),
+            factory.USDC(),
+            "MorphoCompounder Donating Strategy",
+            "osMORPHO",
+            management,
+            predictedForwarder,
+            emergencyAdmin,
+            predictedForwarder,
+            false,
+            address(implementation),
+            management
+        );
+
+        // 5. Deploy SwappingYieldForwarder with the predicted strategy as its vault
+        forwarder = new SwappingYieldForwarder(
+            receiver,
+            keeperEOA,
+            _targetAsset(),
+            address(swapper),
+            predictedStrategy,
+            0
+        );
+        require(address(forwarder) == predictedForwarder, "Forwarder address mismatch");
+
+        // 6. Deploy the strategy with forwarder as keeper AND donation address
         vm.startPrank(management);
         address strategyAddr = factory.createStrategy(
             "MorphoCompounder Donating Strategy",
@@ -86,6 +114,7 @@ abstract contract BaseSwapperIntegrationTest is Test {
             address(implementation)
         );
         vm.stopPrank();
+        require(strategyAddr == predictedStrategy, "Strategy address mismatch: vault wiring broken");
 
         strategy = MorphoCompounderStrategy(strategyAddr);
 
@@ -189,7 +218,7 @@ abstract contract BaseSwapperIntegrationTest is Test {
         uint256 receiverTargetBefore = ERC20(_targetAsset()).balanceOf(receiver);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         _clearMocks();
 
@@ -206,7 +235,7 @@ abstract contract BaseSwapperIntegrationTest is Test {
         _depositAndReport(DEPOSIT_AMOUNT);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         assertEq(assetsOut, 0, "Should return 0 when no profit");
         assertEq(ERC20(_targetAsset()).balanceOf(receiver), 0, "Receiver gets nothing");
@@ -218,14 +247,14 @@ abstract contract BaseSwapperIntegrationTest is Test {
         // First profit cycle
         _simulateProfit(500e6);
         vm.prank(keeperEOA);
-        uint256 assets1 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assets1 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
         _clearMocks();
         assertGt(assets1, 0, "First report should yield target assets");
 
         // Second profit cycle
         _simulateProfit(1_500e6);
         vm.prank(keeperEOA);
-        uint256 assets2 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assets2 = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
         _clearMocks();
         assertGt(assets2, 0, "Second report should yield target assets");
 
@@ -245,7 +274,7 @@ abstract contract BaseSwapperIntegrationTest is Test {
         emit SwappingYieldForwarder.YieldSwappedAndForwarded(address(strategy), receiver, 0, 0, 0);
 
         vm.prank(keeperEOA);
-        forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         _clearMocks();
     }
@@ -261,6 +290,6 @@ abstract contract BaseSwapperIntegrationTest is Test {
     function _test_onlyKeeper_reportSwapAndForward() internal {
         vm.prank(address(0x1111));
         vm.expectRevert(YieldForwarder.OnlyKeeper.selector);
-        forwarder.reportSwapAndForward(address(strategy), 0, 0);
+        forwarder.reportSwapAndForward(address(strategy), 0, 0, block.timestamp + 1 hours);
     }
 }

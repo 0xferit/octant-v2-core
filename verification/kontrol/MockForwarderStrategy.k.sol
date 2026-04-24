@@ -17,6 +17,8 @@ pragma solidity ^0.8.0;
  *        slot 6: expectedBalanceOfAccount -- only this account has shares
  *        slot 7: lastRedeemOwner    -- captures owner arg from redeem()
  *        slot 8: lastRedeemMaxLoss  -- captures maxLoss arg from redeem()
+ *        slot 9: mockMaxRedeem      -- returned by maxRedeem()
+ *        slot 10: mockConvertToAssets -- returned by convertToAssets()
  */
 contract MockForwarderStrategy {
     uint256 public mockShareBalance;
@@ -28,6 +30,8 @@ contract MockForwarderStrategy {
     address public expectedBalanceOfAccount;
     address public lastRedeemOwner;
     uint256 public lastRedeemMaxLoss;
+    uint256 public mockMaxRedeem;
+    uint256 public mockConvertToAssets;
 
     /// @notice No-op report that still records the caller
     function report() external returns (uint256, uint256) {
@@ -42,6 +46,16 @@ contract MockForwarderStrategy {
         }
 
         return mockShareBalance;
+    }
+
+    /// @notice Mock ERC-4626 maxRedeem guard used by SwappingYieldForwarder
+    function maxRedeem(address) external view returns (uint256) {
+        return mockMaxRedeem;
+    }
+
+    /// @notice Mock ERC-4626 convertToAssets guard used by SwappingYieldForwarder
+    function convertToAssets(uint256) external view returns (uint256) {
+        return mockConvertToAssets;
     }
 
     /// @notice Mock redeem that captures arguments and zeroes share balance

@@ -108,7 +108,7 @@ contract UniswapV4SwapperIntegrationTest is BaseSwapperIntegrationTest {
         _simulateProfit(profit);
 
         vm.prank(keeperEOA);
-        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0);
+        uint256 assetsOut = forwarder.reportSwapAndForward(address(strategy), 10_000, 0, block.timestamp + 1 hours);
 
         _clearMocks();
 
@@ -179,7 +179,7 @@ contract UniswapV4MultiHopTest is Test {
         );
 
         deal(WETH, address(this), SWAP_AMOUNT_WETH);
-        IERC20(WETH).transfer(address(adapter), SWAP_AMOUNT_WETH);
+        IERC20(WETH).approve(address(adapter), SWAP_AMOUNT_WETH);
 
         uint256 amountOut = adapter.swap(WETH, DAI, SWAP_AMOUNT_WETH, 0, swapReceiver);
 
@@ -202,7 +202,7 @@ contract UniswapV4MultiHopTest is Test {
         );
 
         deal(WETH, address(this), SWAP_AMOUNT_WETH);
-        IERC20(WETH).transfer(address(adapter), SWAP_AMOUNT_WETH);
+        IERC20(WETH).approve(address(adapter), SWAP_AMOUNT_WETH);
 
         // Unreasonably high minAmountOut should revert
         vm.expectRevert();
@@ -249,7 +249,7 @@ contract UniswapV4MultiHopTest is Test {
         );
 
         deal(WETH, address(this), SWAP_AMOUNT_WETH);
-        IERC20(WETH).transfer(address(adapter), SWAP_AMOUNT_WETH);
+        IERC20(WETH).approve(address(adapter), SWAP_AMOUNT_WETH);
 
         uint256 amountOut = adapter.swap(WETH, USDC, SWAP_AMOUNT_WETH, 0, swapReceiver);
 
@@ -276,7 +276,7 @@ contract UniswapV4MultiHopTest is Test {
         );
 
         deal(USDC, address(this), SWAP_AMOUNT_USDC);
-        IERC20(USDC).transfer(address(adapter), SWAP_AMOUNT_USDC);
+        IERC20(USDC).approve(address(adapter), SWAP_AMOUNT_USDC);
 
         uint256 amountOut = adapter.swap(USDC, DAI, SWAP_AMOUNT_USDC, 0, swapReceiver);
 
@@ -300,7 +300,7 @@ contract UniswapV4MultiHopTest is Test {
         );
 
         deal(USDC, address(this), SWAP_AMOUNT_USDC);
-        IERC20(USDC).transfer(address(adapter), SWAP_AMOUNT_USDC);
+        IERC20(USDC).approve(address(adapter), SWAP_AMOUNT_USDC);
 
         // Should succeed because it uses feeOut/tickSpacingOut, not fee/tickSpacing
         uint256 amountOut = adapter.swap(USDC, DAI, SWAP_AMOUNT_USDC, 0, swapReceiver);
@@ -335,11 +335,35 @@ contract UniswapV4MultiHopTest is Test {
         address keeper = address(0xCAFE);
         address recv = address(0xBEEF);
 
-        SwappingYieldForwarder fwd = new SwappingYieldForwarder(recv, keeper, DAI, address(swapAdapter));
-
         MorphoCompounderStrategyFactory fac = new MorphoCompounderStrategyFactory{
             salt: keccak256("OCT_MORPHO_COMPOUNDER_STRATEGY_VAULT_FACTORY_V1")
         }();
+
+        // Predict addresses to resolve the forwarder <-> strategy cycle.
+        address predictedFwd = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
+        address predictedStrat = fac.computeStrategyAddress(
+            fac.YS_USDC(),
+            fac.USDC(),
+            "MorphoCompounder Donating Strategy",
+            "osMORPHO",
+            mgmt,
+            predictedFwd,
+            address(0xA3),
+            predictedFwd,
+            false,
+            address(impl),
+            mgmt
+        );
+
+        SwappingYieldForwarder fwd = new SwappingYieldForwarder(
+            recv,
+            keeper,
+            DAI,
+            address(swapAdapter),
+            predictedStrat,
+            0
+        );
+        require(address(fwd) == predictedFwd, "Forwarder address mismatch");
 
         vm.startPrank(mgmt);
         address stratAddr = fac.createStrategy(
@@ -353,6 +377,7 @@ contract UniswapV4MultiHopTest is Test {
             address(impl)
         );
         vm.stopPrank();
+        require(stratAddr == predictedStrat, "Strategy address mismatch");
 
         // Deposit
         address usr = address(0x1234);
@@ -380,7 +405,7 @@ contract UniswapV4MultiHopTest is Test {
 
         // Report, swap (USDC→DAI via V4), forward
         vm.prank(keeper);
-        uint256 daiOut = fwd.reportSwapAndForward(stratAddr, 10_000, 0);
+        uint256 daiOut = fwd.reportSwapAndForward(stratAddr, 10_000, 0, block.timestamp + 1 hours);
         vm.clearMockedCalls();
 
         assertGt(daiOut, 0, "Forwarder should produce DAI via swap");

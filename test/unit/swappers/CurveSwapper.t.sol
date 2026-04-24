@@ -102,7 +102,8 @@ contract CurveSwapperTest is Test {
         CurveSwapper s = new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenIn), address(tokenOut));
 
         uint256 amountIn = 1000e18;
-        tokenIn.mint(address(s), amountIn);
+        tokenIn.mint(address(this), amountIn);
+        tokenIn.approve(address(s), amountIn);
 
         uint256 amountOut = s.swap(address(tokenIn), address(tokenOut), amountIn, 0, receiver);
 
@@ -114,7 +115,8 @@ contract CurveSwapperTest is Test {
         CurveSwapper s = new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenIn), address(tokenOut));
 
         uint256 amountIn = 1000e18;
-        tokenIn.mint(address(s), amountIn);
+        tokenIn.mint(address(this), amountIn);
+        tokenIn.approve(address(s), amountIn);
 
         // Pool enforces minAmountOut via the mock
         pool.setSlippage(50); // 50% output
@@ -131,11 +133,44 @@ contract CurveSwapperTest is Test {
         amountIn = bound(amountIn, 1, 1e30);
         CurveSwapper s = new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenIn), address(tokenOut));
 
-        tokenIn.mint(address(s), amountIn);
+        tokenIn.mint(address(this), amountIn);
+        tokenIn.approve(address(s), amountIn);
         uint256 amountOut = s.swap(address(tokenIn), address(tokenOut), amountIn, 0, receiver);
 
         assertEq(amountOut, amountIn, "1:1 mock output");
         assertEq(tokenOut.balanceOf(receiver), amountOut);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ZERO-RESIDUE INVARIANT
+    // ═══════════════════════════════════════════════════════════
+
+    /// @notice The adapter must hold zero tokenIn after any swap call, even
+    ///         when pre-existing balance (a donation, or pool pull semantics
+    ///         leaving surplus) is present at entry.
+    function test_swap_flushesPreExistingTokenInBalance() public {
+        CurveSwapper s = new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenIn), address(tokenOut));
+
+        // Simulate a prior donation / leftover of 7e18 sitting in the adapter.
+        uint256 donation = 7e18;
+        tokenIn.mint(address(s), donation);
+
+        uint256 amountIn = 100e18;
+        tokenIn.mint(address(this), amountIn);
+        tokenIn.approve(address(s), amountIn);
+
+        uint256 callerBalBefore = tokenIn.balanceOf(address(this));
+
+        uint256 amountOut = s.swap(address(tokenIn), address(tokenOut), amountIn, 0, receiver);
+
+        assertEq(amountOut, amountIn, "Output follows 1:1 mock");
+        assertEq(tokenIn.balanceOf(address(s)), 0, "Adapter must hold zero tokenIn after swap");
+        // Caller paid amountIn, received back the donation via the residue flush.
+        assertEq(
+            tokenIn.balanceOf(address(this)),
+            callerBalBefore - amountIn + donation,
+            "Caller should receive the prior donation back via the flush"
+        );
     }
 }
 

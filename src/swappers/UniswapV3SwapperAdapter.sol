@@ -88,6 +88,7 @@ contract UniswapV3SwapperAdapter is ISwapper {
     ) external override returns (uint256 amountOut) {
         if (tokenIn == address(0) || tokenOut == address(0)) revert InvalidToken();
 
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
         IERC20(tokenIn).forceApprove(router, amountIn);
 
         if (base == address(0) || tokenIn == base || tokenOut == base) {
@@ -115,6 +116,16 @@ contract UniswapV3SwapperAdapter is ISwapper {
             amountOut = ISwapRouter(router).exactInput(
                 ISwapRouter.ExactInputParams(path, receiver, block.timestamp, amountIn, minAmountOut)
             );
+        }
+
+        // Zero the router allowance and return any unused tokenIn to the
+        // caller. On a partial fill (shallow pool reaching MIN/MAX tick)
+        // the router pulls only the consumed amount, leaving the rest
+        // sitting in this contract and an equivalent allowance open.
+        IERC20(tokenIn).forceApprove(router, 0);
+        uint256 leftover = IERC20(tokenIn).balanceOf(address(this));
+        if (leftover != 0) {
+            IERC20(tokenIn).safeTransfer(msg.sender, leftover);
         }
     }
 }

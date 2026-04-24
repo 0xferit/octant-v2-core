@@ -174,41 +174,77 @@ contract UniswapV4SwapperAdapter is ISwapper {
     ) external override returns (uint256 amountOut) {
         if (tokenIn == address(0) || tokenOut == address(0)) revert InvalidToken();
 
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+
+        // Thread msg.sender through as originalCaller so unlockCallback can
+        // return any unused tokenIn (partial-fill residue) to the party that
+        // approved us, not to address(this).
         bytes memory result = IV4PoolManager(poolManager).unlock(
-            abi.encode(tokenIn, tokenOut, amountIn, minAmountOut, receiver)
+            abi.encode(msg.sender, tokenIn, tokenOut, amountIn, minAmountOut, receiver)
         );
         amountOut = abi.decode(result, (uint256));
     }
 
     /// @notice Callback invoked by PoolManager during unlock(); executes swaps and settles
     /// @dev Only callable by the PoolManager. Reverts with UnauthorizedCallback otherwise.
-    /// @param data ABI-encoded (tokenIn, tokenOut, amountIn, minAmountOut, receiver)
+    /// @param data ABI-encoded (originalCaller, tokenIn, tokenOut, amountIn, minAmountOut, receiver)
     /// @return ABI-encoded amountOut
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         if (msg.sender != poolManager) revert UnauthorizedCallback();
 
-        (address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address receiver) = abi.decode(
-            data,
-            (address, address, uint256, uint256, address)
-        );
+        (
+            address originalCaller,
+            address tokenIn,
+            address tokenOut,
+            uint256 amountIn,
+            uint256 minAmountOut,
+            address receiver
+        ) = abi.decode(data, (address, address, address, uint256, uint256, address));
 
         uint256 amountOut;
+        uint256 consumed;
+        uint256 unusedBase = 0;
 
         if (base == address(0) || tokenIn == base || tokenOut == base) {
-            amountOut = _singleHop(tokenIn, tokenOut, amountIn);
+            (amountOut, consumed) = _singleHop(tokenIn, tokenOut, amountIn);
         } else {
-            amountOut = _multiHop(tokenIn, tokenOut, amountIn);
+            (amountOut, consumed, unusedBase) = _multiHop(tokenIn, tokenOut, amountIn);
         }
 
         if (amountOut < minAmountOut) revert InsufficientOutput(minAmountOut, amountOut);
 
-        // Settle input: sync balance snapshot → transfer tokens → settle delta
+        // Settle input: sync balance snapshot → transfer tokens → settle delta.
+        // We transfer the full amountIn to the PoolManager; any surplus over
+        // `consumed` is reclaimed below via take(tokenIn, originalCaller, ...).
         IV4PoolManager(poolManager).sync(tokenIn);
         IERC20(tokenIn).safeTransfer(poolManager, amountIn);
         IV4PoolManager(poolManager).settle();
 
         // Take output directly to receiver
         IV4PoolManager(poolManager).take(tokenOut, receiver, amountOut);
+
+        // Recover any unconsumed tokenIn back to originalCaller. Leaving a
+        // positive tokenIn delta would cause unlock to revert with
+        // CurrencyNotSettled and donate the surplus to the PoolManager
+        // singleton.
+        uint256 unusedTokenIn = amountIn - consumed;
+        if (unusedTokenIn != 0) {
+            IV4PoolManager(poolManager).take(tokenIn, originalCaller, unusedTokenIn);
+        }
+
+        // If hop 2 stops at the tick limit, hop 1 may have produced more base
+        // than hop 2 consumed. Return that intermediate residue to the caller
+        // so the unlock has no unsettled positive base delta.
+        if (unusedBase != 0) {
+            IV4PoolManager(poolManager).take(base, originalCaller, unusedBase);
+        }
+
+        // Defensive fallback: return any tokenIn that ended up locally (should
+        // be zero under the flow above) to the originalCaller.
+        uint256 localLeftover = IERC20(tokenIn).balanceOf(address(this));
+        if (localLeftover != 0) {
+            IERC20(tokenIn).safeTransfer(originalCaller, localLeftover);
+        }
 
         return abi.encode(amountOut);
     }
@@ -217,8 +253,14 @@ contract UniswapV4SwapperAdapter is ISwapper {
     // INTERNAL FUNCTIONS
     // ============================================
 
-    /// @dev Execute a single-hop exact-input swap and return the output amount
-    function _singleHop(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256 amountOut) {
+    /// @dev Execute a single-hop exact-input swap
+    /// @return amountOut Amount of output token received
+    /// @return consumed Amount of tokenIn actually consumed by the pool
+    function _singleHop(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn
+    ) internal returns (uint256 amountOut, uint256 consumed) {
         // Select pool config: if tokenIn IS the base, use second-hop config
         uint24 poolFee = (base != address(0) && tokenIn == base) ? feeOut : fee;
         int24 poolTickSpacing = (base != address(0) && tokenIn == base) ? tickSpacingOut : tickSpacing;
@@ -239,13 +281,24 @@ contract UniswapV4SwapperAdapter is ISwapper {
         );
 
         // Extract output from packed BalanceDelta (upper 128 = amount0, lower 128 = amount1)
-        // Output is the positive delta: amount1 for zeroForOne, amount0 for !zeroForOne
+        // Output is the positive delta: amount1 for zeroForOne, amount0 for !zeroForOne.
+        // Consumed is |negative delta| on tokenIn: amount0 for zeroForOne, amount1 otherwise.
         amountOut = uint256(int256(zeroForOne ? int128(delta) : int128(delta >> 128)));
+        int128 inputDelta = zeroForOne ? int128(delta >> 128) : int128(delta);
+        consumed = uint256(uint128(-inputDelta));
     }
 
-    /// @dev Execute a two-hop exact-input swap: tokenIn → base → tokenOut
-    ///      Base token deltas net to zero within the PoolManager's accounting.
-    function _multiHop(address tokenIn, address tokenOut, uint256 amountIn) internal returns (uint256 amountOut) {
+    /// @dev Execute a two-hop exact-input swap: tokenIn → base → tokenOut.
+    ///      Base token deltas net to zero when hop 2 consumes the full hop-1 output;
+    ///      otherwise the unused base is returned to the original caller.
+    /// @return amountOut Final output amount
+    /// @return consumed tokenIn consumed by hop 1 (may be less than amountIn on a shallow pool)
+    /// @return unusedBase base token produced by hop 1 but not consumed by hop 2
+    function _multiHop(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn
+    ) internal returns (uint256 amountOut, uint256 consumed, uint256 unusedBase) {
         // ── Hop 1: tokenIn → base ──
         bool zfo1 = tokenIn < base;
         (address c0_1, address c1_1) = zfo1 ? (tokenIn, base) : (base, tokenIn);
@@ -256,8 +309,10 @@ contract UniswapV4SwapperAdapter is ISwapper {
             ""
         );
 
-        // Extract base amount received (positive delta)
+        // Extract base amount received (positive delta) and tokenIn consumed
         uint256 baseAmount = uint256(int256(zfo1 ? int128(delta1) : int128(delta1 >> 128)));
+        int128 inputDelta1 = zfo1 ? int128(delta1 >> 128) : int128(delta1);
+        consumed = uint256(uint128(-inputDelta1));
 
         // ── Hop 2: base → tokenOut ──
         bool zfo2 = base < tokenOut;
@@ -271,5 +326,8 @@ contract UniswapV4SwapperAdapter is ISwapper {
 
         // Extract final output amount (positive delta)
         amountOut = uint256(int256(zfo2 ? int128(delta2) : int128(delta2 >> 128)));
+        int128 inputDelta2 = zfo2 ? int128(delta2 >> 128) : int128(delta2);
+        uint256 baseConsumed = uint256(uint128(-inputDelta2));
+        unusedBase = baseAmount - baseConsumed;
     }
 }

@@ -42,8 +42,17 @@ contract SYFSetup is KontrolTest {
         mockStrategy = new MockForwarderStrategy();
         mockSwapper = new MockForwarderSwapper();
 
-        // Deploy SwappingYieldForwarder with concrete immutables
-        syfForwarder = new SwappingYieldForwarder(_receiver, _keeper, address(targetAsset), address(mockSwapper));
+        // Deploy SwappingYieldForwarder with concrete immutables. The mock strategy
+        // doubles as the vault reference; its symbolic management() is not exercised
+        // in the current proofs (they don't call setSwapper).
+        syfForwarder = new SwappingYieldForwarder(
+            _receiver,
+            _keeper,
+            address(targetAsset),
+            address(mockSwapper),
+            address(mockStrategy),
+            0
+        );
 
         // ============================================
         // MAKE MOCK STRATEGY STORAGE SYMBOLIC
@@ -57,9 +66,11 @@ contract SYFSetup is KontrolTest {
         // Set symbolic share balance and redeem return
         uint256 shareBalance = freshUInt256Bounded();
         _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, shareBalance);
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, shareBalance);
 
         uint256 redeemReturn = freshUInt256Bounded();
         _storeUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT, redeemReturn);
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, redeemReturn);
 
         // Clear argument capture slots
         _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, 0);
