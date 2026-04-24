@@ -152,13 +152,12 @@ contract UniswapV3SwapperAdapterTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // SWAP — PARTIAL FILL RESIDUE (bailsec #73, #74)
+    // SWAP — PARTIAL FILL RESIDUE
     // ═══════════════════════════════════════════════════════════
 
     /// @notice A partial fill (router pulls less than amountIn) must leave the
     ///         adapter with zero balance, zero router allowance, and the unused
-    ///         tokenIn returned to the caller. Regression test for bailsec
-    ///         #73 (sweepable residue) and #74 (hanging approval).
+    ///         tokenIn returned to the caller.
     function test_swap_partialFill_returnsLeftoverAndZerosApproval() public {
         UniswapV3SwapperAdapter s = new UniswapV3SwapperAdapter(address(router), FEE, address(0), 0);
 

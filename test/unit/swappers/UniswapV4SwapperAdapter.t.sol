@@ -366,14 +366,14 @@ contract UniswapV4SwapperAdapterTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // SWAP — PARTIAL FILL RESIDUE (bailsec #76)
+    // SWAP — PARTIAL FILL RESIDUE
     // ═══════════════════════════════════════════════════════════
 
     /// @notice When the pool consumes less than amountIn (liquidity exhausted
     ///         at the tick limit), the adapter must take the surplus tokenIn
     ///         delta back to the original caller. Without the fix,
     ///         unlock reverts with CurrencyNotSettled and the surplus is
-    ///         stranded in the PoolManager singleton. Regression for bailsec #76.
+    ///         stranded in the PoolManager singleton.
     function test_swap_partialFill_takesUnusedTokenInBack() public {
         UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
             address(pm),

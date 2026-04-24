@@ -310,7 +310,7 @@ contract SwappingYieldForwarderTest is Test {
     }
 
     function test_reportSwapAndForward_revertsOnExpiredDeadline() public {
-        // Bailsec #68: freshness check runs before any other work so a keeper transaction
+        // Freshness check runs before any other work so a keeper transaction
         // that lands one block too late fails cheaply with ExpiredDeadline instead of
         // settling against a moved market.
         uint256 staleDeadline = block.timestamp - 1;
@@ -509,7 +509,7 @@ contract SwappingYieldForwarderTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // setSwapper — VAULT MANAGEMENT (bailsec #72 / #75)
+    // setSwapper — VAULT MANAGEMENT
     // ═══════════════════════════════════════════════════════════
 
     function test_setSwapper_revertsOnNonManagementCaller() public {
@@ -566,7 +566,7 @@ contract SwappingYieldForwarderTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // setMinSlippageBps — ADMIN SLIPPAGE FLOOR (bailsec #67)
+    // setMinSlippageBps — ADMIN SLIPPAGE FLOOR
     // ═══════════════════════════════════════════════════════════
 
     function test_constructor_zeroMinSlippageBps_disablesFloor() public view {
@@ -596,7 +596,7 @@ contract SwappingYieldForwarderTest is Test {
     }
 
     /// @notice When a floor is set, the keeper cannot pass a minAmountOut below
-    ///         (assetsIn * floor / MAX_BPS). Regression for bailsec #67.
+    ///         (assetsIn * floor / MAX_BPS).
     function test_reportSwapAndForward_enforcesSlippageFloor() public {
         vm.prank(management);
         forwarder.setMinSlippageBps(9_900); // 99% floor

@@ -18,7 +18,7 @@ interface IERC4626Asset {
 /// @notice Minimal interface for ERC-4626 maxRedeem
 /// @dev Defined inline here (rather than imported from YieldForwarder) so this
 ///      contract compiles standalone on develop while the matching base-class
-///      interface declarations ship in the sibling #415 PR. Once both PRs merge,
+///      interface declarations ship in the sibling forwarder PR. Once both PRs merge,
 ///      both copies are byte-for-byte identical.
 interface IMaxRedeem {
     /// @notice Maximum shares redeemable by `owner` right now (ERC-4626)
@@ -243,7 +243,7 @@ contract SwappingYieldForwarder is YieldForwarder {
      *      If report() produces no profit shares, the function returns 0 without reverting.
      *      If redemption returns 0 assets, the function returns 0 without attempting a swap.
      *
-     *      Bailsec #68: the caller MUST supply a fresh `deadline` (seconds since epoch).
+     *      The caller MUST supply a fresh `deadline` (seconds since epoch).
      *      The underlying Uniswap V3 adapter uses `block.timestamp` as the router deadline,
      *      which always passes at inclusion and therefore adds no real time bound between
      *      the keeper's quote and settlement. Enforcing an explicit expiry at the forwarder
@@ -263,7 +263,7 @@ contract SwappingYieldForwarder is YieldForwarder {
         uint256 minAmountOut,
         uint256 deadline
     ) external nonReentrant returns (uint256 assetsOut) {
-        // Bailsec #68: freshness check runs before any state-touching work so an expired
+        // Freshness check runs before any state-touching work so an expired
         // call fails cheaply and the keeper can retry with a fresh deadline.
         if (block.timestamp > deadline) revert ExpiredDeadline(deadline, block.timestamp);
         if (msg.sender != keeper) revert OnlyKeeper();
@@ -273,14 +273,14 @@ contract SwappingYieldForwarder is YieldForwarder {
         uint256 balance = IERC20(strategy).balanceOf(address(this));
         if (balance == 0) return 0;
 
-        // Bailsec #62: mirror reportAndForward's maxRedeem cap so the inner redeem
-        // cannot revert when external vault liquidity tightens below the forwarder's
+        // Mirror reportAndForward's maxRedeem cap so the inner redeem cannot
+        // revert when external vault liquidity tightens below the forwarder's
         // share balance. Residual shares stay at the forwarder until headroom recovers.
         uint256 shares = Math.min(balance, IMaxRedeem(strategy).maxRedeem(address(this)));
         if (shares == 0) return 0;
 
-        // Bailsec #61: mirror reportAndForward's ZERO_ASSETS skip so a dust share
-        // balance on a loss-impaired strategy (totalAssets < totalSupply) does not
+        // Mirror reportAndForward's zero-asset skip so a dust share balance on
+        // a loss-impaired strategy (totalAssets < totalSupply) does not
         // roll back the report() above. The dust stays at the forwarder for a later
         // report once the imbalance resolves.
         if (IConvertible(strategy).convertToAssets(shares) == 0) return 0;

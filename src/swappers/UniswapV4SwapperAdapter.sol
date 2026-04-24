@@ -225,8 +225,8 @@ contract UniswapV4SwapperAdapter is ISwapper {
 
         // Recover any unconsumed tokenIn back to originalCaller. Leaving a
         // positive tokenIn delta would cause unlock to revert with
-        // CurrencyNotSettled (bailsec #76) and donate the surplus to the
-        // PoolManager singleton.
+        // CurrencyNotSettled and donate the surplus to the PoolManager
+        // singleton.
         uint256 unusedTokenIn = amountIn - consumed;
         if (unusedTokenIn != 0) {
             IV4PoolManager(poolManager).take(tokenIn, originalCaller, unusedTokenIn);

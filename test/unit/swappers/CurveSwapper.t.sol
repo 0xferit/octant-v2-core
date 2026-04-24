@@ -142,12 +142,12 @@ contract CurveSwapperTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ZERO-RESIDUE INVARIANT (cantina #1)
+    // ZERO-RESIDUE INVARIANT
     // ═══════════════════════════════════════════════════════════
 
     /// @notice The adapter must hold zero tokenIn after any swap call, even
     ///         when pre-existing balance (a donation, or pool pull semantics
-    ///         leaving surplus) is present at entry. Regression for cantina #1.
+    ///         leaving surplus) is present at entry.
     function test_swap_flushesPreExistingTokenInBalance() public {
         CurveSwapper s = new CurveSwapper(address(pool), INDEX_IN, INDEX_OUT, address(tokenIn), address(tokenOut));
 

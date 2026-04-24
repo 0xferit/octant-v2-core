@@ -54,8 +54,8 @@ contract LossImpairedStrategy is ERC20Mock {
     }
 }
 
-/// @notice Programmable strategy mock for the Bailsec #62 maxRedeem cap path. 1:1 rate
-///         means non-zero shares always yield non-zero assets, so the #61 guard never
+/// @notice Programmable strategy mock for the maxRedeem cap path. 1:1 rate
+///         means non-zero shares always yield non-zero assets, so the zero-asset guard never
 ///         fires here and we isolate the cap behaviour.
 contract MockStrategy is ERC20Mock {
     ERC20Mock public immutable underlying;
@@ -106,8 +106,8 @@ contract MockVault {
     }
 }
 
-/// @notice Bailsec #61 / #62 mirror guards on SwappingYieldForwarder.reportSwapAndForward.
-///         Both guards were added to YieldForwarder.reportAndForward in the sibling #415 PR
+/// @notice Mirror guards on SwappingYieldForwarder.reportSwapAndForward.
+///         Both guards were added to YieldForwarder.reportAndForward in the sibling forwarder PR
 ///         and must be mirrored on the swapping variant so external vault liquidity shortfalls
 ///         (maxRedeem < balance) and loss-impaired dust (convertToAssets rounds to zero) do
 ///         not revert the outer call and roll back report() side effects.
@@ -148,7 +148,7 @@ contract SwappingYieldForwarderMirrorTest is Test {
         s.setTotalAssets(shareholderShares - 1);
     }
 
-    // --- Bailsec #61 mirror: ZERO_ASSETS skip on loss-impaired strategy ---
+    // --- Zero-asset skip on loss-impaired strategy ---
 
     /// @notice Dust share on a loss-impaired strategy must not revert reportSwapAndForward.
     ///         report() commits, no swap is attempted, dust stays at forwarder.
@@ -168,7 +168,7 @@ contract SwappingYieldForwarderMirrorTest is Test {
         assertFalse(s.redeemCalled(), "redeem must be skipped, not called-and-failed");
     }
 
-    // --- Bailsec #62 mirror: maxRedeem cap ---
+    // --- maxRedeem cap ---
 
     /// @notice maxRedeem < balance. Pre-fix this would revert inside redeem and roll back
     ///         report(). Post-fix: shares capped at maxRedeem, report() commits, residual

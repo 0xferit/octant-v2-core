@@ -325,7 +325,7 @@ contract PSMSwapperTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // BUY_GEM ROUNDING DUST (bailsec #70)
+    // BUY_GEM ROUNDING DUST
     // ═══════════════════════════════════════════════════════════
 
     /// @notice The gemAmt computation in BUY_GEM floor-divides, so when
@@ -333,7 +333,7 @@ contract PSMSwapperTest is Test {
     ///         PSM charges strictly less than amountIn. The residue must
     ///         stay with the caller, not sit inside the adapter where an
     ///         attacker could sweep it via a follow-up swap() call.
-    ///         Regression for bailsec #70.
+    ///         Regression for rounding dust on the buy-gem route.
     function test_swap_buyGem_roundingDustStaysWithCaller() public {
         MockPSM mockPSM = new MockPSM(address(dai), address(gem));
         mockPSM.setTout(0);

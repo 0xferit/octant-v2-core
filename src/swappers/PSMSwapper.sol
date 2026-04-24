@@ -179,7 +179,7 @@ contract PSMSwapper is ISwapper {
     ///      Calculates max gem purchasable from amountIn accounting for PSM fees (tout),
     ///      then pulls ONLY the exact charge (gemAmt * conversionFactor * (WAD + tout) / WAD)
     ///      via transferFrom so the floor-division remainder stays with the caller
-    ///      rather than being stranded in this adapter (bailsec #70).
+    ///      rather than being stranded in this adapter.
     function _buyGem(uint256 amountIn, address receiver) internal returns (uint256 amountOut) {
         uint256 tout = IPSM(protocol).tout();
         uint256 gemAmt = (amountIn * WAD) / (conversionFactor * (WAD + tout));
