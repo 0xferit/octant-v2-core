@@ -33,6 +33,16 @@ library KpkTestConfig {
     /// @notice Tokenized strategy implementation address
     address internal constant TOKENIZED_STRATEGY_ADDRESS = 0x8cf7246a74704bBE59c9dF614ccB5e3d9717d8Ac;
 
+    /// @notice Mainnet block used for the Kpk integration fork.
+    /// @dev Karpatkey curates the KPK MetaMorpho vaults on Morpho and periodically caps their
+    ///      `maxDeposit` to 0 while rebalancing or waiting for liquidity. When the fork runs on
+    ///      mainnet `latest`, the deposit-side tests fail with `ERC4626: deposit more than max`
+    ///      during those windows even though the strategy code is correct. Pinning to a block
+    ///      where all four KPK vaults (ETH Prime, USDC Prime, Gearbox WETH, Gearbox wstETH) are
+    ///      uncapped keeps the suite deterministic against curator policy changes. Update only if
+    ///      the pinned block itself drifts out of the healthy window.
+    uint256 internal constant FORK_BLOCK = 24_800_000;
+
     // ========== USDC CONFIGURATION ==========
 
     /// @notice Minimum deposit amount for USDC fuzz tests (6 decimals)

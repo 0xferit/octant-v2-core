@@ -27,13 +27,19 @@ abstract contract Privileged {
     }
 
     function _setPrivileged(address _account, bool _status) internal {
-        _privilegedStorage().privileged[_account] = _status;
+        PrivilegedData storage P = _privilegedStorage();
+        // Skip SSTORE + event when the flag is already at the requested value.
+        // Avoids spurious PrivilegedUpdated logs that would skew off-chain indexer timelines.
+        if (P.privileged[_account] == _status) return;
+        P.privileged[_account] = _status;
         emit PrivilegedUpdated(_account, _status);
     }
 
     function _setPrivilegedBatch(address[] calldata _accounts, bool _status) internal {
         PrivilegedData storage P = _privilegedStorage();
         for (uint256 i = 0; i < _accounts.length; i++) {
+            // Skip per-entry no-ops so the batch emits only on real changes.
+            if (P.privileged[_accounts[i]] == _status) continue;
             P.privileged[_accounts[i]] = _status;
             emit PrivilegedUpdated(_accounts[i], _status);
         }

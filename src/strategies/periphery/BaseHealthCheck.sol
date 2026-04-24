@@ -141,7 +141,7 @@ abstract contract BaseHealthCheck is BaseStrategy, IBaseHealthCheck {
     }
 
     /**
-     * @notice OVerrides the default {harvestAndReport} to include a healthcheck.
+     * @notice Overrides the default {harvestAndReport} to include a healthcheck.
      * @return _totalAssets New totalAssets post report.
      */
     function harvestAndReport() external override onlySelf returns (uint256 _totalAssets) {
