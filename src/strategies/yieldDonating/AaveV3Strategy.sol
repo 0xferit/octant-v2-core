@@ -167,7 +167,13 @@ contract AaveV3Strategy is BaseHealthCheck {
 
     /**
      * @notice Returns maximum assets withdrawable without expected loss
-     * @dev Checks pool liquidity to ensure withdrawals won't fail due to high utilization
+     * @dev Checks pool liquidity to ensure withdrawals won't fail due to high utilization.
+     *
+     *      DUST CAVEAT: mirrors `availableDepositLimit`. Aave burns aTokens proportional
+     *      to `amount / liquidityIndex`; sub-unit withdrawals can round to a zero scaled
+     *      burn amount and revert with `INVALID_BURN_AMOUNT`. This view does NOT pre-filter
+     *      dust amounts; callers must handle Aave reverts on amounts below the per-reserve
+     *      scaled-unit floor.
      * @return limit Maximum withdrawal amount in asset base units
      */
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {

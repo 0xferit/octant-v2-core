@@ -12,6 +12,7 @@ contract DustAavePoolMock {
     uint256 internal constant RAY = 1e27;
 
     string internal constant INVALID_MINT_AMOUNT = "24";
+    string internal constant INVALID_BURN_AMOUNT = "25";
 
     uint256 public liquidityIndex = 3e27;
 
@@ -20,7 +21,8 @@ contract DustAavePoolMock {
         IERC20(asset).transferFrom(msg.sender, address(this), amount);
     }
 
-    function withdraw(address, uint256 amount, address) external pure returns (uint256) {
+    function withdraw(address, uint256 amount, address) external view returns (uint256) {
+        require(_rayDiv(amount, liquidityIndex) != 0, INVALID_BURN_AMOUNT);
         return amount;
     }
 
@@ -137,5 +139,10 @@ contract AaveV3DustRevertsTest is Test {
 
         vm.expectRevert(bytes("24"));
         strategy.exposedDeployFunds(1);
+    }
+
+    function test_withdrawDustRevertsWithInvalidBurnAmount() public {
+        vm.expectRevert(bytes("25"));
+        strategy.exposedFreeFunds(1);
     }
 }
