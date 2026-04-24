@@ -41,9 +41,10 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         uint256 dragonRouterDebtInAssetValue; // Track the underlying-asset-value debt owed to dragon router
     }
 
-    // exchange rate storage slot
+    // ERC-7201 namespaced storage slot for yield-skimming state.
+    // Formula: keccak256(abi.encode(uint256(keccak256(NAMESPACE)) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant YIELD_SKIMMING_STORAGE_SLOT =
-        bytes32(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1);
+        keccak256(abi.encode(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1)) & ~bytes32(uint256(0xff));
 
     /// @dev Event emitted when harvest is performed
     event Harvest(address indexed caller, uint256 currentRate);
