@@ -66,9 +66,11 @@ contract SYFSetup is KontrolTest {
         // Set symbolic share balance and redeem return
         uint256 shareBalance = freshUInt256Bounded();
         _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, shareBalance);
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, shareBalance);
 
         uint256 redeemReturn = freshUInt256Bounded();
         _storeUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT, redeemReturn);
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, redeemReturn);
 
         // Clear argument capture slots
         _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, 0);
