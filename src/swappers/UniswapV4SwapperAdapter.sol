@@ -203,11 +203,12 @@ contract UniswapV4SwapperAdapter is ISwapper {
 
         uint256 amountOut;
         uint256 consumed;
+        uint256 unusedBase;
 
         if (base == address(0) || tokenIn == base || tokenOut == base) {
             (amountOut, consumed) = _singleHop(tokenIn, tokenOut, amountIn);
         } else {
-            (amountOut, consumed) = _multiHop(tokenIn, tokenOut, amountIn);
+            (amountOut, consumed, unusedBase) = _multiHop(tokenIn, tokenOut, amountIn);
         }
 
         if (amountOut < minAmountOut) revert InsufficientOutput(minAmountOut, amountOut);
@@ -229,6 +230,13 @@ contract UniswapV4SwapperAdapter is ISwapper {
         uint256 unusedTokenIn = amountIn - consumed;
         if (unusedTokenIn != 0) {
             IV4PoolManager(poolManager).take(tokenIn, originalCaller, unusedTokenIn);
+        }
+
+        // If hop 2 stops at the tick limit, hop 1 may have produced more base
+        // than hop 2 consumed. Return that intermediate residue to the caller
+        // so the unlock has no unsettled positive base delta.
+        if (unusedBase != 0) {
+            IV4PoolManager(poolManager).take(base, originalCaller, unusedBase);
         }
 
         // Defensive fallback: return any tokenIn that ended up locally (should
@@ -280,15 +288,17 @@ contract UniswapV4SwapperAdapter is ISwapper {
         consumed = uint256(uint128(-inputDelta));
     }
 
-    /// @dev Execute a two-hop exact-input swap: tokenIn → base → tokenOut
-    ///      Base token deltas net to zero within the PoolManager's accounting.
+    /// @dev Execute a two-hop exact-input swap: tokenIn → base → tokenOut.
+    ///      Base token deltas net to zero when hop 2 consumes the full hop-1 output;
+    ///      otherwise the unused base is returned to the original caller.
     /// @return amountOut Final output amount
     /// @return consumed tokenIn consumed by hop 1 (may be less than amountIn on a shallow pool)
+    /// @return unusedBase base token produced by hop 1 but not consumed by hop 2
     function _multiHop(
         address tokenIn,
         address tokenOut,
         uint256 amountIn
-    ) internal returns (uint256 amountOut, uint256 consumed) {
+    ) internal returns (uint256 amountOut, uint256 consumed, uint256 unusedBase) {
         // ── Hop 1: tokenIn → base ──
         bool zfo1 = tokenIn < base;
         (address c0_1, address c1_1) = zfo1 ? (tokenIn, base) : (base, tokenIn);
@@ -316,5 +326,8 @@ contract UniswapV4SwapperAdapter is ISwapper {
 
         // Extract final output amount (positive delta)
         amountOut = uint256(int256(zfo2 ? int128(delta2) : int128(delta2 >> 128)));
+        int128 inputDelta2 = zfo2 ? int128(delta2 >> 128) : int128(delta2);
+        uint256 baseConsumed = uint256(uint128(-inputDelta2));
+        unusedBase = baseAmount - baseConsumed;
     }
 }

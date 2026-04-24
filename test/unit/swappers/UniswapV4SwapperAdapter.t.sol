@@ -406,6 +406,45 @@ contract UniswapV4SwapperAdapterTest is Test {
         // PoolManager ends up with exactly `consumed` (its share of the swap settlement)
         assertEq(tokenA.balanceOf(address(pm)), consumed, "PoolManager keeps only the consumed amount");
     }
+
+    /// @notice In a multi-hop swap, hop 2 can also consume less than the base
+    ///         amount produced by hop 1. The unused base must be taken back to
+    ///         the original caller or PoolManager accounting remains unsettled.
+    function test_swap_multiHop_secondHopPartial_takesUnusedBaseBack() public {
+        UniswapV4SwapperAdapter s = new UniswapV4SwapperAdapter(
+            address(pm),
+            FEE,
+            TICK_SPACING,
+            address(0),
+            address(baseToken),
+            FEE_OUT,
+            TICK_SPACING_OUT,
+            address(0)
+        );
+
+        uint256 amountIn = 1000e18;
+        tokenA.mint(address(this), amountIn);
+        tokenA.approve(address(s), amountIn);
+
+        // Hop 1 consumes all tokenA and produces baseToken. Hop 2 consumes only
+        // 70% of that base output, leaving the remaining 30% as a positive base
+        // delta that must be taken back.
+        pm.setConsumedBpsForCall(1, 10_000);
+        pm.setConsumedBpsForCall(2, 7_000);
+        pm.setOutputToken(address(tokenB));
+        baseToken.mint(address(pm), amountIn);
+
+        uint256 amountOut = s.swap(address(tokenA), address(tokenB), amountIn, 0, receiver);
+
+        uint256 baseConsumed = (amountIn * 7_000) / 10_000;
+        uint256 unusedBase = amountIn - baseConsumed;
+
+        assertEq(amountOut, baseConsumed, "amountOut should equal consumed base at 1:1 rate");
+        assertEq(tokenB.balanceOf(receiver), amountOut, "receiver gets final output");
+        assertEq(baseToken.balanceOf(address(this)), unusedBase, "caller receives unused base");
+        assertEq(baseToken.balanceOf(address(s)), 0, "adapter must hold zero base after swap");
+        assertEq(tokenA.balanceOf(address(this)), 0, "caller spent all original input");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -418,6 +457,7 @@ contract MockV4PoolManager {
     address public outputToken;
     uint256 public outputRate = 1e18; // 1:1 by default (1e18 = 100%)
     uint256 public consumedBps = 10_000; // default: full fill (100% of amountIn consumed)
+    mapping(uint256 callIndex => uint256 bps) public consumedBpsForCall;
 
     uint256 internal constant BPS = 10_000;
 
@@ -440,6 +480,13 @@ contract MockV4PoolManager {
     ///         reaches MIN/MAX tick with unconsumed input remaining.
     function setConsumedBps(uint256 _bps) external {
         consumedBps = _bps;
+    }
+
+    /// @notice Override consumed bps for one swap call inside the next unlock.
+    /// @param callIndex 1-based index of the swap call within unlock()
+    /// @param _bps Consumed bps for that call; 0 means use the global value
+    function setConsumedBpsForCall(uint256 callIndex, uint256 _bps) external {
+        consumedBpsForCall[callIndex] = _bps;
     }
 
     function resetSwapCallCount() external {
@@ -466,7 +513,11 @@ contract MockV4PoolManager {
         swapCallCount++;
 
         uint256 absAmountIn = uint256(-params.amountSpecified); // amountSpecified is negative for exactInput
-        uint256 consumed = (absAmountIn * consumedBps) / BPS;
+        uint256 callConsumedBps = consumedBpsForCall[swapCallCount];
+        if (callConsumedBps == 0) {
+            callConsumedBps = consumedBps;
+        }
+        uint256 consumed = (absAmountIn * callConsumedBps) / BPS;
         uint256 amountOut = (consumed * outputRate) / 1e18;
 
         int128 inputDelta = -int128(int256(consumed)); // negative: caller pays consumed
