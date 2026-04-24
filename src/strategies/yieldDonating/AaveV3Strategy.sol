@@ -72,7 +72,7 @@ contract AaveV3Strategy is BaseHealthCheck {
 
     /**
      * @notice Initializes the Aave V3 strategy
-     * @dev Sets up connections to Aave V3 pool, derives aToken from pool registry, and approves max allowance
+     * @dev Sets up connections to Aave V3 pool and derives aToken from pool registry
      * @param _addressesProvider Address of Aave V3 addresses provider
      * @param _asset Address of the underlying asset (must be supported by Aave pool)
      * @param _name Strategy display name (e.g., "Octant Aave V3 USDC Strategy")
@@ -118,9 +118,6 @@ contract AaveV3Strategy is BaseHealthCheck {
         (address _aToken, , ) = dataProvider.getReserveTokensAddresses(_asset);
         require(_aToken != address(0), "Asset not supported by pool");
         aToken = _aToken;
-
-        // Approve Aave pool to spend our asset
-        IERC20(_asset).forceApprove(address(pool), type(uint256).max);
     }
 
     /**
@@ -191,11 +188,21 @@ contract AaveV3Strategy is BaseHealthCheck {
     }
 
     /**
-     * @dev Deposits idle assets into Aave V3 pool
+     * @dev Deposits idle assets into Aave V3 pool.
+     *
+     *      We used to grant `type(uint256).max` allowance to the pool in the constructor.
+     *      The Aave pool is an upgradeable proxy controlled by external governance, so a
+     *      standing max-approval would let a hostile upgrade drain the strategy's idle
+     *      balance at any time. We now approve exactly `_amount` for the call and clear
+     *      the allowance afterward, even if a broken counterparty returns after pulling
+     *      less than `_amount`. `forceApprove` handles non-standard tokens that require
+     *      clearing an existing non-zero allowance first.
      * @param _amount Amount of assets to deploy in asset base units
      */
     function _deployFunds(uint256 _amount) internal override {
+        IERC20(address(asset)).forceApprove(address(pool), _amount);
         pool.supply(address(asset), _amount, address(this), 0);
+        IERC20(address(asset)).forceApprove(address(pool), 0);
     }
 
     /**
