@@ -203,7 +203,7 @@ contract UniswapV4SwapperAdapter is ISwapper {
 
         uint256 amountOut;
         uint256 consumed;
-        uint256 unusedBase;
+        uint256 unusedBase = 0;
 
         if (base == address(0) || tokenIn == base || tokenOut == base) {
             (amountOut, consumed) = _singleHop(tokenIn, tokenOut, amountIn);
