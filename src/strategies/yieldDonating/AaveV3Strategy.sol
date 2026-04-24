@@ -127,9 +127,6 @@ contract AaveV3Strategy is BaseHealthCheck {
     /// @notice Address of the Aave V3 pool
     IPool public immutable pool;
 
-    /// @notice Address of the pool data provider
-    IPoolDataProvider public immutable dataProvider;
-
     /// @notice Address of the aToken for the underlying asset
     address public immutable aToken;
 
@@ -175,12 +172,29 @@ contract AaveV3Strategy is BaseHealthCheck {
 
         addressesProvider = IPoolAddressesProvider(_addressesProvider);
         pool = IPool(addressesProvider.getPool());
-        dataProvider = IPoolDataProvider(addressesProvider.getPoolDataProvider());
 
-        // Derive aToken from pool's registry to ensure correctness
-        (address _aToken, , ) = dataProvider.getReserveTokensAddresses(_asset);
+        // Do NOT cache the data provider as immutable. Aave's `addressesProvider`
+        // rotates the `PoolDataProvider` over time (the Pool itself is a transparent
+        // proxy and is stable, but the data provider is a fresh deployment per Aave
+        // AIP). A cached pointer would keep reading stale supply caps, totals, and
+        // pause flags forever. Read it inline for the constructor-only aToken
+        // derivation; runtime calls go through the public `dataProvider()` view.
+        IPoolDataProvider initialDataProvider = IPoolDataProvider(addressesProvider.getPoolDataProvider());
+        (address _aToken, , ) = initialDataProvider.getReserveTokensAddresses(_asset);
         require(_aToken != address(0), "Asset not supported by pool");
         aToken = _aToken;
+    }
+
+    /**
+     * @notice Returns the current Aave V3 pool data provider.
+     * @dev Resolved from `addressesProvider` on every call so the strategy picks up
+     *      governance-driven `PoolDataProvider` rotations without redeployment. The
+     *      few hundred extra gas per limit query is the cost of not silently reading
+     *      stale supply caps / pause flags.
+     * @return Current `IPoolDataProvider` instance reported by the addresses provider.
+     */
+    function dataProvider() public view returns (IPoolDataProvider) {
+        return IPoolDataProvider(addressesProvider.getPoolDataProvider());
     }
 
     /**
@@ -200,11 +214,11 @@ contract AaveV3Strategy is BaseHealthCheck {
         // Aave-side blockers make `pool.supply` revert when the reserve is paused,
         // inactive, or frozen; surfacing capacity through `maxDeposit` would only
         // route users into failing transactions.
-        if (dataProvider.getPaused(address(asset))) return 0;
-        (, , , , , , , , bool isActive, bool isFrozen) = dataProvider.getReserveConfigurationData(address(asset));
+        if (dataProvider().getPaused(address(asset))) return 0;
+        (, , , , , , , , bool isActive, bool isFrozen) = dataProvider().getReserveConfigurationData(address(asset));
         if (!isActive || isFrozen) return 0;
 
-        (, uint256 supplyCap) = dataProvider.getReserveCaps(address(asset));
+        (, uint256 supplyCap) = dataProvider().getReserveCaps(address(asset));
 
         // If supply cap is 0, it means unlimited (see https://github.com/aave/aave-v3-core/blob/782f51917056a53a2c228701058a6c3fb233684a/contracts/protocol/libraries/types/DataTypes.sol#L53)
         if (supplyCap == 0) {
@@ -256,7 +270,7 @@ contract AaveV3Strategy is BaseHealthCheck {
     ///      `forge coverage` build. Identical on-chain behavior — Solidity decodes the
     ///      first three 32-byte slots of the return data and stops.
     function _cappedTotalSupply() internal view returns (uint256) {
-        (, uint256 accruedToTreasuryScaled, uint256 totalAToken) = IPoolDataProviderSlim(address(dataProvider))
+        (, uint256 accruedToTreasuryScaled, uint256 totalAToken) = IPoolDataProviderSlim(address(dataProvider()))
             .getReserveData(address(asset));
         return
             totalAToken +
@@ -290,8 +304,8 @@ contract AaveV3Strategy is BaseHealthCheck {
         // (Withdrawals are NOT blocked by `isFrozen` -- a frozen reserve still allows
         // exits.) Cap `maxWithdraw`/`maxRedeem` at idle-only so users can still exit
         // any balance already out of the pool even while the Aave side is blocked.
-        if (dataProvider.getPaused(address(asset))) return idleBalance;
-        (, , , , , , , , bool isActive, ) = dataProvider.getReserveConfigurationData(address(asset));
+        if (dataProvider().getPaused(address(asset))) return idleBalance;
+        (, , , , , , , , bool isActive, ) = dataProvider().getReserveConfigurationData(address(asset));
         if (!isActive) return idleBalance;
 
         // Get our aToken balance which represents our deposited assets
