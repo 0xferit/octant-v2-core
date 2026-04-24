@@ -96,7 +96,8 @@ abstract contract BaseSwapperIntegrationTest is Test {
             keeperEOA,
             _targetAsset(),
             address(swapper),
-            predictedStrategy
+            predictedStrategy,
+            0
         );
         require(address(forwarder) == predictedForwarder, "Forwarder address mismatch");
 

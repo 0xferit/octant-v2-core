@@ -50,7 +50,8 @@ contract SYFSetup is KontrolTest {
             _keeper,
             address(targetAsset),
             address(mockSwapper),
-            address(mockStrategy)
+            address(mockStrategy),
+            0
         );
 
         // ============================================

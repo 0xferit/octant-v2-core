@@ -316,7 +316,14 @@ contract UniswapV3MultiHopTest is Test {
             mgmt
         );
 
-        SwappingYieldForwarder fwd = new SwappingYieldForwarder(recv, keeper, DAI, address(multiHopAdapter), predictedStrat);
+        SwappingYieldForwarder fwd = new SwappingYieldForwarder(
+            recv,
+            keeper,
+            DAI,
+            address(multiHopAdapter),
+            predictedStrat,
+            0
+        );
         require(address(fwd) == predictedFwd, "Forwarder address mismatch");
 
         vm.startPrank(mgmt);
