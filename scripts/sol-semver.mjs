@@ -587,6 +587,30 @@ async function prepareWorktreeAsync(worktreeDir) {
   await runAsync("forge", ["build", "--skip", "test", "--skip", "script"], { cwd: worktreeDir });
 }
 
+function overlayUnversionedChangedSourceFiles(worktrees, oldRef, newRef) {
+  const { changedFiles } = gatherChangedSolidityFiles(oldRef, newRef);
+  const overlaid = [];
+
+  for (const sourcePath of changedFiles) {
+    const oldPath = path.join(worktrees.old, sourcePath);
+    const newPath = path.join(worktrees.new, sourcePath);
+    if (!fs.existsSync(oldPath) || !fs.existsSync(newPath)) {
+      continue;
+    }
+
+    const oldSource = fs.readFileSync(oldPath, "utf8");
+    const newSource = fs.readFileSync(newPath, "utf8");
+    if (sourceDeclaresApiVersion(oldSource) || sourceDeclaresApiVersion(newSource)) {
+      continue;
+    }
+
+    fs.copyFileSync(newPath, oldPath);
+    overlaid.push(sourcePath);
+  }
+
+  return overlaid;
+}
+
 function inspectAbi(worktreeDir, contractId) {
   return runJson("forge", ["inspect", contractId, "abi", "--json"], { cwd: worktreeDir });
 }
@@ -1433,9 +1457,20 @@ async function main() {
       prepareWorktreeAsync(worktrees.old),
       prepareWorktreeAsync(worktrees.new)
     ]);
-    const buildFailure = buildResults.find((r) => r.status === "rejected");
-    if (buildFailure) {
-      throw buildFailure.reason;
+    const oldBuildFailed = buildResults[0].status === "rejected";
+    const newBuildFailed = buildResults[1].status === "rejected";
+    if (newBuildFailed) {
+      throw buildResults[1].reason;
+    }
+    if (oldBuildFailed) {
+      const overlaid = overlayUnversionedChangedSourceFiles(worktrees, oldRef, newRef);
+      if (overlaid.length === 0) {
+        throw buildResults[0].reason;
+      }
+      console.error(
+        `Old ref build failed; retrying after overlaying unversioned changed source files: ${overlaid.join(", ")}`
+      );
+      await prepareWorktreeAsync(worktrees.old);
     }
 
     if (opts.command === "diff") {
