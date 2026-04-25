@@ -221,7 +221,7 @@ contract SwappingYieldForwarderTest is Test {
         asset.mint(address(forwarder), 11e18);
 
         vm.expectEmit(true, true, false, true);
-        emit SwappingYieldForwarder.TokenForwarded(address(asset), receiver, 11e18);
+        emit YieldForwarder.TokenForwarded(address(asset), receiver, 11e18);
 
         vm.prank(keeperEOA);
         forwarder.forwardToken(address(asset));
