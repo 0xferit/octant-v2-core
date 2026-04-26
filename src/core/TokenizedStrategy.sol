@@ -91,8 +91,12 @@ abstract contract TokenizedStrategy {
 
     /**
      * @notice Emitted when the strategy reports `profit` or `loss`.
-     * @param profit Profit amount
-     * @param loss Loss amount
+     * @dev Base semantics are notional gain/loss since the previous report.
+     *      Specialized strategies may override the meaning; for
+     *      YieldSkimmingTokenizedStrategy, `loss` is a gross shortfall level
+     *      and must not be summed across consecutive reports.
+     * @param profit Profit amount in asset units, subject to implementation semantics
+     * @param loss Loss amount in asset units, subject to implementation semantics
      */
     event Reported(uint256 profit, uint256 loss);
 
@@ -1155,6 +1159,9 @@ abstract contract TokenizedStrategy {
      * @dev This will account for any gains/losses since the last report.
      * This function is virtual and meant to be overridden by specialized
      * strategies that implement custom yield handling mechanisms.
+     * Specialized overrides may define different return and event semantics;
+     * YieldSkimmingTokenizedStrategy reports `loss` as a gross shortfall level
+     * rather than an incremental delta.
      *
      * Two primary implementations are provided in specialized strategies:
      * - YieldDonatingTokenizedStrategy: Mints shares from profits to the dragonRouter
@@ -1162,8 +1169,7 @@ abstract contract TokenizedStrategy {
      *
      * @return profit Notional amount of gain since last report
      * report in terms of `asset`.
-     * @return loss Notional amount of loss since last report
-     * report in terms of `asset`.
+     * @return loss Notional loss in terms of `asset`, subject to override-specific semantics.
      */
     function report() external virtual returns (uint256 profit, uint256 loss);
 

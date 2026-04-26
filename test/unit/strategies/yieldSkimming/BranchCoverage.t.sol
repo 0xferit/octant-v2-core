@@ -15,6 +15,14 @@ contract YieldSkimmingBranchCoverageTest is Setup {
     address internal user1;
     address internal user2;
 
+    /// @dev ERC-7201 namespaced slot for YieldSkimmingStorage.
+    ///      Field offsets:
+    ///        slot+0  totalDebtOwedToUserInAssetValue
+    ///        slot+1  lastReportedRate
+    ///        slot+2  dragonRouterDebtInAssetValue
+    bytes32 internal constant YS_SLOT =
+        keccak256(abi.encode(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1)) & ~bytes32(uint256(0xff));
+
     function setUp() public override {
         super.setUp();
         dragon = strategy.dragonRouter();
@@ -971,7 +979,10 @@ contract YieldSkimmingBranchCoverageTest is Setup {
 
         assertTrue(IYieldSkimmingStrategy(address(strategy)).isVaultInsolvent());
 
-        vm.expectRevert("Dragon cannot operate during insolvency");
+        // Solvency check is now post-migration. Old dragon balance becoming user debt
+        // only worsens the gap here, so the post-state remains insolvent and finalize
+        // reverts with the new error message.
+        vm.expectRevert("Router change would cause insolvency");
         strategy.finalizeDragonRouterChange();
     }
 
@@ -1329,11 +1340,8 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         uint256 dragonBalance = strategy.balanceOf(dragon);
         assertGt(dragonBalance, 0, "Dragon should have shares");
 
-        // Directly reduce dragonRouterDebtInAssetValue to be less than dragon balance
-        // YieldSkimmingStorage slot: keccak256("octant.yieldSkimming.exchangeRate") - 1
-        // dragonRouterDebtInAssetValue is at offset 2 from the base slot
-        bytes32 baseSlot = bytes32(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1);
-        bytes32 dragonDebtSlot = bytes32(uint256(baseSlot) + 2);
+        // Directly reduce dragonRouterDebtInAssetValue to be less than dragon balance.
+        bytes32 dragonDebtSlot = bytes32(uint256(YS_SLOT) + 2);
         // Set dragon debt to 1 wei (much less than dragon balance)
         vm.store(address(strategy), dragonDebtSlot, bytes32(uint256(1)));
 
@@ -1370,9 +1378,8 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         // To trigger the else, we need userDebt < newDragonBalance.
         // Use vm.store to reduce user debt below newDragonBalance.
 
-        bytes32 baseSlot = bytes32(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1);
         // totalDebtOwedToUserInAssetValue is at offset 0
-        vm.store(address(strategy), baseSlot, bytes32(uint256(100e18)));
+        vm.store(address(strategy), YS_SLOT, bytes32(uint256(100e18)));
         // Now userDebt = 100e18 < newDragonBalance = 200e18
 
         uint256 userDebt = IYieldSkimmingStrategy(address(strategy)).gettotalDebtOwedToUserInAssetValue();
@@ -1544,11 +1551,10 @@ contract YieldSkimmingBranchCoverageTest is Setup {
         // Deposit first so we have shares
         mintAndDepositIntoStrategy(strategy, user1, 100e18);
 
-        // Set rate to 0 and manipulate debts to 0 so vault stays "solvent"
+        // Set rate to 0 and manipulate debts to 0 so vault stays "solvent".
         MockStrategySkimming(address(strategy)).updateExchangeRate(0);
-        bytes32 baseSlot = bytes32(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1);
-        vm.store(address(strategy), baseSlot, bytes32(uint256(0))); // totalDebtOwedToUserInAssetValue = 0
-        bytes32 dragonDebtSlot = bytes32(uint256(baseSlot) + 2);
+        vm.store(address(strategy), YS_SLOT, bytes32(uint256(0))); // totalDebtOwedToUserInAssetValue = 0
+        bytes32 dragonDebtSlot = bytes32(uint256(YS_SLOT) + 2);
         vm.store(address(strategy), dragonDebtSlot, bytes32(uint256(0))); // dragonRouterDebtInAssetValue = 0
 
         // Now vault has no debts but rate is 0 -> solvent + rate 0

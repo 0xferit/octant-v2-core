@@ -15,7 +15,10 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
  * @custom:security-contact security@golem.foundation
  * @notice Specialized TokenizedStrategy for yield-bearing assets with appreciating exchange rates.
  * @dev Mechanism:
- *      - Shares represent ETH value (1 share = 1 ETH value) rather than asset amounts
+ *      - Shares represent value-units of the underlying asset at the strategy exchange rate
+ *        (1 share = 1 unit of underlying-asset value as returned by getCurrentExchangeRate)
+ *        rather than raw asset amounts. Note: the underlying-asset value is NOT pegged to native ETH,
+ *        even when the asset references stETH/wstETH/rETH — value follows the live exchange rate.
  *      - On report(), compares total vault value (assets * rate) vs total outstanding shares
  *        • Profit: mints dragon shares equal to excess value above total share debt
  *        • Loss: burns dragon shares (if enabled) up to available balance to cover shortfall
@@ -33,14 +36,15 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
 
     /// @dev Storage for yield skimming strategy
     struct YieldSkimmingStorage {
-        uint256 totalDebtOwedToUserInAssetValue; // Track ETH value owed to users only
+        uint256 totalDebtOwedToUserInAssetValue; // Track underlying-asset-value debt owed to users only
         uint256 lastReportedRate; // Track the last reported rate
-        uint256 dragonRouterDebtInAssetValue; // Track the ETH value owed to dragon router
+        uint256 dragonRouterDebtInAssetValue; // Track the underlying-asset-value debt owed to dragon router
     }
 
-    // exchange rate storage slot
+    // ERC-7201 namespaced storage slot for yield-skimming state.
+    // Formula: keccak256(abi.encode(uint256(keccak256(NAMESPACE)) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant YIELD_SKIMMING_STORAGE_SLOT =
-        bytes32(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1);
+        keccak256(abi.encode(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1)) & ~bytes32(uint256(0xff));
 
     /// @dev Event emitted when harvest is performed
     event Harvest(address indexed caller, uint256 currentRate);
@@ -61,7 +65,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      *      - Tracks asset value debt
      * @param assets Amount of assets to deposit in asset base units
      * @param receiver Address to receive the shares (cannot be dragon router)
-     * @return shares Amount of shares minted (1 share = 1 asset value)
+     * @return shares Amount of shares minted (1 share = 1 unit of underlying-asset value at the current rate)
      */
     function deposit(uint256 assets, address receiver) public virtual override nonReentrant returns (uint256 shares) {
         // Block deposits during vault insolvency
@@ -86,7 +90,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         // Checking max deposit will also check if shutdown.
         require(assets <= _maxDeposit(S, receiver), "ERC4626: deposit more than max");
 
-        // Issue shares based on value (1 share = 1 ETH value, except in case of uncovered loss)
+        // Issue shares based on value (1 share = 1 unit of underlying-asset value, except in case of uncovered loss)
         shares = assets.mulDiv(currentRate, WadRayMath.RAY);
         require(shares != 0, "ZERO_SHARES");
 
@@ -101,10 +105,10 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
 
     /**
      * @notice Mint exact shares from the strategy with value debt tracking
-     * @dev Implements insolvency protection and tracks ETH value debt
+     * @dev Implements insolvency protection and tracks underlying-asset-value debt
      * @param shares Amount of shares to mint
      * @param receiver Address to receive the shares
-     * @return assets Amount of assets deposited in asset base units (1 share = 1 ETH value, except in case of uncovered loss)
+     * @return assets Amount of assets deposited in asset base units (1 share = 1 unit of underlying-asset value, except in case of uncovered loss)
      */
     function mint(uint256 shares, address receiver) public virtual override nonReentrant returns (uint256 assets) {
         // Block mints during vault insolvency
@@ -124,7 +128,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         // Checking max mint will also check if shutdown
         require(shares <= _maxMint(S, receiver), "ERC4626: mint more than max");
 
-        // Calculate assets needed based on value (1 share = 1 ETH value, except in case of uncovered loss)
+        // Calculate assets needed based on value (1 share = 1 unit of underlying-asset value, except in case of uncovered loss)
         assets = shares.mulDiv(WadRayMath.RAY, currentRate, Math.Rounding.Ceil);
         require(assets != 0, "ZERO_ASSETS");
 
@@ -139,7 +143,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
 
     /**
      * @notice Redeem shares from the strategy with value debt tracking
-     * @dev Shares represent ETH value (1 share = 1 ETH value, except in case of uncovered loss)
+     * @dev Shares represent underlying-asset value (1 share = 1 unit of underlying-asset value at the current rate, except in case of uncovered loss)
      * @param shares Amount of shares to redeem
      * @param receiver Address to receive the assets
      * @param owner Address whose shares are being redeemed
@@ -162,7 +166,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         }
 
         // Calculate actual value returned for debt tracking (before redemption)
-        uint256 valueToReturn = shares; // 1 share = 1 ETH value, except in case of uncovered loss (regardless of actual assets received)
+        uint256 valueToReturn = shares; // 1 share = 1 unit of underlying-asset value, except in case of uncovered loss (regardless of actual assets received)
 
         // Validate inputs and check limits (replaces super.redeem validation)
         require(shares <= _maxRedeem(S, owner), "ERC4626: redeem more than max");
@@ -222,7 +226,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         require((shares = _convertToShares(S, assets, Math.Rounding.Ceil)) != 0, "ZERO_SHARES");
 
         // Calculate actual value returned for debt tracking (before withdrawal)
-        uint256 valueToReturn = shares; // 1 share = 1 ETH value
+        uint256 valueToReturn = shares; // 1 share = 1 unit of underlying-asset value
 
         // Check if dragon withdrawal would compromise vault solvency
         _requireDragonSolvencyAfterOperation(owner, shares);
@@ -342,24 +346,24 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
     }
 
     /**
-     * @notice Get the total ETH value debt owed to users
-     * @return Total user debt in asset value
+     * @notice Get the total underlying-asset-value debt owed to users
+     * @return Total user debt in underlying-asset value units
      */
     function gettotalDebtOwedToUserInAssetValue() external view returns (uint256) {
         return _strategyYieldSkimmingStorage().totalDebtOwedToUserInAssetValue;
     }
 
     /**
-     * @notice Get the total ETH value debt owed to dragon router
-     * @return Total dragon router debt in asset value
+     * @notice Get the total underlying-asset-value debt owed to dragon router
+     * @return Total dragon router debt in underlying-asset value units
      */
     function getDragonRouterDebtInAssetValue() external view returns (uint256) {
         return _strategyYieldSkimmingStorage().dragonRouterDebtInAssetValue;
     }
 
     /**
-     * @notice Get the total ETH value debt owed to both users and dragon router combined
-     * @return Total debt in asset value combining users and dragon router
+     * @notice Get the total underlying-asset-value debt owed to both users and dragon router combined
+     * @return Total debt in underlying-asset value units combining users and dragon router
      */
     function getTotalValueDebtInAssetValue() external view returns (uint256) {
         YieldSkimmingStorage storage YS = _strategyYieldSkimmingStorage();
@@ -520,8 +524,19 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * 3. **Loss Protection**: When current value is less than total shares, burns dragon shares (if enabled) to cover shortfall
      * 4. **Insolvency Handling**: If dragon buffer insufficient for losses, remaining shortfall is handled through proportional asset distribution during withdrawals
      *
-     * @return profit Profit in assets from underlying value appreciation
-     * @return loss Loss in assets from underlying value depreciation
+     * Event semantics: the `loss` value emitted via `Reported` is a gross
+     * shortfall — the full gap between total value debt and current vault
+     * value at the time of the call — not an incremental delta since the last
+     * report. If `report()` is called multiple times during the same impairment
+     * (e.g. dragon shares cannot fully cover the loss), the same gross shortfall
+     * is re-emitted on each call.
+     *
+     * Integrators must not naively sum `loss` across consecutive `Reported`
+     * events to compute cumulative damage; doing so double-counts persistent
+     * impairments. Treat the event as a level signal, not a delta signal.
+     *
+     * @return profit Profit in assets from underlying value appreciation since the last report
+     * @return loss Loss in assets — gross shortfall (level), not a delta. See event semantics above.
      */
     function report()
         public
@@ -550,7 +565,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             // Yield captured! Mint profit shares to dragon
             uint256 profitValue = currentValue - YS.totalDebtOwedToUserInAssetValue - YS.dragonRouterDebtInAssetValue;
 
-            uint256 profitShares = profitValue; // 1 share = 1 ETH value, except in case of uncovered loss
+            uint256 profitShares = profitValue; // 1 share = 1 unit of underlying-asset value, except in case of uncovered loss
 
             // Convert profit value to assets for reporting
             profit = profitValue.mulDiv(WadRayMath.RAY, currentRate);
@@ -573,6 +588,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         S.lastReport = uint96(block.timestamp);
         YS.lastReportedRate = currentRate;
         emit Harvest(msg.sender, currentRate.rayToWad());
+        // `loss` here is a gross shortfall (level), not a delta; see report() NatSpec.
         emit Reported(profit, loss);
 
         return (profit, loss);
@@ -599,7 +615,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * @param S Strategy storage
      * @param assets Amount of assets to convert
      * @param rounding Rounding mode for division
-     * @return Amount of shares equivalent in value (1 share = 1 ETH value, except in case of uncovered loss)
+     * @return Amount of shares equivalent in value (1 share = 1 unit of underlying-asset value, except in case of uncovered loss)
      */
     function _convertToShares(
         StrategyData storage S,
@@ -751,7 +767,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         YieldSkimmingStorage storage YS = _strategyYieldSkimmingStorage();
         StrategyData storage S = _strategyStorage();
 
-        // Direct transfer: shares represent ETH value 1:1 in this system
+        // Direct transfer: shares represent underlying-asset value 1:1 in this system
         if (from == S.dragonRouter) {
             // Dragon sends shares: dragon loses debt obligation, users gain debt obligation
             require(YS.dragonRouterDebtInAssetValue >= transferAmount, "Insufficient dragon debt");
@@ -845,7 +861,7 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
      * @dev Internal function to handle loss protection by burning dragon shares
      * @param S Strategy storage pointer
      * @param YS Yield skimming storage pointer
-     * @param lossValue Loss amount in ETH value terms
+     * @param lossValue Loss amount in underlying-asset value terms
      * @param currentRate Current exchange rate in RAY format
      * @return loss Loss amount in asset terms for reporting
      */
@@ -870,8 +886,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             uint256 dragonBurn = Math.min(lossValue, dragonBalance);
             _burn(S, S.dragonRouter, dragonBurn);
 
-            // update the dragon value debt
-            YS.dragonRouterDebtInAssetValue -= dragonBurn;
+            // Saturating subtraction: dragon-balance and dragon-debt should stay in sync,
+            // but if accounting drifts (e.g. balance > debt) the raw `-=` would underflow
+            // and brick loss protection. Match the defensive pattern used in redeem/withdraw.
+            YS.dragonRouterDebtInAssetValue = YS.dragonRouterDebtInAssetValue > dragonBurn
+                ? YS.dragonRouterDebtInAssetValue - dragonBurn
+                : 0;
 
             emit DonationBurned(S.dragonRouter, dragonBurn, currentRate.rayToWad());
         }
@@ -879,7 +899,13 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
 
     /**
      * @notice Finalizes the dragon router change with proper debt accounting migration
-     * @dev Migrates debt tracking when dragon router changes to maintain correct accounting
+     * @dev Migrates debt tracking when dragon router changes to maintain correct accounting.
+     *      The solvency check runs AFTER debt migration so that:
+     *      - Migrations that would restore solvency (new dragon holds user shares whose
+     *        conversion to dragon debt drops user debt below vault value) are allowed.
+     *      - Migrations that would create insolvency (old dragon balance becoming user
+     *        debt pushes user debt above vault value) are blocked.
+     *      A pre-migration check inspecting the old state misclassifies both directions.
      */
     function finalizeDragonRouterChange() external override {
         StrategyData storage S = _strategyStorage();
@@ -891,13 +917,15 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
         address oldDragonRouter = S.dragonRouter;
         address newDragonRouter = S.pendingDragonRouter;
 
+        // Burn any stale junior loss buffer before snapshotting balances so a
+        // dust transfer to the old dragon cannot decide migration accounting.
+        if (S.enableBurning) {
+            _applyDragonLossProtectionIfNeeded(S, YS);
+        }
+
         // Get balances before changing the router
         uint256 oldDragonBalance = _balanceOf(S, oldDragonRouter);
         uint256 newDragonBalance = _balanceOf(S, newDragonRouter);
-
-        if (oldDragonBalance > 0) {
-            _requireDragonSolvency(oldDragonRouter);
-        }
 
         // Migrate debt accounting:
         // 1. Old dragon router's balance becomes user debt
@@ -918,6 +946,12 @@ contract YieldSkimmingTokenizedStrategy is TokenizedStrategy {
             } else {
                 YS.totalDebtOwedToUserInAssetValue = 0;
             }
+        }
+
+        // Post-migration solvency check: only enforced when burning is enabled
+        // (mirrors the gating used by _requireDragonSolvency / _maxDragonRedeemableShares).
+        if (S.enableBurning) {
+            require(!_isVaultInsolvent(), "Router change would cause insolvency");
         }
 
         // Now call the parent implementation to actually change the router
