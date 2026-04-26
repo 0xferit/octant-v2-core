@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0-develop.2](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.1..1.2.0-develop.2) - 2026-04-26
+
+### Bug Fixes
+
+- **(ci)** retry semver build with unversioned overlays - ([db71381](https://github.com/golemfoundation/octant-v2-core/commit/db7138154c6457e4572896f079140582389d4f69)) - Maxime Viard
+- **(swapping-forwarder)** reuse inherited token forwarding - ([3f14672](https://github.com/golemfoundation/octant-v2-core/commit/3f146728d09d09b6ba75bcdf1f438deadd375eeb)) - Maxime Viard
+- **(yield-donating)** bailsec #55 #57 revert on zero shares minted by target vault - ([e4ccd7e](https://github.com/golemfoundation/octant-v2-core/commit/e4ccd7e95afed3cb5a07648ef606dc1386dade46)) - Maxime
+- **(yield-donating)** bailsec #54 use previewRedeem instead of convertToAssets - ([7943f26](https://github.com/golemfoundation/octant-v2-core/commit/7943f26d20035ec31b0e059351f7c7181146957a)) - Maxime
+- **(yield-donating)** bailsec #52 preserve uint256.max sentinel in availableDepositLimit - ([f15e6dd](https://github.com/golemfoundation/octant-v2-core/commit/f15e6ddf614a38dfadc1dba834aed63c2a1d4b5c)) - Maxime
+- **(yield-donating)** bailsec #60 exact-amount approval in _deployFunds - ([2335365](https://github.com/golemfoundation/octant-v2-core/commit/2335365bcd6d9df0d2c11d733d74fbf75a6f1615)) - skimaharvey
+
+### Documentation
+
+- **(erc4626)** warn that target vaults require per-vault security review - ([33bc87d](https://github.com/golemfoundation/octant-v2-core/commit/33bc87d828a48069ff1955596ebed4962728e03c)) - Maxime
+- **(yearn-v3-strategy)** bailsec #59 document hardcoded maxLoss in _emergencyWithdraw - ([a54273b](https://github.com/golemfoundation/octant-v2-core/commit/a54273beec221becac07a876422445500556bd79)) - Maxime
+
+
 ## [1.2.0-develop.1](https://github.com/golemfoundation/octant-v2-core/compare/backup/pr418-pre-surgery..1.2.0-develop.1) - 2026-04-24
 
 ### Bug Fixes
