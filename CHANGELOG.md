@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0-develop.3](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.2..1.2.0-develop.3) - 2026-04-26
+
+### Bug Fixes
+
+- **(yield-skim)** burn old dragon dust before migration - ([bc9fc1e](https://github.com/golemfoundation/octant-v2-core/commit/bc9fc1efb7a17ebfa6bcb2528f1d01cd97f72c87)) - skimaharvey
+- **(yield-skim)** post-migration solvency check in finalizeDragonRouterChange - ([27f8e29](https://github.com/golemfoundation/octant-v2-core/commit/27f8e29e65c918a3e766db2c877d9b8214441fdf)) - skimaharvey
+- **(yield-skim)** saturate dragon-debt subtraction in loss protection - ([3e9555e](https://github.com/golemfoundation/octant-v2-core/commit/3e9555ecbfc69547730943f0d2db98e3d7517eee)) - skimaharvey
+- **(yield-skim)** conform YIELD_SKIMMING_STORAGE_SLOT to ERC-7201 - ([c38082d](https://github.com/golemfoundation/octant-v2-core/commit/c38082d627bfbc19a4849a05315537d7683c2e51)) - skimaharvey
+
+### Documentation
+
+- **(yield-skim)** clarify Reported.loss is gross shortfall, not a delta - ([98cb0ad](https://github.com/golemfoundation/octant-v2-core/commit/98cb0ad2cbdfa340e11ac647579c6c1eb7977f8a)) - skimaharvey
+- **(yield-skim)** clarify share value is underlying-asset units, not native ETH - ([df5db0c](https://github.com/golemfoundation/octant-v2-core/commit/df5db0ccd8b31fa26bf27cc92977a765c9677ccb)) - skimaharvey
+
+
 ## [1.2.0-develop.2](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.1..1.2.0-develop.2) - 2026-04-26
 
 ### Bug Fixes
