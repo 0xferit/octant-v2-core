@@ -40,7 +40,10 @@ contract MorphoCompounderStrategy is BaseHealthCheck {
 
     /**
      * @notice Initializes the Morpho compounder strategy
-     * @dev Validates asset matches Morpho vault's asset and approves max allowance
+     * @dev Validates asset matches Morpho vault's asset. Approval is issued
+     *      per-deposit inside {_deployFunds} and explicitly cleared after the
+     *      compounder vault call, so no standing allowance against the external
+     *      (upgradeable) compounder vault exists between calls.
      * @param _compounderVault Address of the Morpho compounder vault to deposit into
      * @param _asset Address of the underlying asset (must match compounder vault's asset)
      * @param _name Strategy display name (e.g., "Octant Morpho USDC Strategy")
@@ -78,7 +81,6 @@ contract MorphoCompounderStrategy is BaseHealthCheck {
     {
         // make sure asset is Morpho's asset
         require(ITokenizedStrategy(_compounderVault).asset() == _asset, "Asset mismatch with compounder vault");
-        IERC20(_asset).forceApprove(_compounderVault, type(uint256).max);
         compounderVault = _compounderVault;
     }
 
@@ -99,6 +101,12 @@ contract MorphoCompounderStrategy is BaseHealthCheck {
         // This is because maxDeposit chains through: this strategy → Morpho Steakhouse → SteakHouse USDC,
         // and SteakHouse USDC's maxDeposit may overstate capacity when duplicate markets exist.
         uint256 vaultLimit = ITokenizedStrategy(compounderVault).maxDeposit(address(this));
+        // Preserve the ERC-4626 "infinite capacity" sentinel; subtracting the
+        // idle balance would clobber `type(uint256).max` into `uint256.max - idle`,
+        // which `TokenizedStrategy._maxMint` no longer recognises as unbounded
+        // and routes through `_convertToShares` (risking mulDiv overflow off
+        // 1:1 PPS).
+        if (vaultLimit == type(uint256).max) return type(uint256).max;
         uint256 idleBalance = IERC20(asset).balanceOf(address(this));
         return vaultLimit > idleBalance ? vaultLimit - idleBalance : 0;
     }
@@ -120,14 +128,21 @@ contract MorphoCompounderStrategy is BaseHealthCheck {
      * @param _amount Amount of assets to deploy in asset base units
      */
     function _deployFunds(uint256 _amount) internal override {
-        ITokenizedStrategy(compounderVault).deposit(_amount, address(this));
+        IERC20(asset).forceApprove(compounderVault, _amount);
+        // Assert the target vault credited shares. A zero-share outcome (e.g., high PPS combined
+        // with a tiny deposit, or a misbehaving downstream vault) would consume the asset without
+        // recognising a position, silently stranding funds.
+        uint256 shares = ITokenizedStrategy(compounderVault).deposit(_amount, address(this));
+        require(shares > 0, "MorphoCompounderStrategy: zero shares minted");
+        IERC20(asset).forceApprove(compounderVault, 0);
     }
 
     /**
      * @dev Withdraws assets from Morpho compounder vault
      * @param _amount Amount of assets to withdraw in asset base units
-     * @custom:security maxLoss set to 100% (10_000 BPS) to prevent revert cascades
-     *                  MultistrategyVault enforces actual loss limits via updateDebt
+     * @custom:security Target `withdraw` returns shares burned, not assets received.
+     *                  `TokenizedStrategy._withdraw` measures the post-call asset
+     *                  balance and applies the caller's max-loss limit.
      */
     function _freeFunds(uint256 _amount) internal override {
         ITokenizedStrategy(compounderVault).withdraw(_amount, address(this), address(this), 10_000);
@@ -148,7 +163,9 @@ contract MorphoCompounderStrategy is BaseHealthCheck {
     function _harvestAndReport() internal view override returns (uint256 _totalAssets) {
         // Get strategy's share balance in the compounder vault
         uint256 shares = ITokenizedStrategy(compounderVault).balanceOf(address(this));
-        uint256 vaultAssets = ITokenizedStrategy(compounderVault).convertToAssets(shares);
+        // EIP-4626 requires previewRedeem to reflect any exit-fee policy the target vault enforces;
+        // convertToAssets returns the gross value and would overstate totalAssets for fee-charging vaults.
+        uint256 vaultAssets = ITokenizedStrategy(compounderVault).previewRedeem(shares);
 
         // Include idle funds as per BaseStrategy specification
         uint256 idleAssets = IERC20(asset).balanceOf(address(this));

@@ -39,7 +39,8 @@ contract YearnV3Strategy is BaseHealthCheck {
 
     /**
      * @notice Initializes the Yearn v3 strategy
-     * @dev Validates asset matches Yearn vault's asset and approves max allowance
+     * @dev Validates asset matches Yearn vault's asset. Approval is granted per-deposit
+     *      in `_deployFunds` and explicitly cleared after the Yearn vault call.
      * @param _yearnVault Address of the Yearn v3 vault this strategy deposits into
      * @param _asset Address of the underlying asset (must match Yearn vault's asset)
      * @param _name Strategy display name (e.g., "Octant Yearn USDC Strategy")
@@ -77,7 +78,6 @@ contract YearnV3Strategy is BaseHealthCheck {
     {
         // make sure asset is Yearn vault's asset
         require(ITokenizedStrategy(_yearnVault).asset() == _asset, "Asset mismatch with compounder vault");
-        IERC20(_asset).forceApprove(_yearnVault, type(uint256).max);
         yearnVault = _yearnVault;
     }
 
@@ -97,6 +97,10 @@ contract YearnV3Strategy is BaseHealthCheck {
         // the maxDeposit value may be inflated when the underlying chain reaches vaults with duplicate
         // markets in their supplyQueue (like SteakHouse USDC). This could cause temporary DoS for deposits
         uint256 vaultLimit = ITokenizedStrategy(yearnVault).maxDeposit(address(this));
+        // Preserve the ERC-4626 "infinite capacity" sentinel so TokenizedStrategy._maxMint short-circuits
+        // the _convertToShares call; subtracting the idle balance would clobber the sentinel and cause
+        // maxMint() to overflow in the mulDiv when share price != 1.
+        if (vaultLimit == type(uint256).max) return type(uint256).max;
         uint256 idleBalance = IERC20(asset).balanceOf(address(this));
         return vaultLimit > idleBalance ? vaultLimit - idleBalance : 0;
     }
@@ -116,30 +120,40 @@ contract YearnV3Strategy is BaseHealthCheck {
     /**
      * @dev Deposits idle assets into Yearn v3 vault
      * @param _amount Amount of assets to deploy in asset base units
+     * @custom:security Approves exactly `_amount` and clears the allowance after
+     *                  `deposit`, leaving no standing claim against the strategy's
+     *                  idle balance even if a target vault under-pulls.
      */
     function _deployFunds(uint256 _amount) internal override {
-        ITokenizedStrategy(yearnVault).deposit(_amount, address(this));
+        IERC20(asset).forceApprove(yearnVault, _amount);
+        // Assert the target vault credited shares. A zero-share outcome (e.g., high PPS combined
+        // with a tiny deposit, or a misbehaving downstream vault) would consume the asset without
+        // recognising a position, silently stranding funds.
+        uint256 shares = ITokenizedStrategy(yearnVault).deposit(_amount, address(this));
+        require(shares > 0, "YearnV3Strategy: zero shares minted");
+        IERC20(asset).forceApprove(yearnVault, 0);
     }
 
     /**
      * @dev Withdraws assets from Yearn v3 vault
      * @param _amount Amount of assets to withdraw in asset base units
-     * @custom:security maxLoss set to 100% (10_000 BPS) to prevent revert cascades
-     *                  MultistrategyVault enforces actual loss limits via updateDebt
+     * @custom:security Target `withdraw` returns shares burned, not assets received.
+     *                  `TokenizedStrategy._withdraw` measures the post-call asset
+     *                  balance and applies the caller's max-loss limit. The Yearn
+     *                  call accepts 100% target-vault loss so the outer accounting
+     *                  can observe and enforce the realised result.
      */
     function _freeFunds(uint256 _amount) internal override {
-        // NOTE: maxLoss is set to 10_000 (100%) to ensure withdrawals don't revert when the Yearn vault
-        // has unrealized losses. This is necessary because:
-        // 1. When the TokenizedStrategy needs funds, it calls freeFunds() to withdraw from the underlying Yearn vault
-        // 2. Without accepting losses here, any slippage/loss in Yearn would cause the withdrawal to fail
-        // 3. The MultistrategyVault performs its own loss checks after withdrawal via updateDebt's maxLoss parameter
-        // This allows the strategy to always provide liquidity while loss protection is enforced at the vault level.
         ITokenizedStrategy(yearnVault).withdraw(_amount, address(this), address(this), 10_000);
     }
 
     /**
      * @dev Emergency withdrawal after strategy shutdown
      * @param _amount Amount of assets to withdraw in asset base units
+     * @custom:security Delegates to `_freeFunds`, which calls the Yearn v3 vault
+     *                  with `maxLoss = 10_000` BPS (100%). This preserves the
+     *                  shared `emergencyWithdraw(uint256)` ABI; emergency admins
+     *                  must assess acceptable Yearn loss off-chain before calling.
      */
     function _emergencyWithdraw(uint256 _amount) internal override {
         _freeFunds(_amount);
@@ -152,7 +166,9 @@ contract YearnV3Strategy is BaseHealthCheck {
     function _harvestAndReport() internal view override returns (uint256 _totalAssets) {
         // get strategy's balance in the vault
         uint256 shares = ITokenizedStrategy(yearnVault).balanceOf(address(this));
-        uint256 vaultAssets = ITokenizedStrategy(yearnVault).convertToAssets(shares);
+        // EIP-4626 requires previewRedeem to reflect any exit-fee policy the target vault enforces;
+        // convertToAssets returns the gross value and would overstate totalAssets for fee-charging vaults.
+        uint256 vaultAssets = ITokenizedStrategy(yearnVault).previewRedeem(shares);
 
         uint256 idleAssets = IERC20(asset).balanceOf(address(this));
 

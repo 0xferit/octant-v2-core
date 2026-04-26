@@ -33,7 +33,8 @@ contract SparkStrategy is ERC4626Strategy {
 
     /**
      * @notice Initializes the Spark strategy
-     * @dev Validates asset matches target vault's asset and approves max allowance
+     * @dev Inherits ERC4626Strategy's per-deposit approval flow, which clears
+     *      target-vault allowance after each deploy.
      * @param _targetVault Address of the Spark ERC4626 vault this strategy deposits into
      * @param _asset Address of the underlying asset (must match target vault's asset)
      * @param _name Strategy display name (e.g., "Spark USDC Strategy")
