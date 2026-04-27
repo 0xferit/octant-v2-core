@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AaveV3Strategy } from "src/strategies/yieldDonating/AaveV3Strategy.sol";
 import { AaveV3StrategyFactory } from "src/factories/AaveV3StrategyFactory.sol";
 import { YieldDonatingTokenizedStrategy } from "src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
@@ -14,6 +15,17 @@ import { AaveV3TestConfig } from "../config/AaveV3TestConfig.sol";
 interface IPoolDataProvider {
     function getReserveCaps(address asset) external view returns (uint256 borrowCap, uint256 supplyCap);
     function getATokenTotalSupply(address asset) external view returns (uint256);
+
+    /// @dev Slim view — decodes only the first three 32-byte slots of Aave's full
+    ///      12-return getReserveData tuple (same signature we use in the strategy to
+    ///      keep the coverage build within the stack budget).
+    function getReserveData(
+        address asset
+    ) external view returns (uint256 unbacked, uint256 accruedToTreasuryScaled, uint256 totalAToken);
+}
+
+interface IPool {
+    function getReserveNormalizedIncome(address asset) external view returns (uint256);
 }
 
 /// @title AaveV3 Yield Donating Test
@@ -180,16 +192,31 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         _testHarvestWithProfit(depositAmount, profitAmount);
     }
 
+    function _aaveDataProvider() internal view returns (IPoolDataProvider) {
+        return IPoolDataProvider(address(strategy.dataProvider()));
+    }
+
+    /// @dev Mirror of the strategy's `_cappedTotalSupply` view: underlying-units
+    ///      `totalAToken + rayMul(accruedToTreasuryScaled, normalizedIncome)`, ceiling-
+    ///      rounded. Keeps the integration assertions in lockstep with the Aave-aligned
+    ///      math the strategy applies to `validateSupply` headroom.
+    function _cappedTotalSupplyOnMainnet() internal view returns (uint256) {
+        IPoolDataProvider dp = _aaveDataProvider();
+        IPool aavePool = IPool(AaveV3TestConfig.AAVE_POOL);
+        (, uint256 accruedToTreasuryScaled, uint256 totalAToken) = dp.getReserveData(_asset());
+        uint256 idx = aavePool.getReserveNormalizedIncome(_asset());
+        return totalAToken + Math.mulDiv(accruedToTreasuryScaled, idx, 1e27, Math.Rounding.Ceil);
+    }
+
     /// @notice Test available deposit limit checks supply cap
     function testAvailableDepositLimitWithSupplyCap() public view {
-        IPoolDataProvider dataProvider = IPoolDataProvider(AaveV3TestConfig.AAVE_DATA_PROVIDER);
-        (, uint256 supplyCap) = dataProvider.getReserveCaps(_asset());
+        (, uint256 supplyCap) = _aaveDataProvider().getReserveCaps(_asset());
 
         if (supplyCap == 0) {
             uint256 limit = strategy.availableDepositLimit(user);
             assertEq(limit, type(uint256).max, "Should return max uint256 when no supply cap");
         } else {
-            uint256 totalSupply = dataProvider.getATokenTotalSupply(_asset());
+            uint256 totalSupply = _cappedTotalSupplyOnMainnet();
             uint256 supplyCapScaled = supplyCap * 10 ** _decimals();
 
             uint256 limit = strategy.availableDepositLimit(user);
@@ -214,13 +241,12 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
         assertEq(idleBalance, idleAmount, "Strategy should have idle assets");
 
-        IPoolDataProvider dataProvider = IPoolDataProvider(AaveV3TestConfig.AAVE_DATA_PROVIDER);
-        (, uint256 supplyCap) = dataProvider.getReserveCaps(_asset());
+        (, uint256 supplyCap) = _aaveDataProvider().getReserveCaps(_asset());
 
         if (supplyCap == 0) {
             assertEq(limit, type(uint256).max, "Should return max uint256 when no supply cap");
         } else {
-            uint256 totalSupply = dataProvider.getATokenTotalSupply(_asset());
+            uint256 totalSupply = _cappedTotalSupplyOnMainnet();
             uint256 supplyCapScaled = supplyCap * 10 ** _decimals();
 
             if (supplyCapScaled > totalSupply) {
@@ -233,13 +259,12 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
 
     /// @notice Test available deposit limit returns 0 when idle balance >= available capacity
     function testAvailableDepositLimitIdleExceedsCapacityAave() public {
-        IPoolDataProvider dataProvider = IPoolDataProvider(AaveV3TestConfig.AAVE_DATA_PROVIDER);
-        (, uint256 supplyCap) = dataProvider.getReserveCaps(_asset());
+        (, uint256 supplyCap) = _aaveDataProvider().getReserveCaps(_asset());
 
         // Only test when there is a supply cap
         if (supplyCap == 0) return;
 
-        uint256 totalSupply = dataProvider.getATokenTotalSupply(_asset());
+        uint256 totalSupply = _cappedTotalSupplyOnMainnet();
         uint256 supplyCapScaled = supplyCap * 10 ** _decimals();
 
         // Only test when there is available capacity
@@ -383,6 +408,7 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         vm.expectRevert();
         new AaveV3Strategy(
             AaveV3TestConfig.AAVE_ADDRESSES_PROVIDER,
+            address(0), // rewardsController unused for this revert path
             address(0x123), // Unsupported asset
             _strategyName(),
             _strategySymbol(),
@@ -491,9 +517,10 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         assertGe(assetsWithdrawn, (depositAmount * 99) / 100, "User should receive at least 99% of deposit");
     }
 
-    /// @notice Test availableDepositLimit returns 0 when supplyCapScaled <= totalSupply
+    /// @notice Test availableDepositLimit returns 0 when supplyCapScaled <= capped total supply
     function testAvailableDepositLimitCapReachedAave() public {
-        address dataProviderAddr = address(strategy.dataProvider());
+        address dataProviderAddr = address(_aaveDataProvider());
+        address poolAddr = AaveV3TestConfig.AAVE_POOL;
 
         // Mock getReserveCaps to return a non-zero supply cap
         uint256 fakeBorrowCap = 100;
@@ -508,25 +535,31 @@ contract AaveV3DonatingStrategyTest is BaseYieldDonatingIntegrationTest {
         // supplyCapScaled = 1000 * 10^6 = 1_000_000_000
         uint256 supplyCapScaled = fakeSupplyCap * 10 ** _decimals();
 
-        // Mock getATokenTotalSupply to return >= supplyCapScaled so the else branch returns 0
+        vm.mockCall(
+            poolAddr,
+            abi.encodeWithSelector(IPool.getReserveNormalizedIncome.selector, _asset()),
+            abi.encode(1e27)
+        );
+
+        // Mock getReserveData to return cappedTotalSupply == supplyCapScaled.
         vm.mockCall(
             dataProviderAddr,
-            abi.encodeWithSelector(IPoolDataProvider.getATokenTotalSupply.selector, _asset()),
-            abi.encode(supplyCapScaled) // totalSupply == supplyCapScaled, so supplyCapScaled > totalSupply is false
+            abi.encodeWithSelector(IPoolDataProvider.getReserveData.selector, _asset()),
+            abi.encode(0, 0, supplyCapScaled)
         );
 
         uint256 limit = strategy.availableDepositLimit(user);
-        assertEq(limit, 0, "Should return 0 when supply cap is reached (supplyCapScaled == totalSupply)");
+        assertEq(limit, 0, "Should return 0 when supply cap is reached");
 
-        // Also test when totalSupply > supplyCapScaled
+        // Also test when cappedTotalSupply > supplyCapScaled.
         vm.mockCall(
             dataProviderAddr,
-            abi.encodeWithSelector(IPoolDataProvider.getATokenTotalSupply.selector, _asset()),
-            abi.encode(supplyCapScaled + 1)
+            abi.encodeWithSelector(IPoolDataProvider.getReserveData.selector, _asset()),
+            abi.encode(0, 0, supplyCapScaled + 1)
         );
 
         limit = strategy.availableDepositLimit(user);
-        assertEq(limit, 0, "Should return 0 when supply cap is exceeded (totalSupply > supplyCapScaled)");
+        assertEq(limit, 0, "Should return 0 when supply cap is exceeded");
 
         vm.clearMockedCalls();
     }

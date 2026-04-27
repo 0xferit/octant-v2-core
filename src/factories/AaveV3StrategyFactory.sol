@@ -19,6 +19,13 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
     /// @notice Aave V3 AddressesProvider on Ethereum mainnet
     address public constant AAVE_ADDRESSES_PROVIDER = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
 
+    /// @notice Aave V3 RewardsController on Ethereum mainnet.
+    /// @dev Wired into every deployed strategy so liquidity-mining emissions can be
+    ///      claimed on demand. The controller is a stable, canonical Aave contract;
+    ///      we hardcode it here rather than making it a per-deploy parameter to keep
+    ///      the factory surface small and to prevent operator misconfiguration.
+    address public constant AAVE_REWARDS_CONTROLLER = 0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb;
+
     /// @notice USDC token address (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 on Ethereum mainnet)
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
@@ -60,6 +67,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
         bytes32 parameterHash = keccak256(
             abi.encode(
                 AAVE_ADDRESSES_PROVIDER,
+                AAVE_REWARDS_CONTROLLER,
                 USDC,
                 _name,
                 _symbol,
@@ -76,6 +84,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
             type(AaveV3Strategy).creationCode,
             abi.encode(
                 AAVE_ADDRESSES_PROVIDER,
+                AAVE_REWARDS_CONTROLLER,
                 USDC,
                 _name,
                 _symbol,
@@ -115,6 +124,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
         bytes32 parameterHash = keccak256(
             abi.encode(
                 AAVE_ADDRESSES_PROVIDER,
+                AAVE_REWARDS_CONTROLLER,
                 USDC,
                 _name,
                 _symbol,
@@ -131,6 +141,7 @@ contract AaveV3StrategyFactory is BaseStrategyFactory {
             type(AaveV3Strategy).creationCode,
             abi.encode(
                 AAVE_ADDRESSES_PROVIDER,
+                AAVE_REWARDS_CONTROLLER,
                 USDC,
                 _name,
                 _symbol,

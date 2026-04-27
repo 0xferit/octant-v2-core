@@ -32,6 +32,9 @@ contract MockPool {
     function withdraw(address, uint256, address) external pure returns (uint256) {
         return 0;
     }
+    function getReserveNormalizedIncome(address) external pure returns (uint256) {
+        return 1e27; // RAY — no growth, treasury scaling is a no-op
+    }
 }
 
 /// @title Inline mock for IPoolDataProvider
@@ -60,6 +63,18 @@ contract MockDataProvider {
     function getATokenTotalSupply(address) external view returns (uint256) {
         return totalSupply;
     }
+
+    function getReserveConfigurationData(
+        address
+    ) external pure returns (uint256, uint256, uint256, uint256, uint256, bool, bool, bool, bool, bool) {
+        // Default: active, not frozen — let cap/aToken-derivation tests still exercise
+        // the legacy paths after the pause/freeze short-circuits were added.
+        return (0, 0, 0, 0, 0, false, false, false, true, false);
+    }
+
+    function getPaused(address) external pure returns (bool) {
+        return false;
+    }
 }
 
 /// @title AaveV3Strategy branch coverage tests
@@ -84,6 +99,7 @@ contract AaveV3BranchCoverageTest is Test {
         vm.expectRevert("Zero addressesProvider");
         new AaveV3Strategy(
             address(0), // zero addressesProvider
+            address(0), // rewardsController unused for this revert path
             address(asset),
             "Test Aave",
             "tsAAVE",
@@ -106,6 +122,7 @@ contract AaveV3BranchCoverageTest is Test {
         vm.expectRevert("Asset not supported by pool");
         new AaveV3Strategy(
             address(provider),
+            address(0), // rewardsController unused for this revert path
             address(asset),
             "Test Aave",
             "tsAAVE",
@@ -128,6 +145,7 @@ contract AaveV3BranchCoverageTest is Test {
 
         AaveV3Strategy strategy = new AaveV3Strategy(
             address(provider),
+            address(0), // rewardsController not exercised in cap tests
             address(asset),
             "Test Aave",
             "tsAAVE",
