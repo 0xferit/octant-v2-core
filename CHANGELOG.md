@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0-develop.4](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.3..1.2.0-develop.4) - 2026-04-27
+
+### Bug Fixes
+
+- remove duplicate audit PDF with incorrect name - ([ded547a](https://github.com/golemfoundation/octant-v2-core/commit/ded547a51e4e4883b1428f9099f16c681e3c4083)) - Maxime
+
+### Documentation
+
+- add Cantina review fixes audit report - ([c30bea1](https://github.com/golemfoundation/octant-v2-core/commit/c30bea149e00c189e18000985290f29832049893)) - Maxime
+
+
 ## [1.2.0-develop.3](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.2..1.2.0-develop.3) - 2026-04-26
 
 ### Bug Fixes
