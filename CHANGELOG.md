@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0-develop.5](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.4..1.2.0-develop.5) - 2026-04-27
+
+### Bug Fixes
+
+- **(aave)** add RewardsController claim and airdrop sweep paths - ([935cde8](https://github.com/golemfoundation/octant-v2-core/commit/935cde8b4ca23e3a480a961e223d85832c44972f)) - skimaharvey
+- **(aave)** re-read dataProvider on every call to track Aave rotations - ([984e94c](https://github.com/golemfoundation/octant-v2-core/commit/984e94c65d11f8d267560444d0abd4debf2c7308)) - skimaharvey
+- **(aave)** include accruedToTreasury in deposit cap headroom - ([a7c7328](https://github.com/golemfoundation/octant-v2-core/commit/a7c7328d0fc17eba5ca5670914c3919f9556f124)) - skimaharvey
+- **(aave)** short-circuit limits when reserve is paused or frozen - ([67e9b15](https://github.com/golemfoundation/octant-v2-core/commit/67e9b151ab3ac6824c035589d8d01430dca3098e)) - skimaharvey
+- **(aave)** clear pool approval after each supply - ([57ea2d6](https://github.com/golemfoundation/octant-v2-core/commit/57ea2d6b6e477b64d8018ef5c340456db0daa408)) - skimaharvey
+- **(ci)** retry semver build with unversioned overlays - ([2557801](https://github.com/golemfoundation/octant-v2-core/commit/25578019ca8a062952b55467d8c352ab3246a478)) - Maxime Viard
+- **(swapping-forwarder)** reuse inherited token forwarding - ([7fd969d](https://github.com/golemfoundation/octant-v2-core/commit/7fd969dbcfeee0d7e747090e4eb9a8ebc5def00c)) - Maxime Viard
+
+### Documentation
+
+- **(aave)** clarify emergencyWithdraw depends on Aave pool state - ([c87d90b](https://github.com/golemfoundation/octant-v2-core/commit/c87d90b1f6114648ec552d54f29f44eba386bd36)) - skimaharvey
+- **(aave)** note withdraw dust revert in withdraw limit - ([62873aa](https://github.com/golemfoundation/octant-v2-core/commit/62873aa3c0975a3f0eafbcf13a12ba4eb5d3c774)) - skimaharvey
+- **(aave)** note deposit dust revert in deposit limit - ([57ed4d5](https://github.com/golemfoundation/octant-v2-core/commit/57ed4d5713a690f7f0b0c6b8ba5f8b5b87a6b7eb)) - skimaharvey
+
+
 ## [1.2.0-develop.4](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.3..1.2.0-develop.4) - 2026-04-27
 
 ### Bug Fixes
