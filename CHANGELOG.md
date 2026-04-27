@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0-develop.6](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.5..1.2.0-develop.6) - 2026-04-27
+
+### Testing
+
+- tighten SSR accrual tests to fail on stripped drip() - ([8206f58](https://github.com/golemfoundation/octant-v2-core/commit/8206f58417a7173e7a37e0f93e2d7b052f17f2b2)) - Maxime
+- add Spark sUSDS savings rate vault integration tests - ([e71a18a](https://github.com/golemfoundation/octant-v2-core/commit/e71a18a7ee65b166597791df7c7a5dc85126c717)) - Maxime
+
+
 ## [1.2.0-develop.5](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.4..1.2.0-develop.5) - 2026-04-27
 
 ### Bug Fixes
