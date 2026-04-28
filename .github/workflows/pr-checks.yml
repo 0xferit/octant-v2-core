@@ -1,4 +1,4 @@
-name: '⚙️ PR Standards Check'
+name: "⚙️ PR Standards Check"
 on:
   pull_request:
     branches:
@@ -276,6 +276,47 @@ jobs:
             exit 1
           fi
           echo "All coverage metrics meet the ${THRESHOLD}% threshold."
+
+  kontrol-proofs:
+    name: Kontrol Formal Verification
+    if: github.head_ref != 'main'
+    runs-on: general
+    continue-on-error: true
+    container:
+      image: runtimeverificationinc/kontrol:ubuntu-jammy-1.0.231
+      options: --user root
+    env:
+      PYTHONPATH: /home/user/.local/lib/python3.10/site-packages
+      XDG_CACHE_HOME: /home/user/.cache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fix Python environment
+        run: rm -f /home/user/.local/lib/python3.10/site-packages/typing.py
+
+      - name: Install Forge dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if forge soldeer install; then
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              echo "forge soldeer install failed on attempt ${attempt}/3; retrying..."
+              sleep $((attempt * 10))
+            fi
+          done
+
+          echo "forge soldeer install failed after 3 attempts"
+          exit 1
+
+      - name: Kontrol Build
+        run: kontrol build
+
+      - name: Kontrol Prove
+        run: kontrol prove --workers 4
+        timeout-minutes: 240
 
   analyze:
     name: Analyze with Slither
