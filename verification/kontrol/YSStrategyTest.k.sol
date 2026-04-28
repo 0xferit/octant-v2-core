@@ -749,8 +749,10 @@ contract YSStrategyTest is StrategyBaseTest, YSSetup {
     function testFinalWithdrawZeroValueSurplusFreesAndTransfersDragonDustYS() public {
         _assumeNonReentrant();
 
-        (MockDeployedYieldSkimmingStrategy deployedStrategy, ITokenizedStrategy tokenizedStrategy) =
-            _deployFinalExitStrategy();
+        (
+            MockDeployedYieldSkimmingStrategy deployedStrategy,
+            ITokenizedStrategy tokenizedStrategy
+        ) = _deployFinalExitStrategy();
         address owner = makeAddr("FINAL_EXIT_OWNER");
         uint256 ownerShares = 100 ether;
         uint256 withdrawalAssets = 200 ether;
@@ -779,8 +781,10 @@ contract YSStrategyTest is StrategyBaseTest, YSSetup {
     function testFinalWithdrawPositiveValueSurplusMintsDragonSharesYS() public {
         _assumeNonReentrant();
 
-        (MockDeployedYieldSkimmingStrategy deployedStrategy, ITokenizedStrategy tokenizedStrategy) =
-            _deployFinalExitStrategy();
+        (
+            MockDeployedYieldSkimmingStrategy deployedStrategy,
+            ITokenizedStrategy tokenizedStrategy
+        ) = _deployFinalExitStrategy();
         address owner = makeAddr("FINAL_EXIT_OWNER");
         uint256 ownerShares = 100 ether;
         uint256 withdrawalAssets = ownerShares;
