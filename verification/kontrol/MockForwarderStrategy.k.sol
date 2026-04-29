@@ -58,13 +58,13 @@ contract MockForwarderStrategy {
         return mockConvertToAssets;
     }
 
-    /// @notice Mock redeem that captures arguments and zeroes share balance
+    /// @notice Mock redeem that captures arguments and burns the requested share amount
     function redeem(uint256 shares, address receiver, address owner, uint256 maxLoss) external returns (uint256) {
         lastRedeemShares = shares;
         lastRedeemReceiver = receiver;
         lastRedeemOwner = owner;
         lastRedeemMaxLoss = maxLoss;
-        mockShareBalance = 0;
+        mockShareBalance = mockShareBalance > shares ? mockShareBalance - shares : 0;
         return mockRedeemReturn;
     }
 
