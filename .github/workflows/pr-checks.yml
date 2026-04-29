@@ -315,7 +315,13 @@ jobs:
         run: kontrol build
 
       - name: Kontrol Prove
-        run: kontrol prove --workers 4
+        env:
+          COLUMNS: "220"
+          LINES: "60"
+          TERM: xterm-256color
+          PYTHONUNBUFFERED: "1"
+        run: |
+          kontrol prove --workers 4 --hide-status-bar
         timeout-minutes: 240
 
   analyze:
