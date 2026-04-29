@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0-develop.7](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.6..1.2.0-develop.7) - 2026-04-29
+
+### CI/CD
+
+- restore Kontrol PR check - ([df79ddf](https://github.com/golemfoundation/octant-v2-core/commit/df79ddf33f925b46ac3b6bb234b5396ebc19c699)) - Ferit
+
+
 ## [1.2.0-develop.6](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.5..1.2.0-develop.6) - 2026-04-27
 
 ### Testing
