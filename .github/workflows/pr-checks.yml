@@ -31,9 +31,10 @@ jobs:
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
           HEAD_BRANCH: ${{ github.head_ref }}
+          BASE_BRANCH: ${{ github.base_ref }}
         run: |
           private_ci_supported=true
-          expected_branches="feature/*, fix/*, bugfix/*, hotfix/*, release/*, chore/*, ci/*, docs/*, test/*, refactor/*, perf/*"
+          expected_branches="feature/*, fix/*, bugfix/*, hotfix/*, release/*, chore/*, ci/*, docs/*, test/*, refactor/*, perf/*, or master -> develop release sync"
 
           if [ "$HEAD_REPOSITORY" != "$BASE_REPOSITORY" ]; then
             private_ci_supported=false
@@ -42,6 +43,12 @@ jobs:
 
           case "$HEAD_BRANCH" in
             feature/*|fix/*|bugfix/*|hotfix/*|release/*|chore/*|ci/*|docs/*|test/*|refactor/*|perf/*)
+              ;;
+            master)
+              if [ "$BASE_BRANCH" != "develop" ]; then
+                private_ci_supported=false
+                echo "::error title=Unsupported branch name::Branch '$HEAD_BRANCH' is allowed only for release sync PRs targeting develop."
+              fi
               ;;
             *)
               private_ci_supported=false
@@ -60,6 +67,7 @@ jobs:
               echo "| Head repository | $HEAD_REPOSITORY |"
               echo "| Base repository | $BASE_REPOSITORY |"
               echo "| Head branch | $HEAD_BRANCH |"
+              echo "| Base branch | $BASE_BRANCH |"
               echo "| Expected branch names | $expected_branches |"
               echo ""
               echo "Private-container CI can run only for branches in the base repository because fork PRs do not receive the required secrets."
