@@ -146,6 +146,7 @@ contract YFTest is YFSetup {
 
         _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, shares);
         _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, 0);
+        _storeUInt256(address(mockStrategy), MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT, shares);
         _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
 
         uint256 sentinel = type(uint256).max;

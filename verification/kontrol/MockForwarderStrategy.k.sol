@@ -19,6 +19,8 @@ pragma solidity ^0.8.0;
  *        slot 8: lastRedeemMaxLoss  -- captures maxLoss arg from redeem()
  *        slot 9: mockMaxRedeem      -- returned by maxRedeem()
  *        slot 10: mockConvertToAssets -- returned by convertToAssets()
+ *        slot 11: expectedMaxRedeemOwner -- required owner arg for maxRedeem()
+ *        slot 12: expectedConvertToAssetsShares -- required shares arg for convertToAssets()
  */
 contract MockForwarderStrategy {
     uint256 public mockShareBalance;
@@ -32,6 +34,8 @@ contract MockForwarderStrategy {
     uint256 public lastRedeemMaxLoss;
     uint256 public mockMaxRedeem;
     uint256 public mockConvertToAssets;
+    address public expectedMaxRedeemOwner;
+    uint256 public expectedConvertToAssetsShares;
 
     /// @notice No-op report that still records the caller
     function report() external returns (uint256, uint256) {
@@ -49,12 +53,14 @@ contract MockForwarderStrategy {
     }
 
     /// @notice Mock ERC-4626 maxRedeem guard used by SwappingYieldForwarder
-    function maxRedeem(address) external view returns (uint256) {
+    function maxRedeem(address owner) external view returns (uint256) {
+        require(owner == expectedMaxRedeemOwner);
         return mockMaxRedeem;
     }
 
     /// @notice Mock ERC-4626 convertToAssets guard used by SwappingYieldForwarder
-    function convertToAssets(uint256) external view returns (uint256) {
+    function convertToAssets(uint256 shares) external view returns (uint256) {
+        require(shares == expectedConvertToAssetsShares);
         return mockConvertToAssets;
     }
 

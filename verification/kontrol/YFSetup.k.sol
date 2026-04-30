@@ -55,6 +55,10 @@ contract YFSetup is KontrolTest {
 
         uint256 convertibleAssets = freshUInt256Bounded();
         _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, convertibleAssets);
+        _storeAddress(address(mockStrategy), MFS_EXPECTED_MAX_REDEEM_OWNER_SLOT, address(forwarder));
+
+        uint256 redeemShares = shareBalance < maxRedeem ? shareBalance : maxRedeem;
+        _storeUInt256(address(mockStrategy), MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT, redeemShares);
 
         // Clear argument capture slots (so we can detect if redeem was called)
         _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, 0);

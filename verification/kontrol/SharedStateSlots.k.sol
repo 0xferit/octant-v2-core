@@ -135,6 +135,8 @@ uint256 constant MFS_LAST_OWNER_SLOT = 7;
 uint256 constant MFS_LAST_MAX_LOSS_SLOT = 8;
 uint256 constant MFS_MAX_REDEEM_SLOT = 9;
 uint256 constant MFS_CONVERT_TO_ASSETS_SLOT = 10;
+uint256 constant MFS_EXPECTED_MAX_REDEEM_OWNER_SLOT = 11;
+uint256 constant MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT = 12;
 
 // ============================================
 // MockForwarderSwapper (MSWP_) constants
