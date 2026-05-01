@@ -10,16 +10,33 @@ import "test/kontrol/SharedStateSlots.k.sol";
 /**
  * @title SYFTest
  * @notice Kontrol formal verification proofs for SwappingYieldForwarder
- * @dev Proves 7 behavioral properties of the SwappingYieldForwarder contract:
+ * @dev Proves 9 behavioral properties of the SwappingYieldForwarder contract:
  *      1. Access control on reportSwapAndForward
  *      2. Swap output routed to hardcoded receiver
  *      3. No residual source asset after swap
  *      4. Zero-share passthrough (no swap/redeem)
  *      5. Zero-redeem passthrough (no swap when redeem returns 0)
- *      6. Correct token routing through swapper
- *      7. Inherited reportAndForward access control still works
+ *      6. Zero-maxRedeem passthrough (no swap/redeem)
+ *      7. Zero-convertToAssets passthrough (no swap/redeem)
+ *      8. Correct token routing through swapper
+ *      9. Inherited reportAndForward access control still works
  */
 contract SYFTest is SYFSetup {
+    function _assumeSwapPath() internal view returns (uint256 balance, uint256 redeemShares, uint256 redeemReturn) {
+        balance = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(balance > 0);
+
+        uint256 maxRedeem = _loadUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT);
+        vm.assume(maxRedeem > 0);
+        redeemShares = balance < maxRedeem ? balance : maxRedeem;
+
+        uint256 convertibleAssets = _loadUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT);
+        vm.assume(convertibleAssets > 0);
+
+        redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
+        vm.assume(redeemReturn > 0);
+    }
+
     /// @notice Non-keeper address always reverts with OnlyKeeper on reportSwapAndForward
     function testReportSwapAndForwardOnlyKeeper() public {
         address nonKeeper = makeAddr("NON_KEEPER");
@@ -31,11 +48,8 @@ contract SYFTest is SYFSetup {
 
     /// @notice swap() is always called with the hardcoded receiver as output recipient
     function testReportSwapAndForwardReceiverGuarantee() public {
-        // Pre-conditions: shares exist and redeem returns non-zero
-        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
-        vm.assume(shares > 0);
-        uint256 redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
-        vm.assume(redeemReturn > 0);
+        // Pre-conditions: shares are redeemable, convert to assets, and redeem returns non-zero
+        (, uint256 redeemShares, ) = _assumeSwapPath();
 
         vm.prank(_keeper);
         syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
@@ -43,15 +57,15 @@ contract SYFTest is SYFSetup {
         // Assert: swap was called with receiver == forwarder.receiver()
         address lastReceiver = _loadAddress(address(mockSwapper), MSWP_LAST_RECEIVER_SLOT);
         assertEq(lastReceiver, _receiver);
+
+        uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastShares, redeemShares);
     }
 
     /// @notice After reportSwapAndForward, forwarder holds 0 of source asset
     function testReportSwapAndForwardNoResidualSourceAsset() public {
-        // Pre-conditions: shares exist and redeem returns non-zero
-        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
-        vm.assume(shares > 0);
-        uint256 redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
-        vm.assume(redeemReturn > 0);
+        // Pre-conditions: shares are redeemable, convert to assets, and redeem returns non-zero
+        _assumeSwapPath();
 
         vm.prank(_keeper);
         syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
@@ -98,6 +112,9 @@ contract SYFTest is SYFSetup {
         // Set shares > 0 but redeem return to 0
         uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
         vm.assume(shares > 0);
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, shares);
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, 1);
+        _storeUInt256(address(mockStrategy), MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT, shares);
         _storeUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT, 0);
 
         // Also zero out the forwarder's pre-loaded ERC20 balance (matches 0 redeem)
@@ -114,15 +131,77 @@ contract SYFTest is SYFSetup {
         assertEq(lastSwapReceiver, address(0));
     }
 
-    /// @notice swap() is called with tokenIn = strategy.asset() and tokenOut = targetAsset
-    function testReportSwapAndForwardCorrectTokenRouting() public {
-        // Pre-conditions: shares exist and redeem returns non-zero
+    /// @notice When maxRedeem is 0, report still runs and neither redeem nor swap is called
+    function testReportSwapAndForwardZeroMaxRedeemPassthrough() public {
         uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
         vm.assume(shares > 0);
-        uint256 redeemReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
-        vm.assume(redeemReturn > 0);
+
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, 0);
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, 1);
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
+
+        uint256 sentinel = type(uint256).max;
+        _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, sentinel);
+        _storeUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT, sentinel);
+
+        vm.prank(_keeper);
+        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
+
+        assertEq(assetsOut, 0);
+
+        address lastReportCaller = _loadAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT);
+        assertEq(lastReportCaller, address(syfForwarder));
+
+        uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastShares, sentinel);
+
+        uint256 lastAmountIn = _loadUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT);
+        assertEq(lastAmountIn, sentinel);
+
+        uint256 postShares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        assertEq(postShares, shares);
+    }
+
+    /// @notice When redeemable shares floor to 0 assets, report still runs without redeeming or swapping
+    function testReportSwapAndForwardZeroAssetsPassthrough() public {
+        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(shares > 0);
+
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, shares);
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, 0);
+        _storeUInt256(address(mockStrategy), MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT, shares);
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
+
+        uint256 sentinel = type(uint256).max;
+        _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, sentinel);
+        _storeUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT, sentinel);
+
+        vm.prank(_keeper);
+        uint256 assetsOut = syfForwarder.reportSwapAndForward(address(mockStrategy), 0, 0, block.timestamp + 1 hours);
+
+        assertEq(assetsOut, 0);
+
+        address lastReportCaller = _loadAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT);
+        assertEq(lastReportCaller, address(syfForwarder));
+
+        uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastShares, sentinel);
+
+        uint256 lastAmountIn = _loadUInt256(address(mockSwapper), MSWP_LAST_AMOUNT_IN_SLOT);
+        assertEq(lastAmountIn, sentinel);
+
+        uint256 postShares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        assertEq(postShares, shares);
+    }
+
+    /// @notice swap() is called with tokenIn = strategy.asset() and tokenOut = targetAsset
+    function testReportSwapAndForwardCorrectTokenRouting() public {
+        // Pre-conditions: shares are redeemable, convert to assets, and redeem returns non-zero
+        (, uint256 redeemShares, uint256 redeemReturn) = _assumeSwapPath();
         uint256 maxLoss = freshUInt256Bounded();
         uint256 minAmountOut = freshUInt256Bounded();
+        uint256 swapReturn = _loadUInt256(address(mockSwapper), MSWP_RETURN_SLOT);
+        vm.assume(swapReturn >= minAmountOut);
 
         vm.prank(_keeper);
         syfForwarder.reportSwapAndForward(address(mockStrategy), maxLoss, minAmountOut, block.timestamp + 1 hours);
@@ -152,6 +231,9 @@ contract SYFTest is SYFSetup {
 
         uint256 lastRedeemMaxLoss = _loadUInt256(address(mockStrategy), MFS_LAST_MAX_LOSS_SLOT);
         assertEq(lastRedeemMaxLoss, maxLoss);
+
+        uint256 lastRedeemShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastRedeemShares, redeemShares);
     }
 
     /// @notice Inherited reportAndForward() on SwappingYieldForwarder still enforces keeper check

@@ -72,10 +72,11 @@ uint256 constant TS_ENABLE_BURNING_WIDTH = 1;
 // ============================================
 // YieldSkimming-specific (YS_) constants
 // ============================================
-// Storage at keccak256("octant.yieldSkimming.exchangeRate") - 1
-// = 0x07fb4a10feb8168b5b4e83e7b226bebb72233fd2b17be5642e2b2896eed0348a
+// Storage at keccak256(abi.encode(uint256(keccak256("octant.yieldSkimming.exchangeRate")) - 1))
+// & ~bytes32(uint256(0xff))
+// = 0x66b3d9d1383d5ce25503fdc2e0f4d387777e50a9b5be65141986eec7395fef00
 
-uint256 constant YS_BASE = uint256(0x07fb4a10feb8168b5b4e83e7b226bebb72233fd2b17be5642e2b2896eed0348a);
+uint256 constant YS_BASE = uint256(0x66b3d9d1383d5ce25503fdc2e0f4d387777e50a9b5be65141986eec7395fef00);
 
 uint256 constant YS_TOTAL_DEBT_OWED_TO_USER_SLOT = YS_BASE + 0;
 uint256 constant YS_LAST_REPORTED_RATE_SLOT = YS_BASE + 1;
@@ -134,6 +135,8 @@ uint256 constant MFS_LAST_OWNER_SLOT = 7;
 uint256 constant MFS_LAST_MAX_LOSS_SLOT = 8;
 uint256 constant MFS_MAX_REDEEM_SLOT = 9;
 uint256 constant MFS_CONVERT_TO_ASSETS_SLOT = 10;
+uint256 constant MFS_EXPECTED_MAX_REDEEM_OWNER_SLOT = 11;
+uint256 constant MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT = 12;
 
 // ============================================
 // MockForwarderSwapper (MSWP_) constants

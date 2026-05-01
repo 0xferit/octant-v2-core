@@ -77,21 +77,25 @@ match-test                 = [
         "YSStrategyTest.testConversionSolventYS(uint256)",
         "YSStrategyTest.testConversionFallbackInsolventYS(uint256)",
         # ============================================
-        # YieldForwarder proofs (5)
+        # YieldForwarder proofs (7)
         # ============================================
         "YFTest.testReportAndForwardOnlyKeeper()",
         "YFTest.testReportAndForwardReceiverGuarantee()",
         "YFTest.testReportAndForwardNoResidualShares()",
         "YFTest.testReportAndForwardZeroSharesPassthrough()",
+        "YFTest.testReportAndForwardZeroMaxRedeemPassthrough()",
+        "YFTest.testReportAndForwardZeroAssetsPassthrough()",
         "YFTest.testReportAndForwardReturnsRedeemAssets()",
         # ============================================
-        # SwappingYieldForwarder proofs (7)
+        # SwappingYieldForwarder proofs (9)
         # ============================================
         "SYFTest.testReportSwapAndForwardOnlyKeeper()",
         "SYFTest.testReportSwapAndForwardReceiverGuarantee()",
         "SYFTest.testReportSwapAndForwardNoResidualSourceAsset()",
         "SYFTest.testReportSwapAndForwardZeroSharesPassthrough()",
         "SYFTest.testReportSwapAndForwardZeroRedeemPassthrough()",
+        "SYFTest.testReportSwapAndForwardZeroMaxRedeemPassthrough()",
+        "SYFTest.testReportSwapAndForwardZeroAssetsPassthrough()",
         "SYFTest.testReportSwapAndForwardCorrectTokenRouting()",
         "SYFTest.testInheritedReportAndForwardAccessControl()",
     ]

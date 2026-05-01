@@ -9,14 +9,36 @@ import "test/kontrol/SharedStateSlots.k.sol";
 /**
  * @title YFTest
  * @notice Kontrol formal verification proofs for YieldForwarder
- * @dev Proves 5 behavioral properties of the YieldForwarder contract:
+ * @dev Proves 7 behavioral properties of the YieldForwarder contract:
  *      1. Access control: only keeper can call reportAndForward
  *      2. Receiver guarantee: redeem always targets the hardcoded receiver
- *      3. No residual shares: forwarder holds 0 shares after execution
+ *      3. No residual shares when the full balance is redeemable
  *      4. Zero-share passthrough: returns 0 without calling redeem when no shares
- *      5. Return value correctness: return matches mock redeem output
+ *      5. Zero-maxRedeem passthrough: returns 0 without calling redeem
+ *      6. Zero-convertToAssets passthrough: returns 0 without calling redeem
+ *      7. Return value correctness: return matches mock redeem output
  */
 contract YFTest is YFSetup {
+    function _assumeRedeemPath() internal view returns (uint256 balance, uint256 maxRedeem, uint256 redeemShares) {
+        balance = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(balance > 0);
+
+        maxRedeem = _loadUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT);
+        vm.assume(maxRedeem > 0);
+
+        redeemShares = balance < maxRedeem ? balance : maxRedeem;
+
+        uint256 convertibleAssets = _loadUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT);
+        vm.assume(convertibleAssets > 0);
+    }
+
+    function _assumeFullRedeemPath() internal view returns (uint256 balance) {
+        (balance, , ) = _assumeRedeemPath();
+
+        uint256 maxRedeem = _loadUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT);
+        vm.assume(maxRedeem >= balance);
+    }
+
     /// @notice Non-keeper address always reverts with OnlyKeeper
     function testReportAndForwardOnlyKeeper() public {
         address nonKeeper = makeAddr("NON_KEEPER");
@@ -28,9 +50,8 @@ contract YFTest is YFSetup {
 
     /// @notice redeem() is always called with the hardcoded receiver as recipient
     function testReportAndForwardReceiverGuarantee() public {
-        // Pre-condition: shares exist to trigger the redeem path
-        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
-        vm.assume(shares > 0);
+        // Pre-condition: shares are redeemable and convert to non-zero assets
+        (, , uint256 redeemShares) = _assumeRedeemPath();
         uint256 maxLoss = freshUInt256Bounded();
 
         vm.prank(_keeper);
@@ -45,13 +66,15 @@ contract YFTest is YFSetup {
 
         uint256 lastMaxLoss = _loadUInt256(address(mockStrategy), MFS_LAST_MAX_LOSS_SLOT);
         assertEq(lastMaxLoss, maxLoss);
+
+        uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastShares, redeemShares);
     }
 
-    /// @notice After reportAndForward, forwarder holds 0 shares on the strategy
+    /// @notice After reportAndForward, forwarder holds 0 shares when the full balance is redeemable
     function testReportAndForwardNoResidualShares() public {
-        // Pre-condition: shares exist
-        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
-        vm.assume(shares > 0);
+        // Pre-condition: shares exist and all are redeemable
+        _assumeFullRedeemPath();
 
         vm.prank(_keeper);
         forwarder.reportAndForward(address(mockStrategy), 0);
@@ -89,11 +112,65 @@ contract YFTest is YFSetup {
         assertEq(lastShares, sentinel);
     }
 
-    /// @notice Return value of reportAndForward equals the value returned by redeem
-    function testReportAndForwardReturnsRedeemAssets() public {
-        // Pre-condition: shares exist
+    /// @notice When maxRedeem is 0, report still runs and redeem is never called
+    function testReportAndForwardZeroMaxRedeemPassthrough() public {
         uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
         vm.assume(shares > 0);
+
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, 0);
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, 1);
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
+
+        uint256 sentinel = type(uint256).max;
+        _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, sentinel);
+
+        vm.prank(_keeper);
+        uint256 assets = forwarder.reportAndForward(address(mockStrategy), 0);
+
+        assertEq(assets, 0);
+
+        address lastReportCaller = _loadAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT);
+        assertEq(lastReportCaller, address(forwarder));
+
+        uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastShares, sentinel);
+
+        uint256 postShares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        assertEq(postShares, shares);
+    }
+
+    /// @notice When redeemable shares floor to 0 assets, report still runs and redeem is never called
+    function testReportAndForwardZeroAssetsPassthrough() public {
+        uint256 shares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        vm.assume(shares > 0);
+
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, shares);
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, 0);
+        _storeUInt256(address(mockStrategy), MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT, shares);
+        _storeAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT, address(0));
+
+        uint256 sentinel = type(uint256).max;
+        _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, sentinel);
+
+        vm.prank(_keeper);
+        uint256 assets = forwarder.reportAndForward(address(mockStrategy), 0);
+
+        assertEq(assets, 0);
+
+        address lastReportCaller = _loadAddress(address(mockStrategy), MFS_LAST_REPORT_CALLER_SLOT);
+        assertEq(lastReportCaller, address(forwarder));
+
+        uint256 lastShares = _loadUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT);
+        assertEq(lastShares, sentinel);
+
+        uint256 postShares = _loadUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT);
+        assertEq(postShares, shares);
+    }
+
+    /// @notice Return value of reportAndForward equals the value returned by redeem
+    function testReportAndForwardReturnsRedeemAssets() public {
+        // Pre-condition: shares are redeemable and convert to non-zero assets
+        _assumeRedeemPath();
 
         uint256 expectedReturn = _loadUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT);
 

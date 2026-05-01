@@ -63,14 +63,22 @@ contract SYFSetup is KontrolTest {
         _storeAddress(address(mockStrategy), MFS_ASSET_SLOT, address(sourceAsset));
         _storeAddress(address(mockStrategy), MFS_EXPECTED_BALANCE_OF_ACCOUNT_SLOT, address(syfForwarder));
 
-        // Set symbolic share balance and redeem return
+        // Set symbolic share balance, redeem return, and ERC-4626 guards
         uint256 shareBalance = freshUInt256Bounded();
         _storeUInt256(address(mockStrategy), MFS_SHARE_BALANCE_SLOT, shareBalance);
-        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, shareBalance);
 
         uint256 redeemReturn = freshUInt256Bounded();
         _storeUInt256(address(mockStrategy), MFS_REDEEM_RETURN_SLOT, redeemReturn);
-        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, redeemReturn);
+
+        uint256 maxRedeem = freshUInt256Bounded();
+        _storeUInt256(address(mockStrategy), MFS_MAX_REDEEM_SLOT, maxRedeem);
+
+        uint256 convertibleAssets = freshUInt256Bounded();
+        _storeUInt256(address(mockStrategy), MFS_CONVERT_TO_ASSETS_SLOT, convertibleAssets);
+        _storeAddress(address(mockStrategy), MFS_EXPECTED_MAX_REDEEM_OWNER_SLOT, address(syfForwarder));
+
+        uint256 redeemShares = shareBalance < maxRedeem ? shareBalance : maxRedeem;
+        _storeUInt256(address(mockStrategy), MFS_EXPECTED_CONVERT_TO_ASSETS_SHARES_SLOT, redeemShares);
 
         // Clear argument capture slots
         _storeUInt256(address(mockStrategy), MFS_LAST_SHARES_SLOT, 0);
