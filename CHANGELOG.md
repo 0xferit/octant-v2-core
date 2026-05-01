@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0-develop.8](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.7..1.2.0-develop.8) - 2026-05-01
+
+### CI/CD
+
+- **(kontrol)** hide prove status bar - ([2fe1b80](https://github.com/golemfoundation/octant-v2-core/commit/2fe1b807e88073fdf6eac0d56bf2c576db6e36d2)) - Ferit
+
+### Testing
+
+- **(kontrol)** assert forwarder guard arguments - ([96a603f](https://github.com/golemfoundation/octant-v2-core/commit/96a603f3e27576ac7f019b87d36308a47d1c6a05)) - Ferit
+- **(kontrol)** fix yield skimming storage slot - ([67f57b0](https://github.com/golemfoundation/octant-v2-core/commit/67f57b0b9f7a08e3054c76772ab3dd4c3519b9cc)) - Ferit
+- **(kontrol)** fix forwarder redeem guard proofs - ([56038db](https://github.com/golemfoundation/octant-v2-core/commit/56038db62e17e0157c247b4080f313ef9902bd2b)) - Ferit
+
+
 ## [1.2.0-develop.7](https://github.com/golemfoundation/octant-v2-core/compare/1.2.0-develop.6..1.2.0-develop.7) - 2026-04-29
 
 ### CI/CD
